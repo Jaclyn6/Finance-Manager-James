@@ -7,12 +7,24 @@ import { UserDisplay } from "./user-display";
 
 /**
  * Top bar inside the protected shell. Holds the page-context label on
- * the left and the user pill on the right.
+ * the left and the user controls on the right.
  *
- * `UserDisplay` reads `cookies()` so it lives inside a `<Suspense>`
- * boundary — required for `cacheComponents: true` to prerender the
- * rest of the shell. The skeleton roughly matches the final element's
- * footprint so layout doesn't shift on hydration.
+ * The right-side cluster (theme toggle + user display) lives inside a
+ * single `<Suspense>` boundary. Two reasons this is required under
+ * `cacheComponents: true`:
+ *
+ * 1. `UserDisplay` is a Server Component that calls `cookies()` — a
+ *    runtime API that must live behind Suspense or the static shell
+ *    can't prerender.
+ * 2. `ThemeToggle` renders shadcn's `<Button>`, which internally uses
+ *    `@base-ui/react/button`; base-ui generates unique IDs via
+ *    `Math.random()` at mount time. Any non-deterministic value in a
+ *    Client Component must also sit inside a Suspense boundary so
+ *    Next can stream around it without baking an unstable value into
+ *    the prerendered HTML.
+ *
+ * One boundary covers both. The fallback matches the final footprint
+ * (icon button + user pill) so hydration doesn't shift the layout.
  */
 export function Header() {
   return (
@@ -20,12 +32,21 @@ export function Header() {
       <div className="text-sm font-medium text-muted-foreground">
         오늘의 투자 환경
       </div>
-      <div className="flex items-center gap-2">
-        <ThemeToggle />
-        <Suspense fallback={<Skeleton className="h-9 w-56 rounded-md" />}>
+      <Suspense fallback={<HeaderRightSkeleton />}>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
           <UserDisplay />
-        </Suspense>
-      </div>
+        </div>
+      </Suspense>
     </header>
+  );
+}
+
+function HeaderRightSkeleton() {
+  return (
+    <div className="flex items-center gap-2">
+      <Skeleton className="size-9 rounded-md" />
+      <Skeleton className="h-9 w-56 rounded-md" />
+    </div>
   );
 }
