@@ -10,7 +10,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">오늘의 상태</h1>
+        <h1 className="text-3xl font-bold tracking-tight">오늘 시장 상황</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           매크로 코어와 자산군별 합성 점수가 데이터 파이프라인 가동 이후
           여기에 표시됩니다.

@@ -12,7 +12,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "오늘의 상태", group: "홈" },
+  { href: "/dashboard", label: "오늘 시장 상황", group: "홈" },
   { href: "/asset/us-equity", label: "미국주식", group: "자산군" },
   { href: "/asset/kr-equity", label: "한국주식", group: "자산군" },
   { href: "/asset/btc", label: "BTC", group: "자산군" },
