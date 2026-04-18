@@ -3,6 +3,7 @@
 > **Version history**
 > - **v1** (2026-04-18, by feature-dev:code-architect): initial blueprint against PRD v3 §18 Phase 1, written assuming Next.js 15 + `@supabase/ssr` 0.5.x.
 > - **v2** (2026-04-19): rewritten after Next.js 16.2.4 + React 19 + Tailwind v4 + `@supabase/ssr` 0.10.2 turned out to be the actually-installed stack, and after the user chose Path B (Cache Components model) for caching. Product requirements, scope, and schema are identical to v1. Only the Next.js-specific patterns changed.
+> - **v2.1** (2026-04-19 later): date-navigation feature (PRD v3.1 §11.6 Phase 1 range) folded into Phase 1 build. All protected pages take an optional `?date=YYYY-MM-DD` query param; data-layer readers become date-parameterized; a new `src/components/layout/date-picker.tsx` lands. Price-overlay is Phase 2 so this document only prepares the hook.
 >
 > The Next 15 → Next 16 research that drove the v2 rewrite is preserved unchanged at [`phase1_blueprint_next16_delta.md`](./phase1_blueprint_next16_delta.md) as a reference artifact — consult it when you need the evidence behind a v2 decision.
 >
@@ -70,7 +71,14 @@ finance-manager/
 │   │   │
 │   │   └── utils/{score-band,date}.ts
 │   │
-│   ├── components/{ui,layout,dashboard,changelog,charts,shared}/
+│   ├── components/
+│   │   ├── ui/                        # shadcn primitives
+│   │   ├── layout/                    # sidebar, header, date-picker (v2.1),
+│   │   │                              #   user-display, sign-out-button
+│   │   ├── shared/                    # disclaimer-banner, staleness-badge
+│   │   ├── dashboard/
+│   │   ├── changelog/
+│   │   └── charts/
 │   ├── types/database.ts                  # ✔ generated via supabase MCP
 │   └── proxy.ts                           # Next 16 auth guard (was middleware.ts)
 ├── vercel.json                            # Cron schedule
@@ -183,15 +191,33 @@ Runs on `GET /api/auth/callback?code=…&next=…` for PKCE code exchange. Phase
 
 ## 6. UI Routes
 
+All three protected routes accept an optional `?date=YYYY-MM-DD` query parameter (see §6.1). When absent, the route resolves "latest" (today's snapshot if present, otherwise the most recent available).
+
 | Route | Type | Cache mechanism | Purpose |
 |---|---|---|---|
 | `/` | Server | static | Redirects to `/dashboard` |
 | `/login` | Partial Prerender | static shell + Suspense | Email+password form |
-| `/dashboard` | Server | `'use cache' + cacheTag('macro-snapshot') + cacheLife('days')` | Home: composite state + 4 asset cards + top 3 changes |
-| `/asset/[slug]` | Server | `'use cache' + cacheTag('macro-snapshot') + cacheLife('days')` | Asset detail: 30-day trend + contributing indicators |
-| `/changelog` | Server | `'use cache' + cacheTag('changelog') + cacheLife('days')` | Date-sorted score deltas |
+| `/dashboard?date=` | Server | `'use cache'(date) + cacheTag('macro-snapshot') + cacheLife('days')` | Home: composite state + 4 asset cards + top 3 changes for the chosen date |
+| `/asset/[slug]?date=` | Server | `'use cache'(slug, date) + cacheTag('macro-snapshot') + cacheLife('days')` | Asset detail: trend anchored at selected date + contributing indicators |
+| `/changelog?date=` | Server | `'use cache'(date) + cacheTag('changelog') + cacheLife('days')` | Score deltas around the selected date |
 | `/api/cron/ingest-macro` | Route Handler | none (write path) | Cron target |
 | `/api/auth/callback` | Route Handler | none | PKCE fallback |
+
+### 6.1 Date Navigation (PRD §11.6)
+
+**Date picker location:** header (global, persists across page navigation). Lives in `src/components/layout/date-picker.tsx` alongside the user display.
+
+**URL contract:** `?date=YYYY-MM-DD`. Absent means "latest". The date picker updates the URL; `Link` components in the sidebar preserve the current `date` param when navigating between pages so the user stays anchored in their chosen time window.
+
+**Validation:** the date string is parsed and clamped to the range [project_epoch, today]. Invalid input falls back to "latest" with a toast (Phase 2) or silent fallback (Phase 1). Dates before the earliest `composite_snapshots.snapshot_date` render an empty-state with a link to the earliest available day.
+
+**Missing-data UX:** when `snapshot_date = ?date` produces no row, show:
+- "수집된 데이터가 없습니다" message,
+- the closest earlier `snapshot_date` as a quick-jump link.
+
+Never render an interpolated or extrapolated score — the PRD §11.6 rule forbids "score estimation" for missing days.
+
+**Phase 2 extension (gated by PRD §8.5):** when the price-overlay feature lands, the same `?date=` param also anchors the price timeline on asset-detail pages. No additional URL plumbing needed.
 
 **shadcn components installed:** `button, card, badge, input, label, separator, skeleton, tooltip` (base-nova style, Lucide icons).
 
@@ -214,6 +240,7 @@ Example data-layer pattern (`src/lib/data/indicators.ts`):
 import { cacheLife, cacheTag } from 'next/cache'
 import { getSupabaseServerClient } from '@/lib/supabase/server'
 
+// "latest" variant — no date argument, serves today's snapshot when present.
 export async function getLatestCompositeSnapshots() {
   'use cache'
   cacheTag('macro-snapshot')
@@ -227,7 +254,24 @@ export async function getLatestCompositeSnapshots() {
     .limit(4)             // 4 asset classes
   return data
 }
+
+// Date-parameterized variant — date becomes part of the cache key so each
+// historical day gets its own entry. Feeds the Phase 1 date-navigation UI.
+export async function getCompositeSnapshotsForDate(date: string) {
+  'use cache'
+  cacheTag('macro-snapshot')
+  cacheLife('weeks')     // historical entries don't change — cache longer
+
+  const supabase = await getSupabaseServerClient()
+  const { data } = await supabase
+    .from('composite_snapshots')
+    .select('*')
+    .eq('snapshot_date', date)
+  return data
+}
 ```
+
+**Why a separate function rather than an optional param on `getLatestCompositeSnapshots`:** cache keys are derived from function arguments in Next.js's `'use cache'`. A single function with an optional date would cache `undefined` and `"2026-03-15"` as different keys, which works, but splitting makes the cadence explicit: `latest` recycles daily with the cron, `forDate` persists for weeks since history is immutable.
 
 Example page-level pattern (`src/app/(protected)/dashboard/page.tsx`):
 
@@ -288,6 +332,8 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. This
 | Criterion | Proving file / evidence |
 |---|---|
 | 홈 화면에서 5초 내 현재 상태를 이해할 수 있다 | `/dashboard/page.tsx` is `'use cache'` + Server Component → HTML is near-static; `CompositeStateCard` renders band + Korean label above the fold. Vercel Analytics LCP < 2s target. |
+| 최근 30일 범위 내 임의 과거 날짜를 선택하면 그 시점 스냅샷과 `model_version`이 표시된다 (PRD v3.1 §16.1 추가) | Step 9.5 outputs: `date-picker.tsx` updates `?date=` query; `getCompositeSnapshotsForDate(date)` returns the row; `CompositeStateCard` + `AssetCard` both read `model_version` out of the snapshot and surface it next to the band label. |
+| 데이터가 없는 날짜를 선택하면 값을 추정하지 않고 안내 + 최근 이전 수집일 제안 (PRD v3.1 §16.1 추가) | `src/components/shared/no-snapshot-notice.tsx` rendered when `getCompositeSnapshotsForDate(date)` returns empty; a sibling helper `getClosestEarlierSnapshotDate(date)` generates the quick-jump link. |
 | 자산군별 카드가 분리되어 있다 | `AssetCard.tsx` rendered once per `asset_type_enum` value (4 cards). |
 | 최소 6개 이상의 공통 매크로 코어 지표가 자동 반영된다 | `INDICATOR_CONFIG` in `weights.ts` defines 7 FRED series; `ingest_runs.indicators_success` must be ≥ 6 on green runs. |
 | 최소 2개 이상의 기술적 지표(RSI, MACD)가 적용된다 | **Phase 2 scope** — PRD §18 places these in Phase 2. The `model_version` scheme accommodates additions without a schema migration. |
@@ -315,6 +361,9 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. This
 8. **Vercel Cron Hobby vs GitHub Actions** — Hobby plan 1/day matches the 24h refresh cadence exactly. Zero extra infra. Upgrade to Pro unlocks precise-minute crons if Phase 2 demands sub-daily refresh (it probably won't).
 9. **Family accounts via Admin API vs SQL seed migration** — Admin API wins because real UUIDs shouldn't live in replayable SQL migrations. A `supabase db reset` would then re-execute a seed referencing UUIDs that no longer exist. The migration file `0003_seed_family_users.sql` from v1's plan was dropped for this reason.
 10. **Login form: Server Component page wrapping Client Component form** — the Server Component reads `searchParams` and passes `nextPath` as a prop to the Client form. `useSearchParams()` inside a Client Component under `cacheComponents` forces a blocking dynamic render; prop-drilling the resolved value from a Suspense-wrapped Server Component avoids it.
+11. **Date in URL, not local state** (v2.1) — the selected date lives as a `?date=YYYY-MM-DD` query param rather than React state or a global store. Trade-offs: shareable links, deep-linking, browser-back semantics, SSR-friendly (Server Components read `searchParams` directly). Cost: every sidebar `<Link>` must preserve the current date param, which a small helper `buildNavHref(pathname, searchParams)` centralizes.
+12. **Two data-layer functions per resource, not one with an optional arg** (v2.1) — `getLatestCompositeSnapshots()` and `getCompositeSnapshotsForDate(date)` are separate because `'use cache'` keys on arguments. Splitting makes cache cadence explicit: latest = `cacheLife('days')` (matches cron), historical = `cacheLife('weeks')` (immutable). One function with an optional arg would conflate the two.
+13. **Price-overlay deferred to Phase 2** (v2.1) — PRD §8.5 + §11.6 Phase 2 range. Phase 1 date-navigation only touches scores. The `?date=` URL contract is designed so Phase 2 can add a price axis to the same chart without URL changes.
 
 ---
 
