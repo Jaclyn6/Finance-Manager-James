@@ -15,7 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "오늘 시장 상황", group: "홈" },
   { href: "/asset/us-equity", label: "미국주식", group: "자산군" },
   { href: "/asset/kr-equity", label: "한국주식", group: "자산군" },
-  { href: "/asset/btc", label: "BTC", group: "자산군" },
+  { href: "/asset/crypto", label: "암호화폐", group: "자산군" },
   { href: "/asset/global-etf", label: "글로벌 ETF", group: "자산군" },
   { href: "/changelog", label: "변화 로그", group: "히스토리" },
 ];

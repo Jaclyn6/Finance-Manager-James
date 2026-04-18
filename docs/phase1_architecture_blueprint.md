@@ -95,7 +95,7 @@ Note the v1→v2 structural diffs:
 
 **Enums:**
 - `fetch_status_enum('success', 'error', 'stale', 'partial')` — PRD §12 staleness semantics.
-- `asset_type_enum('us_equity', 'kr_equity', 'btc', 'global_etf', 'common')` — 4 asset classes + `common` for macro-core indicators not bound to any single asset class.
+- `asset_type_enum('us_equity', 'kr_equity', 'crypto', 'global_etf', 'common')` — 4 asset classes + `common` for macro-core indicators not bound to any single asset class. The `crypto` value covers the broader cryptocurrency market (BTC + ETH + majors) rather than being narrowed to Bitcoin — the PRD's "BTC/ETH" phrasing is shorthand for this category. Enum was renamed from the original `'btc'` in migration `0003_rename_btc_to_crypto.sql`.
 
 **RLS pattern:**
 - All data tables: `FOR SELECT TO authenticated USING (true)`. Writes restricted to `TO service_role WITH CHECK (true)` — direct client writes impossible.
@@ -291,7 +291,7 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. This
 | 자산군별 카드가 분리되어 있다 | `AssetCard.tsx` rendered once per `asset_type_enum` value (4 cards). |
 | 최소 6개 이상의 공통 매크로 코어 지표가 자동 반영된다 | `INDICATOR_CONFIG` in `weights.ts` defines 7 FRED series; `ingest_runs.indicators_success` must be ≥ 6 on green runs. |
 | 최소 2개 이상의 기술적 지표(RSI, MACD)가 적용된다 | **Phase 2 scope** — PRD §18 places these in Phase 2. The `model_version` scheme accommodates additions without a schema migration. |
-| BTC에는 최소 1개 이상의 온체인 지표(MVRV 또는 SOPR)가 적용된다 | **Phase 2 scope** — same. |
+| BTC에는 최소 1개 이상의 온체인 지표(MVRV 또는 SOPR)가 적용된다 | **Phase 2 scope** — same. The `crypto` asset class will carry these when they land. |
 | 데이터 실패 시 캐시와 상태 배지가 작동한다 | `fred.ts` returns `fetch_status: 'error'` on failure; `snapshot.ts` persists status; `StalenessBadge.tsx` renders red when status ≠ 'success'; cron continues with remaining indicators (partial data > no data). |
 | 가족 계정 외 사용자는 데이터에 접근할 수 없다 | `proxy.ts` redirects unauth; RLS `TO authenticated` on all data tables; Supabase Dashboard has Sign Ups disabled. |
 

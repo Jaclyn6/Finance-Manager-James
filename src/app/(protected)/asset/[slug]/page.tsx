@@ -24,7 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 const ASSET_LABELS: Record<string, string> = {
   "us-equity": "미국주식",
   "kr-equity": "한국주식",
-  btc: "BTC",
+  crypto: "암호화폐",
   "global-etf": "글로벌 ETF",
 };
 

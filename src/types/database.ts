@@ -220,7 +220,7 @@ export type Database = {
       asset_type_enum:
         | "us_equity"
         | "kr_equity"
-        | "btc"
+        | "crypto"
         | "global_etf"
         | "common"
       fetch_status_enum: "success" | "error" | "stale" | "partial"
@@ -354,7 +354,7 @@ export const Constants = {
       asset_type_enum: [
         "us_equity",
         "kr_equity",
-        "btc",
+        "crypto",
         "global_etf",
         "common",
       ],
