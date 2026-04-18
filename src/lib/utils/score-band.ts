@@ -24,11 +24,19 @@ export interface Band {
 }
 
 /**
- * Boundary logic: closed-open intervals, except the top boundary which
- * is [80, 100]. A score of exactly 80 is "강한 비중 확대", 79.999 is
- * just "비중 확대". Non-finite or out-of-range input coerces to
- * "유지" (neutral) as a safe default — an error upstream shouldn't
- * silently present as a confident signal either way.
+ * Boundary logic: closed-open intervals. A score of exactly 80 is
+ * "강한 비중 확대", 79.999 is just "비중 확대"; likewise for 60/40/20.
+ * Non-finite input (NaN, ±Infinity) coerces to "유지" (neutral) as a
+ * safe default — an error upstream shouldn't present as a confident
+ * signal.
+ *
+ * Finite but out-of-range input (e.g. 120 from floating-point dust,
+ * -5 from a bad caller) is NOT neutralized — it falls into the
+ * closest extreme band (120 → 강한 비중 확대, -5 → 강한 비중 축소).
+ * Upstream is responsible for producing scores in [0, 100]; both
+ * `zScoreTo0100` and `computeComposite` do so, so the out-of-range
+ * branch is effectively a floating-point-rounding tolerance rather
+ * than a guard against real bugs.
  */
 export function scoreToBand(score: number): Band {
   if (!Number.isFinite(score)) {

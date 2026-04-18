@@ -46,12 +46,15 @@ export function computeComposite(
     }))
     .filter(
       (entry): entry is { ind: IndicatorScore; weight: number } =>
-        typeof entry.weight === "number" && entry.weight > 0,
+        // `Number.isFinite` rejects `undefined`, `NaN`, `±Infinity`, and
+        // non-numbers in one check — stronger than `typeof === "number"`,
+        // which accepts `NaN`/`Infinity` and would poison the composite.
+        Number.isFinite(entry.weight) && entry.weight > 0,
     );
 
   const weightSum = active.reduce((acc, { weight }) => acc + weight, 0);
 
-  if (active.length === 0 || weightSum === 0) {
+  if (active.length === 0 || !Number.isFinite(weightSum) || weightSum === 0) {
     return { score0to100: 50, contributing: {} };
   }
 
@@ -59,11 +62,16 @@ export function computeComposite(
   let composite = 0;
 
   for (const { ind, weight } of active) {
+    // Safety: if a caller constructs an `IndicatorScore` with a non-finite
+    // score0to100 (bypassing `zScoreTo0100`'s own NaN guard), fall back to
+    // the neutral 50 rather than letting NaN contaminate the composite.
+    // One broken indicator shouldn't blank out the whole dashboard.
+    const safeScore = Number.isFinite(ind.score0to100) ? ind.score0to100 : 50;
     const normalizedWeight = weight / weightSum;
-    const contribution = ind.score0to100 * normalizedWeight;
+    const contribution = safeScore * normalizedWeight;
     composite += contribution;
     contributing[ind.key] = {
-      score: ind.score0to100,
+      score: safeScore,
       weight: normalizedWeight,
       contribution,
     };

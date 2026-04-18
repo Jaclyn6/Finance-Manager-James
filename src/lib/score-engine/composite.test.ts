@@ -105,12 +105,62 @@ describe("computeComposite", () => {
     expect(result.contributing.zero).toBeUndefined();
   });
 
-  it("composite result stays within [0, 100] given in-range inputs", () => {
+  it("averages the extremes of the scale to the midpoint", () => {
+    // 0 and 100 with equal weights should land exactly at 50 — anything
+    // else means the weighting math drifted (or returned a constant).
     const result = computeComposite(
       [score("A", 0), score("B", 100)],
       "us_equity",
     );
-    expect(result.score0to100).toBeGreaterThanOrEqual(0);
-    expect(result.score0to100).toBeLessThanOrEqual(100);
+    expect(result.score0to100).toBeCloseTo(50, 5);
+  });
+
+  describe("robustness against bad input", () => {
+    it("coerces a NaN indicator score to neutral 50 inside the composite", () => {
+      // A misbehaving upstream path might hand us NaN despite
+      // zScoreTo0100's own guard. The composite should survive.
+      const result = computeComposite(
+        [
+          { key: "broken", score0to100: Number.NaN, weights: { us_equity: 1 } },
+          score("ok", 80),
+        ],
+        "us_equity",
+      );
+      // broken is treated as 50; expected = (50*1 + 80*1) / 2 = 65
+      expect(result.score0to100).toBeCloseTo(65, 5);
+      // The contributing map should reflect the neutralized value too.
+      expect(result.contributing.broken.score).toBe(50);
+    });
+
+    it("ignores indicators whose weight is Infinity", () => {
+      // An Infinity weight would blow up normalization; the filter
+      // must drop it in favor of the well-defined weights.
+      const result = computeComposite(
+        [
+          {
+            key: "wild",
+            score0to100: 80,
+            weights: { us_equity: Number.POSITIVE_INFINITY },
+          },
+          score("A", 40),
+        ],
+        "us_equity",
+      );
+      // Only A survives → composite = 40
+      expect(result.score0to100).toBeCloseTo(40, 5);
+      expect(result.contributing.wild).toBeUndefined();
+    });
+
+    it("ignores indicators whose weight is NaN", () => {
+      const result = computeComposite(
+        [
+          { key: "wild", score0to100: 80, weights: { us_equity: Number.NaN } },
+          score("A", 40),
+        ],
+        "us_equity",
+      );
+      expect(result.score0to100).toBeCloseTo(40, 5);
+      expect(result.contributing.wild).toBeUndefined();
+    });
   });
 });
