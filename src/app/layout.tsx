@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Kraken's UI uses the proprietary Kraken-Product font with an
+ * IBM Plex Sans fallback. Since Kraken-Product isn't publicly
+ * available, we lean on IBM Plex Sans directly as the system's
+ * primary. Korean glyphs fall back through the browser's system
+ * Korean font (Apple SD Gothic Neo / Malgun Gothic / Noto Sans CJK)
+ * which renders IBM-Plex-Sans-adjacent weights well on modern OSes.
+ */
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-sans",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -25,8 +30,8 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="ko"
+      className={`${ibmPlexSans.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

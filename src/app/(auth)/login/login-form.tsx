@@ -56,9 +56,17 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>로그인</CardTitle>
+    <Card
+      className="w-full max-w-sm border-0 bg-card"
+      style={{ boxShadow: "var(--shadow-subtle)" }}
+    >
+      <CardHeader className="space-y-2">
+        <div className="inline-flex w-fit rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-dark">
+          Investment Advisor
+        </div>
+        <CardTitle className="text-3xl font-bold tracking-tight">
+          로그인
+        </CardTitle>
         <CardDescription>
           가족 계정으로 로그인하면 오늘의 투자 상태를 확인할 수 있습니다.
         </CardDescription>
@@ -76,6 +84,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={isSubmitting}
+              placeholder="family@example.com"
             />
           </div>
 
@@ -99,15 +108,15 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           )}
         </CardContent>
 
-        <CardFooter className="flex flex-col gap-2">
+        <CardFooter className="flex flex-col gap-3">
           <Button
             type="submit"
-            className="w-full"
+            className="w-full rounded-xl py-3 text-base font-medium"
             disabled={isSubmitting || !email || !password}
           >
             {isSubmitting ? "로그인 중..." : "로그인"}
           </Button>
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-center text-xs text-muted-foreground">
             참고용 해석 도구입니다. 확정적 투자 자문이 아닙니다.
           </p>
         </CardFooter>

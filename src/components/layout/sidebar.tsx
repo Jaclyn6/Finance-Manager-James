@@ -23,28 +23,30 @@ const NAV_ITEMS: NavItem[] = [
 const GROUP_ORDER = ["홈", "자산군", "히스토리"] as const;
 
 /**
- * Client Component because active-link highlighting depends on
- * `usePathname()`. Kept intentionally small so the protected layout
- * stays mostly Server-Component.
+ * Client Component — active-link highlighting requires `usePathname()`.
  *
- * `pathname.startsWith(item.href)` is used for `/asset/*` so that
- * `/asset/us-equity` (the page) correctly highlights "미국주식" even
- * if sub-routes are added later.
+ * Visual: Kraken-inspired. Brand mark in Kraken Purple with tight
+ * negative tracking, nav groups labeled in tiny caps, active item
+ * filled with `brand-subtle` tied back to the primary brand hue.
  */
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 shrink-0 border-r bg-card px-4 py-6">
-      <div className="mb-6 px-2">
-        <p className="text-sm font-semibold">투자 어드바이저</p>
-        <p className="text-xs text-muted-foreground">가족 전용 대시보드</p>
+    <aside className="w-60 shrink-0 border-r bg-sidebar px-5 py-6">
+      <div className="mb-8 px-2">
+        <p className="text-base font-bold tracking-tight text-brand">
+          Investment Advisor
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          가족 전용 대시보드
+        </p>
       </div>
 
-      <nav className="space-y-4">
+      <nav className="space-y-5">
         {GROUP_ORDER.map((group) => (
           <div key={group}>
-            <p className="mb-1 px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
               {group}
             </p>
             <ul className="space-y-0.5">
@@ -56,10 +58,10 @@ export function Sidebar() {
                     <Link
                       href={item.href}
                       className={cn(
-                        "block rounded px-2 py-1.5 text-sm transition-colors",
+                        "block rounded-md px-2.5 py-2 text-sm transition-colors",
                         isActive
-                          ? "bg-accent font-medium text-accent-foreground"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                          ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",
                       )}
                     >
                       {item.label}

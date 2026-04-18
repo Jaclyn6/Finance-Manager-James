@@ -12,9 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
  * Under `cacheComponents: true`, awaiting a page's `params` Promise at
  * the top-level turns the route into blocking dynamic content and
  * fails the prerender. The fix is the same pattern we use at
- * `(auth)/login/page.tsx`: the outer page is synchronous and just
- * passes the `params` Promise down into a Suspense-wrapped child
- * where the await happens.
+ * `(auth)/login/page.tsx`: the outer page is synchronous and passes
+ * the `params` Promise down into a Suspense-wrapped child where the
+ * await happens.
  *
  * When real data fetching lands in Step 10, the inner slot can adopt
  * `'use cache'` + `cacheTag('macro-snapshot')` + `cacheLife('days')`
@@ -49,14 +49,17 @@ async function AssetDetailSlot({ params }: { params: AssetParams }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{label}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <div className="inline-flex rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-dark">
+          자산군
+        </div>
+        <h1 className="mt-2 text-4xl font-bold tracking-tight">{label}</h1>
+        <p className="mt-2 max-w-2xl text-base text-muted-foreground">
           자산군별 합성 점수·기여 지표·30일 추이 차트는 Step 10에서 연결됩니다.
         </p>
       </div>
-      <div className="rounded-lg border bg-card p-12 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground">
         이 자산군에 대한 스냅샷은 아직 집계되지 않았습니다.
       </div>
     </div>
@@ -65,12 +68,13 @@ async function AssetDetailSlot({ params }: { params: AssetParams }) {
 
 function AssetDetailSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-2">
-        <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-4 w-96" />
+        <Skeleton className="h-4 w-16 rounded-md" />
+        <Skeleton className="h-10 w-40" />
+        <Skeleton className="h-5 w-[420px]" />
       </div>
-      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-48 w-full rounded-2xl" />
     </div>
   );
 }
