@@ -30,6 +30,17 @@ export async function UserDisplay() {
   // The Supabase JWT payload carries `email` (from auth.users.email) and
   // `user_metadata` (the object passed at admin-createUser time). Neither
   // field is part of the base JwtPayload type, so we narrow explicitly.
+  //
+  // ⚠️ SECURITY NOTE: `user_metadata` is user-writable by default via
+  // `supabase.auth.updateUser({ data: { persona: '...' } })`. The value
+  // here is safe because it only drives a display label (rendered as
+  // plain text by React, so XSS-free). Do NOT use this persona value
+  // for authorization decisions (e.g. showing "expert-only" data or
+  // gating a destructive action). When personalization needs real
+  // trust — Phase 2 and beyond — source persona from the server-only
+  // `public.user_preferences` table via RLS-gated reads, since that
+  // table is writable only by service_role or via policy-checked
+  // user inserts.
   const narrowed = claims as { email?: string; user_metadata?: { persona?: string } };
   const email = narrowed.email ?? "";
   const persona = narrowed.user_metadata?.persona ?? "intermediate";

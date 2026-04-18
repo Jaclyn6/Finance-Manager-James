@@ -111,7 +111,10 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         <CardFooter className="flex flex-col gap-3">
           <Button
             type="submit"
-            className="w-full rounded-xl py-3 text-base font-medium"
+            // rounded-lg resolves to --radius-lg = --radius = 0.75rem (12px),
+            // which matches DESIGN.md §4 Primary Purple button spec and
+            // the §7 "12px is the max radius for buttons" rule.
+            className="w-full rounded-lg py-3 text-base font-medium"
             disabled={isSubmitting || !email || !password}
           >
             {isSubmitting ? "로그인 중..." : "로그인"}

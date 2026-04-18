@@ -16,12 +16,14 @@ import { UserDisplay } from "./user-display";
  * 1. `UserDisplay` is a Server Component that calls `cookies()` — a
  *    runtime API that must live behind Suspense or the static shell
  *    can't prerender.
- * 2. `ThemeToggle` renders shadcn's `<Button>`, which internally uses
- *    `@base-ui/react/button`; base-ui generates unique IDs via
- *    `Math.random()` at mount time. Any non-deterministic value in a
- *    Client Component must also sit inside a Suspense boundary so
- *    Next can stream around it without baking an unstable value into
- *    the prerendered HTML.
+ * 2. `ThemeToggle` renders shadcn's `<Button>`, which imports
+ *    `@base-ui/react/button`. base-ui calls `Math.random()` during its
+ *    module evaluation (a property-name-obfuscation trick for
+ *    `useInsertionEffect`, plus fallback id generation on older React).
+ *    Next.js flags any non-deterministic value in a Client Component
+ *    bundle — regardless of whether it fires at module load or at
+ *    mount — so the component tree must sit inside a Suspense
+ *    boundary. Without one, the static shell can't be prerendered.
  *
  * One boundary covers both. The fallback matches the final footprint
  * (icon button + user pill) so hydration doesn't shift the layout.

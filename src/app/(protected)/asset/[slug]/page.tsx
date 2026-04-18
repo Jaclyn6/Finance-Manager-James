@@ -16,6 +16,21 @@ import { Skeleton } from "@/components/ui/skeleton";
  * the `params` Promise down into a Suspense-wrapped child where the
  * await happens.
  *
+ * Status-code caveat: `notFound()` fires inside the Suspense-wrapped
+ * slot. By the time the slot resolves and calls `notFound()`, Next.js
+ * has already committed a 200 response header via the streaming
+ * prerender — so unknown slugs render the not-found UI but with HTTP
+ * 200, not 404. The user experience is correct (they see the 404
+ * page); only the status code is wrong. Accepted as a Phase 1 tradeoff
+ * for a private family dashboard where SEO and link-checker behavior
+ * don't matter. The conventional fix (`export const dynamicParams =
+ * false` alongside `generateStaticParams`) is rejected by Next 16
+ * under `cacheComponents: true`.
+ *
+ * `generateStaticParams` is still declared so the four known slugs
+ * are prerendered at build time (faster first render) and so the
+ * whitelist is machine-checkable in one place.
+ *
  * When real data fetching lands in Step 10, the inner slot can adopt
  * `'use cache'` + `cacheTag('macro-snapshot')` + `cacheLife('days')`
  * — but only with the resolved slug passed as a serializable string
@@ -30,6 +45,10 @@ const ASSET_LABELS: Record<string, string> = {
 
 type AssetParams = Promise<{ slug: string }>;
 
+export function generateStaticParams() {
+  return Object.keys(ASSET_LABELS).map((slug) => ({ slug }));
+}
+
 export default function AssetDetailPage({ params }: { params: AssetParams }) {
   return (
     <div className="mx-auto max-w-5xl">
@@ -42,7 +61,13 @@ export default function AssetDetailPage({ params }: { params: AssetParams }) {
 
 async function AssetDetailSlot({ params }: { params: AssetParams }) {
   const { slug } = await params;
-  const label = ASSET_LABELS[slug];
+
+  // `Object.hasOwn` check (instead of `ASSET_LABELS[slug]` directly)
+  // closes a prototype-pollution hole where `/asset/toString`,
+  // `/asset/constructor`, etc. would resolve to the inherited
+  // `Object.prototype` member — a truthy function value — and bypass
+  // the `!label` 404 guard.
+  const label = Object.hasOwn(ASSET_LABELS, slug) ? ASSET_LABELS[slug] : undefined;
 
   if (!label) {
     notFound();
