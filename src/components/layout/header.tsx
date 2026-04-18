@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 import { UserDisplay } from "./user-display";
 
@@ -19,9 +20,12 @@ export function Header() {
       <div className="text-sm font-medium text-muted-foreground">
         오늘의 투자 환경
       </div>
-      <Suspense fallback={<Skeleton className="h-9 w-56 rounded-md" />}>
-        <UserDisplay />
-      </Suspense>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <Suspense fallback={<Skeleton className="h-9 w-56 rounded-md" />}>
+          <UserDisplay />
+        </Suspense>
+      </div>
     </header>
   );
 }

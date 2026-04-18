@@ -54,8 +54,8 @@ async function AssetDetailSlot({ params }: { params: AssetParams }) {
         <div className="inline-flex rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-dark">
           자산군
         </div>
-        <h1 className="mt-2 text-4xl font-bold tracking-tight">{label}</h1>
-        <p className="mt-2 max-w-2xl text-base text-muted-foreground">
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">{label}</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           자산군별 합성 점수·기여 지표·30일 추이 차트는 Step 10에서 연결됩니다.
         </p>
       </div>
@@ -71,8 +71,8 @@ function AssetDetailSkeleton() {
     <div className="space-y-8">
       <div className="space-y-2">
         <Skeleton className="h-4 w-16 rounded-md" />
-        <Skeleton className="h-10 w-40" />
-        <Skeleton className="h-5 w-[420px]" />
+        <Skeleton className="h-9 w-40" />
+        <Skeleton className="h-4 w-[420px]" />
       </div>
       <Skeleton className="h-48 w-full rounded-2xl" />
     </div>

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
+import { ThemeProvider } from "@/components/theme-provider";
+
 /**
  * Kraken's UI uses the proprietary Kraken-Product font with an
  * IBM Plex Sans fallback. Since Kraken-Product isn't publicly
@@ -31,9 +33,12 @@ export default function RootLayout({
   return (
     <html
       lang="ko"
+      suppressHydrationWarning
       className={`${ibmPlexSans.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
