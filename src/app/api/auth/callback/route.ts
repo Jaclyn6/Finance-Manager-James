@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { safeRelativePath } from "@/lib/utils/redirect";
 
 /**
  * OAuth / magic-link PKCE callback.
@@ -18,7 +19,10 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  // Must be validated before any redirect — a raw `next` from the URL can be
+  // a protocol-relative hijack target (e.g. "//evil.com/path"), see
+  // lib/utils/redirect.ts for the rationale.
+  const nextPath = safeRelativePath(searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login`);
@@ -33,5 +37,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(failureUrl);
   }
 
-  return NextResponse.redirect(`${origin}${next}`);
+  return NextResponse.redirect(`${origin}${nextPath}`);
 }

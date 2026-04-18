@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { safeRelativePath } from "@/lib/utils/redirect";
 
 import { LoginForm } from "./login-form";
 
@@ -42,6 +43,6 @@ async function LoginFormSlot({
   searchParams: LoginSearchParams;
 }) {
   const { next } = await searchParams;
-  const nextPath = next && next.startsWith("/") ? next : "/dashboard";
+  const nextPath = safeRelativePath(next);
   return <LoginForm nextPath={nextPath} />;
 }

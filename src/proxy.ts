@@ -73,17 +73,41 @@ export async function proxy(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", path);
-    return NextResponse.redirect(redirectUrl);
+    return withSupabaseCookies(
+      NextResponse.redirect(redirectUrl),
+      supabaseResponse,
+    );
   }
 
   if (path === "/login" && claims) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/dashboard";
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return withSupabaseCookies(
+      NextResponse.redirect(redirectUrl),
+      supabaseResponse,
+    );
   }
 
   return supabaseResponse;
+}
+
+/**
+ * Copies every cookie written by Supabase during `getClaims()` onto an
+ * outbound redirect response. Without this, a token that the Supabase
+ * client silently refreshed during the guard check is discarded and the
+ * next request still carries the pre-refresh cookie — at best wasting a
+ * refresh-token use, at worst leaving an invalidated cookie in the
+ * browser jar (when Supabase intended to clear it).
+ */
+function withSupabaseCookies(
+  redirectResponse: NextResponse,
+  supabaseResponse: NextResponse,
+) {
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+  return redirectResponse;
 }
 
 export const config = {
@@ -92,8 +116,13 @@ export const config = {
    * is authenticated by `Authorization: Bearer ${CRON_SECRET}` instead
    * of a Supabase session), and the auth callback (which must not be
    * gated by the guard it is trying to establish).
+   *
+   * Trailing slashes on `api/cron/` and `api/auth/` anchor the exclusion
+   * to a segment boundary — without them, a future route like
+   * `/api/cronjob` or `/api/authentication` would silently bypass the
+   * guard because the regex would still match the `api/auth` prefix.
    */
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/cron|api/auth).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/cron/|api/auth/).*)",
   ],
 };
