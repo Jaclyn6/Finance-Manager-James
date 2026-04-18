@@ -13,6 +13,14 @@ build/
 dist/
 *.tsbuildinfo
 next-env.d.ts
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+*.pem
 
 # ---- Supabase local ----
 supabase/.branches
