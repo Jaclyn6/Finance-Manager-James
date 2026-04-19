@@ -22,7 +22,14 @@ export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // Intentional hydration gate. On the server and during the first
+  // client render, `resolvedTheme` is `undefined`; rendering the Sun/Moon
+  // icon based on it would cause a hydration mismatch. The post-mount
+  // `setMounted(true)` swaps in the correct icon on exactly the second
+  // render — the pattern `next-themes` itself documents. Refactoring to
+  // `useSyncExternalStore` would be lint-clean but obscures the intent.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

@@ -46,10 +46,19 @@ export function computeComposite(
     }))
     .filter(
       (entry): entry is { ind: IndicatorScore; weight: number } =>
-        // `Number.isFinite` rejects `undefined`, `NaN`, `±Infinity`, and
-        // non-numbers in one check — stronger than `typeof === "number"`,
-        // which accepts `NaN`/`Infinity` and would poison the composite.
-        Number.isFinite(entry.weight) && entry.weight > 0,
+        // Two-part check, each pulling its own weight:
+        //   - `typeof entry.weight === "number"` narrows TS from
+        //     `number | undefined` to `number`, because
+        //     `ind.weights[assetType]` is `Partial<Record<...>>[K]`.
+        //     `Number.isFinite` is a runtime check with signature
+        //     `(value: unknown) => boolean` — it has no TS type predicate,
+        //     so it doesn't narrow the static type.
+        //   - `Number.isFinite(...)` then rejects `NaN`/`±Infinity` at
+        //     runtime; `typeof === "number"` accepts those and would
+        //     poison the composite.
+        typeof entry.weight === "number" &&
+        Number.isFinite(entry.weight) &&
+        entry.weight > 0,
     );
 
   const weightSum = active.reduce((acc, { weight }) => acc + weight, 0);
