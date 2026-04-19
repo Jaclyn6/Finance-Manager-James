@@ -15,6 +15,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // The `server-only` package is a build-time guard that throws on
+      // import from any client bundle (see `src/lib/supabase/admin.ts`
+      // and `src/lib/score-engine/indicators/fred.ts`). Vitest's Node
+      // environment has no Next.js runtime markers, so the real module
+      // unconditionally throws. Aliasing to a no-op stub preserves the
+      // production guard while letting tests import guarded modules.
+      "server-only": path.resolve(__dirname, "./vitest.setup.server-only.ts"),
     },
   },
   test: {

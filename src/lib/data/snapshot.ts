@@ -24,20 +24,14 @@ import { CACHE_TAGS } from "./tags";
  *
  * Idempotency strategy — the cron can re-run for the same day
  * (manual retrigger, Vercel cron retry on a 5xx) without duplicating
- * data. We upsert on the natural unique keys declared in migration
- * `0001_initial_schema.sql`:
+ * data. We upsert on the natural unique keys:
  *
  *   indicator_readings    → (indicator_key, observed_at, model_version)
+ *                           declared in migration 0001
  *   composite_snapshots   → (asset_type, snapshot_date, model_version)
- *
- * `score_changelog` has NO unique index today (the schema leaves it
- * open-ended), so `writeScoreChangelog` does a plain `.insert()`. If
- * the cron double-fires, duplicate delta rows can accrue for the same
- * (asset_type, change_date). The TODO below tracks closing this gap.
- *
- * TODO(blueprint §9 Step 8): add `score_changelog_dedup` unique index
- * on `(asset_type, change_date, model_version)` via a new migration,
- * then switch `writeScoreChangelog` to an upsert on that constraint.
+ *                           declared in migration 0001
+ *   score_changelog       → (asset_type, change_date, model_version)
+ *                           declared in migration 0004 (added at Step 9)
  *
  * `ingest_runs` is a plain append — each cron execution is its own
  * audit record, so duplication is expected on retry (each retry gets
@@ -104,14 +98,23 @@ export async function writeCompositeSnapshot(
 }
 
 /**
- * Insert one score-changelog row. Plain `.insert()` — see the
- * file-level TODO about the missing unique index.
+ * Upsert one score-changelog row.
+ *
+ * Conflict on `(asset_type, change_date, model_version)` — the
+ * `score_changelog_dedup` unique index landed in migration 0004.
+ * On same-day rerun the new row replaces the old; this matters
+ * when a partial-failure day produces a better composite (and
+ * therefore a corrected delta) on the second pass.
  */
 export async function writeScoreChangelog(
   entry: ScoreChangelogInsert,
 ): Promise<void> {
   const supabase = getSupabaseAdminClient();
-  const { error } = await supabase.from("score_changelog").insert(entry);
+  const { error } = await supabase
+    .from("score_changelog")
+    .upsert(entry, {
+      onConflict: "asset_type,change_date,model_version",
+    });
 
   if (error) {
     throw new Error(
