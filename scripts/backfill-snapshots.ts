@@ -39,11 +39,14 @@
  *    The Phase 1 smoke-test row for 2026-04-19 will get overwritten —
  *    that's fine, the recomputed value uses the same inputs.
  *
- * 5. **Bypasses `admin.ts` + `snapshot.ts` module chain.** Those carry
- *    `import "server-only"` which throws in a Node-env script. The
- *    script uses `@supabase/supabase-js` directly with the service
- *    role key — same behavior, no import-chain guard. Pure score-engine
- *    functions are reused (no "server-only" anywhere in that chain).
+ * 5. **Bypasses `admin.ts` + `snapshot.ts` module chain.** `admin.ts`
+ *    carries `import "server-only"` (Step 8 post-review hardening), and
+ *    `snapshot.ts` imports `admin.ts` so its transitive chain throws
+ *    the same guard in a Node-env script. This script uses
+ *    `@supabase/supabase-js` directly with the service-role key — same
+ *    behavior at the DB, no import-chain guard. Pure score-engine
+ *    functions are reused (none of `weights` / `normalize` / `composite` /
+ *    `top-movers` / `score-band` carries "server-only").
  *
  * Running:
  *   npx tsx scripts/backfill-snapshots.ts
@@ -51,13 +54,20 @@
  *   FRED_API_KEY)
  */
 
-import "dotenv/config";
 import { config as loadEnv } from "dotenv";
 
-// dotenv/config loads `.env` by default, but our secrets live in
-// `.env.local` per Next.js convention. Load that too; `.env.local`
-// values override `.env` (both silently absent if missing).
-loadEnv({ path: ".env.local" });
+// Next.js convention: `.env.local` overrides `.env`. Replicate that
+// precedence explicitly so the script works in either single-file or
+// both-file setups:
+//   1. Load `.env` first (silently skipped if absent).
+//   2. Load `.env.local` with `override: true` so its values win over
+//      anything `.env` already set — dotenv's default is FIRST-WIN, not
+//      last-win, so without `override: true` a `.env` containing an
+//      outdated NEXT_PUBLIC_SUPABASE_URL would silently route the
+//      backfill to the wrong project. The single `import "dotenv/config"`
+//      shorthand only covers `.env`, so we use the explicit form twice.
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local", override: true });
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -252,7 +262,13 @@ async function main() {
         // is the canonical value for all 7 FRED series in Phase 1.
         asset_type: "common",
         value_raw: asOf.value,
-        value_normalized: z,
+        // `computeZScore` returns NaN for the flat-window-non-mean
+        // edge case (normalize.ts:34). Mirror the cron's defensive
+        // coercion (route.ts) so value_normalized stays a clean
+        // number-or-null rather than leaking NaN into the NUMERIC
+        // column. Score stays safe because `zScoreTo0100` itself
+        // guards non-finite and returns 50.
+        value_normalized: Number.isFinite(z) ? z : null,
         score_0_100: score,
         model_version: MODEL_VERSION,
         source_name: config.sourceName,
@@ -315,10 +331,27 @@ async function main() {
     }
   }
 
-  // Dedup indicator_readings on (key, observed_at, model_version) —
-  // monthly indicators repeat the same observed_at across many
-  // backfill dates. Keeping the last-written entry is semantically
-  // identical because the inputs are deterministic.
+  // Dedup indicator_readings on (key, observed_at, model_version).
+  // Monthly indicators (FEDFUNDS / CPIAUCSL / SAHMCURRENT) publish on
+  // the 1st and stay constant for the rest of the month, so the same
+  // observed_at repeats across many backfill dates. Daily indicators
+  // have a fresh observed_at per business day, so they're rarely
+  // deduped except over weekends/holidays.
+  //
+  // Subtlety: for monthly indicators, each backfill date D re-computes
+  // the z-score against a DIFFERENT 5-year window (anchored at D, not
+  // at observed_at). So two backfill dates that collide on observed_at
+  // typically produce slightly different value_normalized / score_0_100
+  // values — the 5-year window can shift by up to 30 days over this
+  // backfill's scope, moving the window's oldest edge across a handful
+  // of observations. Keeping the last-written entry (the most recent
+  // backfill date's computation) is intentional — it's the closest
+  // proxy to "what the cron would have written today" — but callers
+  // should be aware this is NOT literally the score that backfill-date
+  // D1 computed for the same monthly row; for 30 days of backfill the
+  // drift is sub-percent on the z-score and imperceptible on the 0-100
+  // score. If pixel-perfect per-date scores for monthly indicators ever
+  // matter, split the dedup key to include snapshot_date too.
   const dedupedReadings = Array.from(
     new Map(
       readingRows.map((r) => [

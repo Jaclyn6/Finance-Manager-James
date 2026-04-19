@@ -1,4 +1,4 @@
-# Phase 1 Implementation Blueprint — v2.2
+# Phase 1 Implementation Blueprint — v2.3
 
 > **Version history**
 > - **v1** (2026-04-18, by feature-dev:code-architect): initial blueprint against PRD v3 §18 Phase 1, written assuming Next.js 15 + `@supabase/ssr` 0.5.x.
@@ -428,7 +428,7 @@ Steps are ordered so the repo never enters a broken state. ✔ marks steps alrea
 11.5. **Historical backfill (30-day seed, v2.3)** — run once before Step 12 so the dashboard trend chart and changelog page carry real data instead of the Phase 1 smoke-test's single point. Operational tooling, not part of the runtime app:
    - Split `src/lib/score-engine/indicators/fred.ts` into `fred.ts` (fetcher, keeps `import "server-only"`) + `fred-parse.ts` (pure parser + `findObservationAsOf` helper, no guard). The wrapper re-exports the parser so existing cron + Vitest callers are unchanged.
    - `scripts/backfill-snapshots.ts` (run via `npx tsx`): fetches 5-year history for each of the 7 FRED series once, then for every date D in the 30-day backfill window recomputes z-scores against the window `[D - 5y, D]` (a **per-date** window, not today-anchored — otherwise future data would leak into past scores). Writes ~83 deduped `indicator_readings`, 150 `composite_snapshots` (30 × 5 asset types), 145 `score_changelog` rows via upserts on the existing unique indexes — idempotent and overwrite-safe.
-   - Bypasses `src/lib/supabase/admin.ts` + `src/lib/data/snapshot.ts` (both carry `import "server-only"` that throws in a Node-env script) by using `@supabase/supabase-js` directly with the service-role key. Pure score-engine functions (`weights`, `normalize`, `composite`, `top-movers`, `score-band`) are reused.
+   - Bypasses `src/lib/supabase/admin.ts` (carries `import "server-only"`) and `src/lib/data/snapshot.ts` (transitively throws because it imports from `admin.ts`) by using `@supabase/supabase-js` directly with the service-role key. Pure score-engine functions (`weights`, `normalize`, `composite`, `top-movers`, `score-band`) are reused.
    - After running, dev server restart (or next daily cron) triggers `revalidateTag('macro-snapshot' / 'changelog')` to evict the stale `cacheLife('days')` entries.
    - Script prints a min/mean/max score summary so the operator can eyeball whether the resulting distribution looks reasonable without opening the dashboard.
    - **No schema changes, no runtime app changes.** The migration 0004 unique indexes shipped at Step 9 already make re-runs idempotent.
