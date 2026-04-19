@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 
+import { MODEL_VERSION } from "@/lib/score-engine/weights";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { computeDateWindow } from "@/lib/utils/date";
 import type { Tables } from "@/types/database";
@@ -26,6 +27,12 @@ import { CACHE_TAGS } from "./tags";
  * would be safe for deep-historical windows (rows don't change once
  * written), but the changelog page is typically anchored on recent
  * dates where freshness matters more than longevity.
+ *
+ * Like the composite-snapshot readers in `indicators.ts`, this reader
+ * filters on `model_version = MODEL_VERSION` so a version bump cleanly
+ * separates histories: the user sees the current model's changelog
+ * only. Old-version rows stay in the table for backtest replay but
+ * don't leak into the live UI.
  */
 
 type ScoreChangelogRow = Tables<"score_changelog">;
@@ -60,6 +67,7 @@ export async function getChangelogAroundDate(
   const { data, error } = await supabase
     .from("score_changelog")
     .select("*")
+    .eq("model_version", MODEL_VERSION)
     .gte("change_date", start)
     .lte("change_date", end)
     .order("change_date", { ascending: false });

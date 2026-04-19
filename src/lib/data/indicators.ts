@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 
+import { MODEL_VERSION } from "@/lib/score-engine/weights";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -57,6 +58,22 @@ import { CACHE_TAGS } from "./tags";
  * `'use cache'` keys on arguments: a function called with `undefined`
  * and with `"2026-04-19"` gets two cache entries. Splitting them makes
  * the cadence difference explicit in the signature.
+ *
+ * ─ `model_version` filter ────────────────────────────────────────
+ *
+ * Every reader filters on `model_version = MODEL_VERSION`
+ * (current). Blueprint §4.2 says bumping `MODEL_VERSION` "writes new
+ * rows that coexist with old under a different version tag", i.e. old
+ * and new can share the same (asset_type, snapshot_date). Without
+ * this filter, the dashboard would non-deterministically mix versions
+ * per asset card after a bump. Explicit filtering also means a
+ * `MODEL_VERSION` bump immediately cuts off stale composites even if
+ * the cache hasn't been invalidated yet.
+ *
+ * If Phase 3 ever wants to browse historical versions side-by-side
+ * (blueprint §4.2 mentions backtest replay), add a parallel
+ * `getCompositeSnapshotsForDateAndVersion(date, version)` reader
+ * rather than loosening this filter.
  */
 
 type CompositeSnapshot = Tables<"composite_snapshots">;
@@ -80,9 +97,11 @@ const LATEST_LOOKBACK_DAYS = 7;
  * the same asset_type across a partial-failure day and leave another
  * asset_type missing).
  *
- * Implementation: fetch a 7-day window newest-first, then dedupe in
- * memory keeping the first row per asset_type. Cheap (≤35 rows), robust
- * to a week of ingest outages, single query.
+ * Implementation: fetch a 7-day window newest-first (today + 6
+ * prior days), then dedupe in memory keeping the first row per
+ * asset_type. Cheap (≤35 rows), robust to up to 6 consecutive missed
+ * ingest days — an outage longer than that produces an empty result
+ * and the UI surfaces it via the staleness badge. Single query.
  *
  * Under the cron invariant "every successful run writes one row per
  * asset_type", the typical case is 5 rows returned, all from today.
@@ -98,6 +117,7 @@ export async function getLatestCompositeSnapshots(): Promise<
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("*")
+    .eq("model_version", MODEL_VERSION)
     .order("snapshot_date", { ascending: false })
     .limit(LATEST_LOOKBACK_DAYS * ASSET_TYPE_COUNT);
 
@@ -139,7 +159,8 @@ export async function getCompositeSnapshotsForDate(
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("*")
-    .eq("snapshot_date", date);
+    .eq("snapshot_date", date)
+    .eq("model_version", MODEL_VERSION);
 
   if (error) {
     throw new Error(
@@ -172,6 +193,7 @@ export async function getClosestEarlierSnapshotDate(
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("snapshot_date")
+    .eq("model_version", MODEL_VERSION)
     .lt("snapshot_date", date)
     .order("snapshot_date", { ascending: false })
     .limit(1);
