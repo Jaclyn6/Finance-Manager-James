@@ -102,8 +102,15 @@ export function DatePicker() {
             render={
               <Button
                 variant="outline"
-                size="sm"
-                className="gap-2"
+                // Explicit `h-11` honors blueprint §6.2's universal
+                // ≥44×44 touch-target rule — §6.2 lists "date picker"
+                // verbatim without a viewport qualifier, so the
+                // desktop trigger needs the same height as the mobile
+                // native input. `size="default"` (h-8) and `size="sm"`
+                // (h-7) are both below the threshold; overriding via
+                // className keeps the shadcn cva intact for padding
+                // and gap while forcing the height.
+                className="h-11 gap-2"
                 aria-label="날짜 선택"
               />
             }
