@@ -35,8 +35,10 @@ export interface ScoreTrendLineProps {
   /** Pre-fetched ascending-date series. `score_0_100` in each row. */
   data: { snapshot_date: string; score_0_100: number }[];
   /**
-   * Rolling window length in days — used only for the chart's empty
-   * state message. Default 90.
+   * Rolling window length in days. Used to label the chart header
+   * ("최근 N일 점수 추이") AND the empty-state fallback ("최근 N일
+   * 동안 수집된 점수가 없습니다"). Callers pass the window they
+   * fetched with so the visible framing matches the data. Default 90.
    */
   rangeDays?: number;
 }
@@ -56,6 +58,20 @@ export function ScoreTrendLine({ data, rangeDays = 90 }: ScoreTrendLineProps) {
   // data they have.
   const isSparse = data.length < 2;
 
+  // Summarize the series for screen readers. Recharts produces an
+  // inline <svg> with no accessible name by default (WCAG 1.1.1 /
+  // 4.1.2), which would leave AT users hearing nothing about the
+  // trend. A text description on the chart container fills that gap
+  // — minimum, latest, and range are the three facts a SR user needs
+  // to understand "is the trend favorable right now?".
+  const scores = data.map((d) => d.score_0_100);
+  const latestScore = scores[scores.length - 1];
+  const minScore = Math.min(...scores);
+  const maxScore = Math.max(...scores);
+  const ariaSummary = isSparse
+    ? `최근 ${rangeDays}일 점수 추이. 데이터 1개 — ${data[0].snapshot_date} 기준 ${latestScore.toFixed(1)}점.`
+    : `최근 ${rangeDays}일 점수 추이. ${data.length}개 데이터. 최저 ${minScore.toFixed(1)}점, 최고 ${maxScore.toFixed(1)}점, 가장 최근 ${latestScore.toFixed(1)}점.`;
+
   return (
     <div className="rounded-2xl border bg-card p-4 md:p-6">
       <div className="mb-3 flex items-baseline justify-between">
@@ -66,10 +82,17 @@ export function ScoreTrendLine({ data, rangeDays = 90 }: ScoreTrendLineProps) {
           {data.length}일 기록
         </span>
       </div>
-      {/* `h-64 md:h-72` gives Recharts a deterministic height — without
-          it, the ResponsiveContainer reports 0 on first measure and
-          the chart never draws (a long-standing Recharts footgun). */}
-      <div className="h-64 w-full md:h-72">
+      {/* `role="img"` + `aria-label` give this SVG an accessible name
+          so screen readers announce the summary instead of skipping
+          past silently. `h-64 md:h-72` gives Recharts a deterministic
+          height — without it, the ResponsiveContainer reports 0 on
+          first measure and the chart never draws (a long-standing
+          Recharts footgun). */}
+      <div
+        role="img"
+        aria-label={ariaSummary}
+        className="h-64 w-full md:h-72"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}

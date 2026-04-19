@@ -96,6 +96,15 @@ export function ContributingIndicators({
                         focusable="false"
                         className="size-3"
                       />
+                      {/*
+                        Screen-reader-only suffix announces the context
+                        change before activation. `target="_blank"`
+                        alone is a WCAG 3.2.5 / G201 oversight — SR
+                        users don't expect a new tab unless told.
+                        Visually hidden (`sr-only`) so sighted users
+                        see the icon, not the text.
+                      */}
+                      <span className="sr-only">(새 창에서 열기)</span>
                     </a>
                   ) : (
                     <p className="text-xs text-muted-foreground">{row.key}</p>
