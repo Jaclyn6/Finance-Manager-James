@@ -87,23 +87,43 @@ describe("parseFredResponse", () => {
       observations: [
         { date: "2025-01-01", value: "1.0" },
         { date: "2025-02-01", value: "not a number" },
-        { date: "bad-date-ignored-too", value: "3.0" }, // date is a string, kept (parser doesn't validate format)
+        { date: "bad-date-format", value: "3.0" }, // not YYYY-MM-DD
+        { date: "", value: "4.0" }, // empty string — would crash Postgres DATE cast
         { noDate: true, value: "5.0" },
         { date: "2025-03-01", value: "3.5" },
       ],
     };
     const result = parseFredResponse("TEST", body);
 
-    // "not a number" drops; "noDate" drops; "bad-date-ignored-too" kept
-    // (parser accepts any string date — downstream DB cast would fail;
-    // in practice FRED never returns invalid dates).
+    // "not a number" drops (NaN); "bad-date-format" drops (regex); "" drops
+    // (regex); "noDate" drops (typeof guard). Only the two well-formed
+    // rows survive.
     expect(result.observations.map((o) => o.date)).toEqual([
       "2025-01-01",
-      "bad-date-ignored-too",
       "2025-03-01",
     ]);
     expect(result.fetch_status).toBe("success");
     expect(result.latest?.date).toBe("2025-03-01");
+  });
+
+  it("rejects dates that are strings but not YYYY-MM-DD formatted", () => {
+    // Guards the Postgres DATE cast on indicator_readings.observed_at.
+    // If an invalid-format string reached the DB, the batch upsert
+    // would throw `invalid input syntax for type date` and abort the
+    // whole ingest run.
+    const body = {
+      observations: [
+        { date: "2025/01/01", value: "1.0" }, // wrong separator
+        { date: "20250101", value: "2.0" }, // no separators
+        { date: "2025-1-1", value: "3.0" }, // not zero-padded
+        { date: "", value: "4.0" }, // empty
+        { date: "2025-01-01T00:00:00Z", value: "5.0" }, // timestamp, not DATE
+      ],
+    };
+    const result = parseFredResponse("TEST", body);
+    expect(result.observations).toHaveLength(0);
+    // Zero observations → partial status per the parser's contract.
+    expect(result.fetch_status).toBe("partial");
   });
 
   it("returns error on non-object body", () => {

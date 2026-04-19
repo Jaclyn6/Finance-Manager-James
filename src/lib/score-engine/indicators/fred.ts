@@ -16,8 +16,10 @@ import "server-only";
  *    not poison the others.
  *
  * 2. **Hard timeout per call.** `AbortController` fires after 15s.
- *    Seven indicators × 15s worst-case = 105s total wall time, well under
- *    the Vercel Fluid Compute 300s default timeout.
+ *    The cron route calls `fetchFredSeries` in parallel via
+ *    `Promise.all`, so worst-case total wall time is ~15s (the slowest
+ *    series), not 7×15s. Well under the Vercel Fluid Compute 300s
+ *    default timeout.
  *
  * 3. **Pure parser extracted.** `parseFredResponse(id, body)` is a
  *    named export so Vitest can feed synthetic payloads without going
@@ -154,11 +156,19 @@ export function parseFredResponse(
     return makeErrorResult(seriesId, "FRED response missing observations[]");
   }
 
+  // FRED returns observation dates as `YYYY-MM-DD`. The Postgres
+  // `observed_at` column on indicator_readings is a DATE, and an
+  // empty string / off-format value would cause the whole batch
+  // upsert to throw `invalid input syntax for type date`, killing
+  // the ingest run. Be strict here so one malformed upstream row
+  // can't poison the batch.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
   const observations: FredObservation[] = [];
   for (const item of rawObs) {
     if (!item || typeof item !== "object") continue;
     const rec = item as { date?: unknown; value?: unknown };
-    if (typeof rec.date !== "string") continue;
+    if (typeof rec.date !== "string" || !ISO_DATE.test(rec.date)) continue;
     if (typeof rec.value !== "string") continue;
     if (rec.value === ".") {
       observations.push({ date: rec.date, value: null });
