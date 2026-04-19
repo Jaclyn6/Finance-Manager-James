@@ -2,67 +2,56 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-20 00:40 (manual `/handoff`-equivalent rewrite, immediately after removing the auto-handoff-on-clear hook)
+2026-04-20 01:05 (manual `/handoff`-equivalent rewrite after mobile-scope decisions confirmed and PRD v3.2 + blueprint v2.2 edits applied)
 
 ## 2. Current Phase / Step
 
-**Phase 1, Step 7 complete.** Next is **Step 8 (cron route handler)** — but a new **Step 8.5 (mobile shell retrofit)** is pending user confirmation of four decision points, and if confirmed it lands between Step 8 and Step 9 rather than displacing Step 8.
+**Phase 1, blueprint §9 Step 8 complete ✔.** Next is **Step 9 (cron route handler)**, and a new **Step 9.5 (mobile shell retrofit, v2.2)** is queued between Step 9 and Step 10.
 
-Blueprint v2.1 §9 Build Sequence — Steps 1–7 ✔.
+Note on numbering: earlier conversation turns sometimes called the data layer "Step 7" — that was a lag; the blueprint's Step numbering (§9 Build Sequence) is authoritative, and by that numbering Steps 1–8 are now ✔. Going forward all references use blueprint numbers.
 
 ## 3. Last Commit
 
-Will be the commit made immediately after this handoff snapshot (removes the `UserPromptSubmit` hook + hook script + safety-net paragraph in CLAUDE.md + restores this rich handoff over the mechanical one at `e41edbe`).
+Will be the commit made immediately after this snapshot — bundles the PRD v3.2 update, blueprint v2.2 update, and this handoff rewrite.
 
-Prior to that commit, `main` tip is `e41edbe` (mechanical auto-handoff — being superseded). The true "Step 7 complete + post-review fixes" cursor is `30d7f5e`. Everything before that is Step 6 and handoff-infra work.
-
-Working tree state at snapshot time:
-- `.claude/settings.json` — modified (hook config removed)
-- `.claude/hooks/auto-handoff-on-clear.sh` — deleted (directory gone)
-- `CLAUDE.md` — modified (safety-net paragraph replaced with "manual-only" note)
-- `docs/handoff.md` — this file (rewritten)
+Prior tip on `main` is `7239685` (hook removal + rich handoff restoration). The data layer cursor is `30d7f5e`.
 
 ## 4. Active Thread
 
 - **Just finished:**
-  - Step 7 data layer (`6aab776`): `src/lib/data/{tags,snapshot,indicators,changelog}.ts` + `src/lib/utils/date.ts` + tests. Resolved blueprint §7 open question #3 by using the admin (service_role) Supabase client inside `'use cache'` scopes (no `cookies()` dependency, client created fresh inside function body so serializability is moot).
-  - 5-agent code review → 3 findings ≥80 confidence → all fixed in `30d7f5e`:
-    1. Added `.eq("model_version", MODEL_VERSION)` to every composite/changelog reader so a future MODEL_VERSION bump can't silently mix versions (conf 85).
-    2. Added `import "server-only"` to `src/lib/supabase/admin.ts` — makes any accidental `"use client"` import chain a build-time error instead of a silent runtime leak (conf 80).
-    3. Fixed stale "robust to a week of ingest outages" comment (actually 6 consecutive missed days) (conf 82).
-  - Mobile audit (PRD + blueprint + current components, 3 parallel Explore agents): confirmed **mobile is entirely undocumented** and the current UI is **mobile-hostile** (fixed `w-60` sidebar with no drawer, fixed `px-6` padding, no `<ResponsiveContainer>`, no explicit viewport meta, placeholder `p-12`). Only the login form is mobile-friendly.
-  - Removed `UserPromptSubmit` hook: matcher `^/clear\b` was firing on unrelated prompts and overwriting rich `handoff.md` with mechanical fallbacks. Hook script + config deleted; CLAUDE.md updated to mark handoffs "manual-only".
-- **About to start:** awaiting user confirmation on 4 mobile-retrofit decision points (§5). On confirmation → PRD + blueprint edits, insert Step 8.5, then Step 8 cron. If user declines mobile scope → go directly to Step 8.
-- **Not blocked** on build/tests: `npm run build` green, `npm run lint` green, Vitest 56/56 green.
+  - Removed the `UserPromptSubmit` auto-handoff hook (`7239685`) — the `^/clear\b` matcher was firing on unrelated prompts and overwriting rich handoff narratives. Handoffs are now manual-only.
+  - Audited PRD + blueprint + current components for mobile readiness (3 parallel Explore agents). Result: **mobile entirely undocumented** and **current UI mobile-hostile** (fixed `w-60` sidebar, fixed paddings, no `<ResponsiveContainer>`, no explicit viewport).
+  - User confirmed all 4 mobile-scope decisions:
+    1. Breakpoint `md` = 768px (iPad portrait and up = desktop layout).
+    2. Hybrid date picker — native `<input type="date">` on `<md`, shadcn `Popover + Calendar` on `md+`.
+    3. Step 9.5 placement — between cron (Step 9) and dashboard UI (Step 10), so all subsequent UI is authored mobile-first.
+    4. Phase 1 mobile scope cap — only reactive layout + native-gesture non-interference. **Offline excluded**, **PWA deferred to Phase 2**, **custom gestures / haptics excluded** (user explicitly picked "iOS native gesture preservation" only from the gesture menu).
+  - Edited PRD to v3.2: §5 타겟 사용자 (added "주 사용 디바이스" column + mobile-primary note), new §11.7 모바일 지원 범위 (full scope spec + Phase-boundary declarations), §13.3 frontend stack addendum, §16.1 두 줄 수용 기준 추가, §18 Phase 2 got PWA bullet.
+  - Edited blueprint to v2.2: version history entry; §1 folder additions (`mobile-nav.tsx`, `sheet.tsx`); §6.1 date picker got device-branched rendering subsection; new §6.2 Responsive Layout with breakpoint table + touch-target rule + viewport meta snippet + native-gesture-preservation policy + Step 9.5 testing checklist; §9 Build Sequence marked Steps 6–8 as ✔, inserted new **Step 9.5 Mobile shell retrofit** with explicit substep list, updated Step 10 + 10.5 to reference mobile-first grid and hybrid picker; §10 got two new acceptance rows; §11 got trade-off #14.
+- **About to start:** Step 9 (cron route handler). No blockers.
+- **Not blocked** on build/tests (last run: `npm run build` green, `npm run lint` green, Vitest 56/56 green).
 
 ## 5. Pending User Decisions
 
-Four mobile-retrofit decisions to unblock the blueprint + PRD edits:
-
-1. **Primary breakpoint** — use `md` = 768px for the sidebar↔drawer switch? (Alt: `lg` = 1024px keeps drawer up through tablet portrait.)
-2. **Mobile date picker** — use the browser-native `<input type="date">` on `<md` (free touch-friendly UX, no extra code), falling back to shadcn `Popover + Calendar` on `md+`? (Trade-off: visual inconsistency with header styling.)
-3. **Step 8.5 placement** — land the mobile shell retrofit *after* Step 8 cron and *before* Step 9 dashboard UI, so all subsequent UI is authored mobile-first?
-4. **Phase 1 mobile scope cap** — exclude PWA / offline / gestures / haptics from Phase 1? (They'd be Phase 2+ if we want them at all.)
-
-Default if user says "yes to all": proceed exactly as proposed.
+None open. All 4 mobile decisions confirmed and folded into docs.
 
 ## 6. Recent Context (last 5 commits, pre-this-snapshot)
 
-- `e41edbe` docs: auto-handoff mechanical snapshot on /clear — **spurious**, written by the removed hook; this handoff rewrite supersedes it.
-- `30d7f5e` Step 7 post-review fixes — model_version filter + server-only guard + comment fix.
-- `6aab776` Step 7: data layer — writers + 'use cache' readers + tag registry + date utils.
-- `9cd51d3` docs: update handoff snapshot — pre-Step 7 rich handoff.
-- `f3db835` docs: refresh handoff snapshot with post-hook-wiring state — (now-obsolete mentions of the hook.)
+- `7239685` Remove auto-handoff-on-clear hook + rewrite handoff to rich state.
+- `e41edbe` docs: auto-handoff mechanical snapshot on /clear — spurious, superseded by `7239685`.
+- `30d7f5e` Step 8 (blueprint §9) post-review fixes — model_version filter + server-only guard + comment fix.
+- `6aab776` Step 8: data layer (snapshot writers + cached readers + cache-tag registry).
+- `9cd51d3` docs: update handoff snapshot.
 
 ## 7. Open Issues to Watch
 
-- **`score_changelog` unique index** — missing today; `writeScoreChangelog` uses plain `.insert()`. TODO in `src/lib/data/snapshot.ts` file-level doc: add migration `0004_score_changelog_unique.sql` adding `CREATE UNIQUE INDEX score_changelog_dedup ON public.score_changelog (asset_type, change_date, model_version)` **during Step 8**, then switch the writer to an upsert on that constraint. Prevents duplicate delta rows on cron retry.
+- **`score_changelog` unique index** — missing today; `writeScoreChangelog` uses plain `.insert()`. TODO in `src/lib/data/snapshot.ts` file-level doc: add migration `0004_score_changelog_unique.sql` adding `CREATE UNIQUE INDEX score_changelog_dedup ON public.score_changelog (asset_type, change_date, model_version)` **during Step 9**, then switch the writer to an upsert on that constraint. Prevents duplicate delta rows on cron retry. The blueprint §9 Step 9 description also captures this.
 - **`scoreToBand` out-of-range policy** — unchanged, tolerated as floating-point dust.
 - **Vercel CLI not installed** — `npm i -g vercel` before Step 12 deploy.
 - **Secrets hygiene** — `.env.local` holds live Supabase service_role JWT, FRED key, Alpha Vantage key, CRON_SECRET. Git-ignored; present on disk.
-- **Mobile support** — not yet in PRD or blueprint; audit done; Step 8.5 proposed; awaiting the 4 decisions in §5 before editing docs.
-- **Blueprint §7 open question #3** — **RESOLVED** at commit `6aab776`. Admin client inside `'use cache'` scopes, no cookies dependency; rationale documented in the top-of-file block of `src/lib/data/indicators.ts`.
-- **Auto-handoff overwrite risk** — **RESOLVED** by removing the hook entirely.
+- **Mobile support** — **RESOLVED** in PRD v3.2 + blueprint v2.2. Actual code retrofit happens at Step 9.5.
+- **Blueprint §7 open question #3** — **RESOLVED** at commit `6aab776`. Admin client inside `'use cache'` scopes.
+- **Auto-handoff overwrite risk** — **RESOLVED** at commit `7239685` by removing the hook.
 
 ## 8. Environment State
 
@@ -70,31 +59,40 @@ Default if user says "yes to all": proceed exactly as proposed.
 - Cache model: **Path B** (`cacheComponents: true`). Runtime APIs under `<Suspense>` or inside `'use cache'` only. Data-layer readers use the admin client inside `'use cache'` to sidestep the cookies-serializability constraint.
 - File rename: `middleware.ts` → `proxy.ts` (Next 16). Never create `middleware.ts`.
 - `server-only` guard live in `src/lib/supabase/admin.ts` — any `"use client"` import chain reaching it is a build-time error.
+- **Blueprint version**: v2.2 (2026-04-20). **PRD version**: v3.2 (2026-04-20).
+- **Mobile scope (new)**: Phase 1 supports iOS Safari / Android Chrome; `md` (768px) breakpoint; Sheet drawer on `<md`; hybrid date picker; ≥44px touch targets; native gesture non-interference. PWA / offline / custom gestures / haptics out of scope (PWA is Phase 2+, others permanently deferred unless reopened).
 - Supabase project: `hhohrclmfsvpkigbdpsb` (ap-northeast-2 Seoul, free tier).
-- Family users in `auth.users`: `jw.byun=beb7b8af...` / `edc0422=6dd6fbf2...` / `odete4=dbe5c5db...`. `user_metadata.persona` set at creation (`expert` / `intermediate` / `beginner`).
-- `asset_type_enum`: `us_equity | kr_equity | crypto | global_etf | common`. `btc` → `crypto` via migration `0003`.
-- MCP servers (project-scope `.mcp.json`): `figma`, `supabase`, `context7`, `alphavantage`. Supabase token expired once mid-project; re-auth via `/mcp` if needed.
-- `.env.local` keys (names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`.
+- Family users: `jw.byun=beb7b8af...` / `edc0422=6dd6fbf2...` / `odete4=dbe5c5db...`. Personas: expert / intermediate / beginner. **여자친구 and 어머니 primarily use mobile.**
+- `asset_type_enum`: `us_equity | kr_equity | crypto | global_etf | common`.
+- MCP servers (project-scope `.mcp.json`): `figma`, `supabase`, `context7`, `alphavantage`.
+- `.env.local` keys: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`.
 - GitHub repo: `Jaclyn6/Finance-Manager-James` (private). `gh` CLI auth'd as `Jaclyn6`.
-- Dev server: `npm run dev` via `preview_start` (`.claude/launch.json`). Port 3000.
-- Handoff: **manual only** now. `/handoff` slash command at `.claude/commands/handoff.md`. No hooks.
-- Code-review workflow: per CLAUDE.md Trigger 1 and Trigger 2, run `/code-review:code-review` (5-agent Sonnet + Haiku scoring, filter ≥80) on every Step completion and every pre-push feature-unit.
+- Dev server: `npm run dev` via `preview_start`. Port 3000.
+- Handoff: **manual only**. `/handoff` slash command at `.claude/commands/handoff.md`. No hooks.
+- Code-review workflow: per CLAUDE.md Trigger 1 / 2, run 5-agent review on every Step completion and every pre-push feature-unit.
 
 ## 9. How to Resume
 
-1. Read `docs/phase1_architecture_blueprint.md` v2.1 §9 Build Sequence. Current position: **Step 7 complete** (both `6aab776` and `30d7f5e` landed).
-2. Check §5 above — if the four mobile-retrofit decisions are still open, surface them to the user, collect answers, then:
-   - Edit PRD (`docs/investment_advisor_dashboard_prd_kr_v3.md`): §5 타겟 사용자 (mobile-primary note), new §11.7 모바일 지원 범위, §13.3 stack note, §16.1 2 acceptance lines.
-   - Edit blueprint to v2.2: §1 folder additions (`mobile-nav.tsx`, `ui/sheet.tsx`), §6.1 date-picker mobile branch, new §6.2 Responsive Layout, §9 insert Step 8.5, §10 new acceptance rows, §11 new trade-off #14.
-   - Then proceed Step 8 → Step 8.5 → Step 9.
-3. If mobile scope is declined or deferred, go straight to **Step 8 (cron route handler)**:
-   - Create `src/app/api/cron/ingest-macro/route.ts`: CRON_SECRET Bearer check → fetch 7 FRED series → `computeZScore` / `zScoreTo0100` → `computeComposite` per asset class → `writeCompositeSnapshot` + `writeScoreChangelog` + `writeIngestRun` (all from `src/lib/data/snapshot.ts`) → `invalidateMacroSnapshotCache()` + `invalidateChangelogCache()`.
-   - Also add migration `0004_score_changelog_unique.sql` (see §7) and switch `writeScoreChangelog` to upsert on the new index.
-   - Create `src/lib/score-engine/indicators/fred.ts` (import boundary for FRED fetches, only imported by the cron handler per blueprint §8 safety invariants).
-   - Add `vercel.json` cron schedule (06:00 UTC daily).
-   - Local smoke via `curl -H "Authorization: Bearer ${CRON_SECRET}" http://localhost:3000/api/cron/ingest-macro`.
-4. Run `/code-review:code-review` (or spawn 5 parallel reviewers per CLAUDE.md) on the Step 8 commit; fix ≥80 findings; push.
+1. Read `docs/phase1_architecture_blueprint.md` v2.2 §9 Build Sequence. Current position: **Step 8 complete** (`30d7f5e`). Steps 1–8 all marked ✔.
+2. Begin **Step 9 (cron route handler)**:
+   - **Migration first**: create `supabase/migrations/0004_score_changelog_unique.sql` with `CREATE UNIQUE INDEX score_changelog_dedup ON public.score_changelog (asset_type, change_date, model_version);`. Apply via `mcp__supabase__apply_migration`.
+   - **Regenerate types**: `mcp__supabase__generate_typescript_types` → overwrite `src/types/database.ts`.
+   - **Switch `writeScoreChangelog` to upsert** on the new constraint; update the file-level TODO comment in `src/lib/data/snapshot.ts`.
+   - **Create FRED fetcher**: `src/lib/score-engine/indicators/fred.ts` — one function per indicator key, returns `{ value, observed_at, released_at, fetch_status }`. Only imported by the cron handler (safety invariant §8).
+   - **Create cron route**: `src/app/api/cron/ingest-macro/route.ts`:
+     - `Authorization: Bearer ${CRON_SECRET}` check — 401 on mismatch.
+     - Fetch all 7 FRED series in parallel (`Promise.allSettled`).
+     - For each successful series: build 5-year window, `computeZScore`, `zScoreTo0100`, collect into `IndicatorScore[]`.
+     - For each `AssetType`: `computeComposite(...)` → `writeCompositeSnapshot(...)` via `src/lib/data/snapshot.ts`.
+     - Build changelog deltas vs prior snapshot (read prior via `getCompositeSnapshotsForDate(yesterday)` — or a dedicated admin-client read since the cron runs before any cache invalidation).
+     - `writeScoreChangelog(...)` per asset class where a delta exists.
+     - `writeIngestRun(...)` with counts.
+     - Call `invalidateMacroSnapshotCache()` + `invalidateChangelogCache()` at the end.
+   - **Add `vercel.json`** with daily cron schedule: `{ "crons": [{ "path": "/api/cron/ingest-macro", "schedule": "0 6 * * *" }] }`.
+   - **Local smoke**: `curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/ingest-macro` and verify rows via `mcp__supabase__execute_sql`.
+3. Run `/code-review:code-review` (5-agent spawn) on the Step 9 commit. Fix ≥80 findings. Push.
+4. Then **Step 9.5 Mobile shell retrofit** per the blueprint v2.2 substep list (`npx shadcn@latest add sheet`, `mobile-nav.tsx`, viewport meta, responsive paddings, hidden-on-mobile sidebar). Verify at DevTools 360 / 375 / 768 / 1280 + real iPhone Safari.
 
 ---
 
-*Handoffs are manual-only. This file is rewritten on every `/handoff` invocation; there is no automation overwriting it.*
+*Handoffs are manual-only. This file is rewritten on every `/handoff` invocation.*

@@ -1,9 +1,10 @@
-# Phase 1 Implementation Blueprint — v2
+# Phase 1 Implementation Blueprint — v2.2
 
 > **Version history**
 > - **v1** (2026-04-18, by feature-dev:code-architect): initial blueprint against PRD v3 §18 Phase 1, written assuming Next.js 15 + `@supabase/ssr` 0.5.x.
 > - **v2** (2026-04-19): rewritten after Next.js 16.2.4 + React 19 + Tailwind v4 + `@supabase/ssr` 0.10.2 turned out to be the actually-installed stack, and after the user chose Path B (Cache Components model) for caching. Product requirements, scope, and schema are identical to v1. Only the Next.js-specific patterns changed.
 > - **v2.1** (2026-04-19 later): date-navigation feature (PRD v3.1 §11.6 Phase 1 range) folded into Phase 1 build. All protected pages take an optional `?date=YYYY-MM-DD` query param; data-layer readers become date-parameterized; a new `src/components/layout/date-picker.tsx` lands. Price-overlay is Phase 2 so this document only prepares the hook.
+> - **v2.2** (2026-04-20): mobile support added as first-class Phase 1 scope (PRD v3.2 §11.7). §1 gets `mobile-nav.tsx` + `sheet.tsx`. §6.1 date picker splits into native (`<md`) + Popover (`md+`) paths. New §6.2 Responsive Layout section. §9 gets new **Step 9.5 Mobile shell retrofit** between cron and dashboard UI. §10 gets two mobile acceptance rows. §11 gets trade-off #14 explaining the retrofit-over-up-front-design choice.
 >
 > The Next 15 → Next 16 research that drove the v2 rewrite is preserved unchanged at [`phase1_blueprint_next16_delta.md`](./phase1_blueprint_next16_delta.md) as a reference artifact — consult it when you need the evidence behind a v2 decision.
 >
@@ -72,13 +73,15 @@ finance-manager/
 │   │   └── utils/{score-band,date}.ts
 │   │
 │   ├── components/
-│   │   ├── ui/                        # shadcn primitives
+│   │   ├── ui/                        # shadcn primitives (incl. sheet.tsx v2.2)
 │   │   ├── layout/                    # sidebar, header, date-picker (v2.1),
-│   │   │                              #   user-display, sign-out-button
+│   │   │                              #   mobile-nav (v2.2), user-display,
+│   │   │                              #   sign-out-button
 │   │   ├── shared/                    # disclaimer-banner, staleness-badge
 │   │   ├── dashboard/
 │   │   ├── changelog/
-│   │   └── charts/
+│   │   └── charts/                    # Recharts wrappers, always inside
+│   │                                  #   <ResponsiveContainer> (v2.2)
 │   ├── types/database.ts                  # ✔ generated via supabase MCP
 │   └── proxy.ts                           # Next 16 auth guard (was middleware.ts)
 ├── vercel.json                            # Cron schedule
@@ -209,6 +212,12 @@ All three protected routes accept an optional `?date=YYYY-MM-DD` query parameter
 
 **URL contract:** `?date=YYYY-MM-DD`. Absent means "latest". The date picker updates the URL; `Link` components in the sidebar preserve the current `date` param when navigating between pages so the user stays anchored in their chosen time window.
 
+**Device-branched rendering (v2.2):** the date-picker component is a single Client Component that branches internally on a CSS media-query hook:
+- `<md` (mobile): renders `<input type="date" min={epoch} max={today} value={date} onChange={updateUrl}>`. iOS and Android replace this with their OS-native calendar UI (wheel picker on iOS, Material calendar on Android) — zero extra code, fully touch-native, and the browser guarantees the returned value is already a valid `YYYY-MM-DD` string.
+- `md+` (desktop): renders the original shadcn `Popover + Calendar` pair for mouse interaction and visual consistency with the rest of the header UI.
+
+Both paths write to the same `?date=YYYY-MM-DD` query param, so all downstream `searchParams.date` plumbing (pages, sidebar links, data-layer readers) is identical regardless of how the user picked the date. The breakpoint is evaluated once on mount and re-evaluated on viewport change (e.g. iPad rotation); no SSR-vs-client mismatch because both branches render the same initial `<input>` shell until hydration completes.
+
 **Validation:** the date string is parsed and clamped to the range [project_epoch, today]. Invalid input falls back to "latest" with a toast (Phase 2) or silent fallback (Phase 1). Dates before the earliest `composite_snapshots.snapshot_date` render an empty-state with a link to the earliest available day.
 
 **Missing-data UX:** when `snapshot_date = ?date` produces no row, show:
@@ -219,11 +228,66 @@ Never render an interpolated or extrapolated score — the PRD §11.6 rule forbi
 
 **Phase 2 extension (gated by PRD §8.5):** when the price-overlay feature lands, the same `?date=` param also anchors the price timeline on asset-detail pages. No additional URL plumbing needed.
 
-**shadcn components installed:** `button, card, badge, input, label, separator, skeleton, tooltip` (base-nova style, Lucide icons).
+**shadcn components installed:** `button, card, badge, input, label, separator, skeleton, tooltip` (base-nova style, Lucide icons). v2.2 adds `sheet` for the mobile nav drawer.
 
-**Charts:** Recharts `LineChart` + `ReferenceLine` at 80/60/40/20 for band thresholds. Recharts requires the browser DOM, so the chart component is wrapped in `"use client"` and receives pre-fetched data as a serializable prop from the parent Server Component.
+**Charts:** Recharts `LineChart` + `ReferenceLine` at 80/60/40/20 for band thresholds. Recharts requires the browser DOM, so the chart component is wrapped in `"use client"` and receives pre-fetched data as a serializable prop from the parent Server Component. **Every chart must be wrapped in `<ResponsiveContainer>`** (v2.2) — fixed-pixel widths break on mobile viewports and break the mobile-first grid layout.
 
 **Suspense-wrapped auth-dependent UI (required under Path B):** any component that calls `cookies()` / `headers()` at request time must be inside a `<Suspense>` boundary — otherwise the prerender fails with "Uncached data was accessed outside of `<Suspense>`". The protected layout's sidebar user display reads the session cookie to show the user name, so it is extracted to a sub-component inside `<Suspense fallback={<SidebarSkeleton />}>` in the protected layout.
+
+### 6.2 Responsive Layout (PRD §11.7) — v2.2
+
+Phase 1 supports mobile browsers (iOS Safari / Android Chrome) as a first-class target because two of three family users primarily read the dashboard on their phones. The scope is "responsive web", not "native-app experience": PWA / offline / custom gestures / haptics are out of Phase 1 per PRD §11.7.
+
+**Breakpoint policy:**
+- Single primary breakpoint: Tailwind `md` = 768px.
+- `<md` (phones, small tablets): single-column layout, hamburger → drawer sidebar, mobile-first paddings (`px-4`), native `<input type="date">`.
+- `md+` (iPad portrait, laptops, desktops): existing fixed sidebar, wider paddings (`px-6`), 2-column asset card grid, Popover date picker.
+- No separate tablet styling — `md` is the sole toggle. If Phase 2 needs it, add a second breakpoint then.
+
+**Layout tokens by viewport:**
+
+| Element | `<md` | `md+` |
+|---|---|---|
+| Sidebar | Hidden; opened via hamburger button in header, renders as shadcn `Sheet` drawer from the left | Fixed `w-60`, always visible |
+| Header padding | `px-4` | `px-6` |
+| Main content padding | `px-4 py-6` | `px-6 py-8` |
+| Asset card grid | `grid-cols-1` (stacked) | `grid-cols-2` (2×2 grid) |
+| Heading size | `text-2xl` | `text-3xl` |
+| Disclaimer text | `text-xs` | `text-sm` |
+| Date picker | Native `<input type="date">` | shadcn `Popover + Calendar` |
+
+**Touch-target rule:** any element the user taps (buttons, icon buttons, links in the sidebar, date picker, hamburger) must render at **≥44×44 CSS pixels**. In Tailwind this means `size-11` or `h-11 w-11`, which maps to 44×44 on a 16px root font. shadcn `Button` default size satisfies this; icon buttons must be sized explicitly.
+
+**Viewport meta:** `src/app/layout.tsx` exports a Next-recognized `viewport` object:
+
+```ts
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5, // allow user zoom — accessibility WCAG 1.4.4
+};
+```
+
+Next's default is close to this but explicit is safer and lets us set `maximumScale` (do **not** use `maximumScale: 1` — it defeats the user's pinch-to-zoom).
+
+**Native gesture preservation:** Phase 1 adds **no** custom gestures (no pull-to-refresh, no swipe navigation, no haptics). Instead, code must not break the OS-native ones:
+- Do not intercept `touchstart` / `touchmove` on scrollable areas unless functionally necessary.
+- Do not apply `overscroll-behavior: none` on the root — it blocks iOS rubber-band and pull-to-refresh.
+- Sheet drawer (`<md` sidebar) uses shadcn's default swipe-to-close which maps to iOS bottom-sheet semantics.
+- Do not register global `preventDefault` on navigation events — iOS left-edge swipe-back must keep working.
+
+**Out of Phase 1 scope (deferred to Phase 2+):**
+- PWA manifest, service worker, installable icon (PRD §18 Phase 2)
+- Offline cached reads
+- Custom gestures (pull-to-refresh, swipe between asset tabs)
+- Web haptics API (not supported in iOS Safari anyway)
+
+**Testing checklist for Step 9.5:**
+- Chrome DevTools device toolbar at 360×640, 375×812, 768×1024, 1280×800.
+- Real iPhone Safari and Android Chrome if available.
+- Pinch-zoom works (fails if `maximumScale: 1` slipped in).
+- Left-edge swipe-back on iOS still navigates (regression check).
+- Native date input pops the OS calendar on tap.
 
 ## 7. Caching Strategy (Path B — Cache Components)
 
@@ -315,18 +379,27 @@ Steps are ordered so the repo never enters a broken state. ✔ marks steps alrea
 3. ✔ **Next.js 16 + shadcn scaffold** — `create-next-app --typescript --tailwind --eslint --app --src-dir --turbopack`, then `shadcn@latest init` + 8 components, plus `@supabase/ssr`, `@supabase/supabase-js`, `recharts`.
 4. ✔ **Supabase migrations** — `0001_initial_schema.sql` + `0002_rls_policies.sql` applied via MCP. TypeScript types generated into `src/types/database.ts`. `user_preferences` seeded from `auth.users.raw_user_meta_data`.
 5. ✔ **Auth & proxy** — `next.config.ts` with `cacheComponents: true`, 3 Supabase client factories, `src/proxy.ts`, login page split (Server + Client), auth callback Route Handler, root `/` → `/dashboard` redirect. `next build` passes.
-6. **Protected layout shell** (next) — `src/app/(protected)/layout.tsx` reads session via `getSupabaseServerClient`, renders sidebar + header + disclaimer banner. Auth-dependent sub-component (user display) wrapped in `<Suspense>`. Stub pages for `/dashboard`, `/asset/[slug]`, `/changelog` so the shell has real routes to link to.
-7. **Score engine core** — pure functions first: `weights.ts` (`MODEL_VERSION`, `INDICATOR_CONFIG`), `normalize.ts` (`computeZScore`, `zScoreTo0100`), `composite.ts`, `score-band.ts`. Unit-testable with Vitest; exit condition is tests green without any DB.
-8. **Data layer & snapshot writer** — `src/lib/data/snapshot.ts` (admin-client writer, no cache), `indicators.ts` + `changelog.ts` readers with `'use cache'` + `cacheTag` + `cacheLife('days')`.
-9. **Cron route handler** — `src/app/api/cron/ingest-macro/route.ts`: CRON_SECRET check → FRED fetches → normalize → composite → snapshot write → `revalidateTag('...', { expire: 0 })`. `vercel.json` with cron schedule. Local smoke test via `curl -H "Authorization: Bearer ${CRON_SECRET}"`.
-10. **Dashboard UI (latest-only variant)** — `dashboard/page.tsx` reads from `getLatestCompositeSnapshots`; `CompositeStateCard`, `AssetCard`, `RecentChanges` components; `StalenessBadge` renders `ingested_at` + `fetch_status`. At this step the page is always "today"; the `?date=` support lands at Step 10.5.
-10.5. **Date-navigation UI (v2.1)** — `src/components/layout/date-picker.tsx` (Client Component, calendar popup); `?date=YYYY-MM-DD` query param plumbed through the header and preserved by all sidebar `<Link>`s via a `buildNavHref` helper; `getCompositeSnapshotsForDate(date)` read function in `src/lib/data/indicators.ts`; dashboard page branches on `searchParams.date` (inside its Suspense boundary) between "latest" and "forDate" reads; `src/components/shared/no-snapshot-notice.tsx` empty-state with a link to the closest earlier `snapshot_date`.
+6. ✔ **Protected layout shell** — `src/app/(protected)/layout.tsx` reads session via `getSupabaseServerClient`, renders sidebar + header + disclaimer banner. Auth-dependent sub-component (user display) wrapped in `<Suspense>`. Stub pages for `/dashboard`, `/asset/[slug]`, `/changelog` so the shell has real routes to link to. Kraken design tokens + `next-themes` dark mode also landed here.
+7. ✔ **Score engine core** — pure functions: `weights.ts` (`MODEL_VERSION`, `INDICATOR_CONFIG`), `normalize.ts` (`computeZScore`, `zScoreTo0100`), `composite.ts`, `score-band.ts`. Vitest 47 tests green. Post-review fixes added `Number.isFinite` + `typeof === "number"` narrowing for non-finite weight/score guards.
+8. ✔ **Data layer & snapshot writer** — `src/lib/data/{tags,snapshot,indicators,changelog}.ts` + `src/lib/utils/date.ts`. Writers use admin client (no cache); readers use `'use cache'` + `cacheTag` + `cacheLife('days' / 'weeks')` with the admin client **inside** the cached scope (resolves open question #3 from §7). Post-review fixes added `.eq("model_version", MODEL_VERSION)` to every reader and `import "server-only"` to `supabase/admin.ts`. Vitest 56 tests green.
+9. **Cron route handler** (next) — `src/app/api/cron/ingest-macro/route.ts`: CRON_SECRET check → FRED fetches → normalize → composite → snapshot write → `invalidateMacroSnapshotCache()` + `invalidateChangelogCache()` (wrappers around `revalidateTag(tag, { expire: 0 })` in `src/lib/data/snapshot.ts`). `vercel.json` with cron schedule. Local smoke test via `curl -H "Authorization: Bearer ${CRON_SECRET}"`. Also adds migration `0004_score_changelog_unique.sql` creating `score_changelog_dedup` unique index on `(asset_type, change_date, model_version)`, then switches `writeScoreChangelog` from plain insert to upsert on that constraint (closes the idempotency TODO in `snapshot.ts`).
+9.5. **Mobile shell retrofit (v2.2)** — execute between Step 9 and Step 10 so all subsequent UI is authored mobile-first. Substeps:
+   - `npx shadcn@latest add sheet` — installs the drawer primitive.
+   - Create `src/components/layout/mobile-nav.tsx`: a Client Component rendering a hamburger `Button` and a `Sheet` containing the sidebar's nav links. Opens on tap, dismisses via tap outside, `Esc`, or swipe-left (Sheet default).
+   - Edit `src/components/layout/header.tsx`: show hamburger on `<md`, hide sidebar on `<md`; swap `px-6` → `px-4 md:px-6`.
+   - Edit `src/app/(protected)/layout.tsx`: hide the fixed `<Sidebar>` on `<md` (`hidden md:flex`), add `<MobileNav>` always in the header; main padding becomes `px-4 py-6 md:px-6 md:py-8`.
+   - Edit `src/app/layout.tsx`: export `viewport` per §6.2 (explicit `width: device-width` / `initialScale: 1` / `maximumScale: 5`).
+   - Retrofit existing dashboard placeholder page: replace `p-12` with `p-4 md:p-12`, `text-3xl` with `text-2xl md:text-3xl`. The stub stays; Step 10 replaces it with the real composite UI.
+   - Verify no regressions in dev (`npm run dev`) at DevTools viewports 360 / 375 / 768 / 1280. Verify iOS edge-swipe-back is not intercepted.
+   - **No DB / cron / data-layer changes** in this step — it's UI plumbing only.
+10. **Dashboard UI (latest-only variant, mobile-first)** — `dashboard/page.tsx` reads from `getLatestCompositeSnapshots`; `CompositeStateCard`, `AssetCard`, `RecentChanges` components; `StalenessBadge` renders `ingested_at` + `fetch_status`. Cards use `grid-cols-1 md:grid-cols-2` (v2.2). At this step the page is always "today"; the `?date=` support lands at Step 10.5.
+10.5. **Date-navigation UI (v2.1 + v2.2)** — `src/components/layout/date-picker.tsx` (Client Component) renders the hybrid picker per §6.1: native `<input type="date">` on `<md`, shadcn `Popover + Calendar` on `md+`. `?date=YYYY-MM-DD` query param plumbed through the header and preserved by all sidebar + mobile-nav `<Link>`s via a `buildNavHref` helper. `getCompositeSnapshotsForDate(date)` read function in `src/lib/data/indicators.ts` (already landed in Step 8). Dashboard page branches on `searchParams.date` (inside its Suspense boundary) between "latest" and "forDate" reads. `src/components/shared/no-snapshot-notice.tsx` empty-state with a link to the closest earlier `snapshot_date`.
 11. **Asset detail & changelog UI** — `asset/[slug]/page.tsx` (async params + async searchParams); `ScoreTrendLine` Recharts Client Component shows a rolling window ending at the selected date; changelog page renders deltas around the selected date with `band_changed` highlight; both pages consume the `?date=` param already plumbed in Step 10.5.
 12. **Vercel deploy + smoke test** — push to GitHub → Vercel auto-deploys. Add all env vars (service role / FRED / CRON_SECRET Production-only). Manually trigger cron from Vercel UI; verify data in Supabase; verify dashboard renders with `revalidateTag` working; verify `?date=` navigation round-trips correctly on production build.
 
 ## 10. Acceptance Criterion Mapping
 
-Every PRD §16 criterion mapped to the specific file / test that proves it. This table is unchanged from v1 — requirements didn't shift, only the framework did.
+Every PRD §16 criterion mapped to the specific file / test that proves it. v2.2 adds the two mobile rows at the end of §10.1 per PRD §11.7 / §16.1 additions.
 
 ### §16.1 MVP Acceptance
 
@@ -341,6 +414,8 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. This
 | BTC에는 최소 1개 이상의 온체인 지표(MVRV 또는 SOPR)가 적용된다 | **Phase 2 scope** — same. The `crypto` asset class will carry these when they land. |
 | 데이터 실패 시 캐시와 상태 배지가 작동한다 | `fred.ts` returns `fetch_status: 'error'` on failure; `snapshot.ts` persists status; `StalenessBadge.tsx` renders red when status ≠ 'success'; cron continues with remaining indicators (partial data > no data). |
 | 가족 계정 외 사용자는 데이터에 접근할 수 없다 | `proxy.ts` redirects unauth; RLS `TO authenticated` on all data tables; Supabase Dashboard has Sign Ups disabled. |
+| 375px 폭 모바일에서 홈 화면이 가로 스크롤 없이 5초 내 이해 가능 (PRD v3.2 §16.1 추가) | Step 9.5 + Step 10 outputs: `src/app/(protected)/layout.tsx` gated sidebar (`hidden md:flex`) + hamburger-triggered `mobile-nav.tsx` drawer; dashboard grid uses `grid-cols-1 md:grid-cols-2`; `CompositeStateCard` renders band + score above the fold at 375px. Verified via Chrome DevTools device toolbar at 375×812 and real iOS Safari. |
+| 모바일에서 날짜 탐색 터치 조작 + 터치 타깃 ≥44×44px (PRD v3.2 §16.1 추가) | Step 10.5 output: `date-picker.tsx` branches to `<input type="date">` on `<md` (OS-native calendar, touch-native). Hamburger button, date picker, and all sidebar/drawer links use `size-11` or shadcn Button default size (44px). Smoke test script in Step 9.5 walks both picker paths. |
 
 ### §16.2 Quality
 
@@ -365,6 +440,7 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. This
 11. **Date in URL, not local state** (v2.1) — the selected date lives as a `?date=YYYY-MM-DD` query param rather than React state or a global store. Trade-offs: shareable links, deep-linking, browser-back semantics, SSR-friendly (Server Components read `searchParams` directly). Cost: every sidebar `<Link>` must preserve the current date param, which a small helper `buildNavHref(pathname, searchParams)` centralizes.
 12. **Two data-layer functions per resource, not one with an optional arg** (v2.1) — `getLatestCompositeSnapshots()` and `getCompositeSnapshotsForDate(date)` are separate because `'use cache'` keys on arguments. Splitting makes cache cadence explicit: latest = `cacheLife('days')` (matches cron), historical = `cacheLife('weeks')` (immutable). One function with an optional arg would conflate the two.
 13. **Price-overlay deferred to Phase 2** (v2.1) — PRD §8.5 + §11.6 Phase 2 range. Phase 1 date-navigation only touches scores. The `?date=` URL contract is designed so Phase 2 can add a price axis to the same chart without URL changes.
+14. **Mobile-first retrofit, not up-front design** (v2.2) — Steps 1-8 were built desktop-first; §11.7's responsive requirement arrived after the data layer landed. Cost of a full top-to-bottom rewrite: ~1 day. Cost of the targeted Step 9.5 retrofit (header/sidebar/viewport/padding) before Step 10 dashboard UI: ~2-3 hours, and every subsequent UI step is authored mobile-first. Trade-off accepted: the retrofit adds one build step, but the UI component library (shadcn `Sheet`, native `<input type="date">`) shoulders most of the complexity. Also: **native `<input type="date">` over a custom picker on mobile** — OS calendars are familiar to mom / 여자친구 and free; visual inconsistency with the header's Kraken styling is accepted since consistency matters less than familiarity for the two non-technical users. **Custom gestures and PWA deferred to Phase 2+** — pull-to-refresh, swipe navigation, and PWA add surface area that could delay MVP; native-gesture non-interference gets us 80% of the "mobile-app feel" for 5% of the work.
 
 ---
 
