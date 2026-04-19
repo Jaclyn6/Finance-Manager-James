@@ -4,6 +4,14 @@
 
 These are persistent behavior rules for Claude on this project. They apply to every session.
 
+## Session continuity — always start here
+
+At the beginning of every session (including `/clear` resumes), if `docs/handoff.md` exists, read it before answering anything beyond a pure greeting. It captures where the previous session left off: current phase/step, last commit, active thread, pending user decisions, open issues, and environment state. Treat it as authoritative for "what were we doing" context.
+
+When the user signals that context is running thin (phrases like "handoff", "context 정리", "clear 하기 전에 정리"), or when you sense the conversation is about to exceed a comfortable remaining budget, run the `/handoff` slash command (defined at `.claude/commands/handoff.md`). It snapshots the current state into `docs/handoff.md`, commits it, and pushes — so a fresh session can resume from the same point with zero briefing.
+
+Do not rely on memory files under `~/.claude/projects/...` for this — those are durable high-level project facts, not live session state. `docs/handoff.md` is the live state; it is git-tracked and survives worktree switches and clones.
+
 ## Code review workflow
 
 Run the `/code-review:code-review` skill — five parallel Sonnet reviewers covering (1) AGENTS.md + blueprint compliance, (2) shallow bug scan, (3) blueprint drift / historical context, (4) code-comments-vs-reality, (5) security — then score findings 0-100 with Haiku agents, filter out anything below 80 confidence, dedupe overlaps, and report.
