@@ -1,5 +1,12 @@
 import "server-only";
 
+import {
+  parseFredResponse,
+  type FredFetchResult,
+  type FredObservation,
+  type FredFetchStatus,
+} from "./fred-parse";
+
 /**
  * FRED (St. Louis Federal Reserve Economic Data) series fetcher.
  *
@@ -21,10 +28,11 @@ import "server-only";
  *    series), not 7×15s. Well under the Vercel Fluid Compute 300s
  *    default timeout.
  *
- * 3. **Pure parser extracted.** `parseFredResponse(id, body)` is a
- *    named export so Vitest can feed synthetic payloads without going
- *    over the network. The wrapper `fetchFredSeries` is the thin
- *    HTTP concern.
+ * 3. **Pure parser extracted to `fred-parse.ts`.** `parseFredResponse(id, body)`
+ *    lives there so Vitest (and the Phase 1 backfill script) can
+ *    exercise it without the `"server-only"` guard this file carries.
+ *    Re-exported from here for backward compatibility with existing
+ *    callers.
  *
  * 4. **`"."` is a missing-data sentinel.** FRED uses a literal period
  *    to denote "no value for this date" (common at recent month-ends
@@ -38,35 +46,8 @@ import "server-only";
  *    at build time instead of runtime.
  */
 
-/**
- * One row from the FRED series/observations endpoint.
- */
-export interface FredObservation {
-  /** Calendar date of the observation, YYYY-MM-DD. */
-  date: string;
-  /** Parsed numeric value; null when FRED returned its `"."` sentinel. */
-  value: number | null;
-}
-
-export type FredFetchStatus = "success" | "error" | "stale" | "partial";
-
-export interface FredFetchResult {
-  series_id: string;
-  /** All observations in the requested window, chronological. */
-  observations: FredObservation[];
-  /** The most recent observation whose value is non-null, or null. */
-  latest: FredObservation | null;
-  /**
-   * Historical values excluding `latest`. Passable directly as the
-   * `series` argument to {@link computeZScore}. Nulls are dropped.
-   */
-  window: number[];
-  fetch_status: FredFetchStatus;
-  /** Populated when fetch_status !== "success". */
-  error?: string;
-  /** ISO timestamp of fetch completion (success or failure). */
-  fetched_at: string;
-}
+export type { FredObservation, FredFetchStatus, FredFetchResult };
+export { parseFredResponse };
 
 export interface FetchFredSeriesOptions {
   /** Years of history to request. Default 5, matching INDICATOR_CONFIG. */
@@ -115,10 +96,15 @@ export async function fetchFredSeries(
     });
 
     if (!response.ok) {
-      return makeErrorResult(
-        seriesId,
-        `FRED HTTP ${response.status} ${response.statusText}`,
-      );
+      return {
+        series_id: seriesId,
+        observations: [],
+        latest: null,
+        window: [],
+        fetch_status: "error",
+        error: `FRED HTTP ${response.status} ${response.statusText}`,
+        fetched_at: new Date().toISOString(),
+      };
     }
 
     const body = (await response.json()) as unknown;
@@ -130,115 +116,16 @@ export async function fetchFredSeries(
         : err instanceof Error
           ? err.message
           : String(err);
-    return makeErrorResult(seriesId, message);
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-/**
- * Pure parser. Safe to call with any `unknown` payload — returns a
- * well-shaped error result for anything that doesn't match FRED's
- * documented `{ observations: [{date, value}, ...] }` schema.
- *
- * Exported for Vitest; the network wrapper is the only other caller.
- */
-export function parseFredResponse(
-  seriesId: string,
-  body: unknown,
-): FredFetchResult {
-  if (!body || typeof body !== "object") {
-    return makeErrorResult(seriesId, "FRED response was not an object");
-  }
-
-  const rawObs = (body as { observations?: unknown }).observations;
-  if (!Array.isArray(rawObs)) {
-    return makeErrorResult(seriesId, "FRED response missing observations[]");
-  }
-
-  // FRED returns observation dates as `YYYY-MM-DD`. The Postgres
-  // `observed_at` column on indicator_readings is a DATE, and an
-  // empty string / off-format value would cause the whole batch
-  // upsert to throw `invalid input syntax for type date`, killing
-  // the ingest run. Be strict here so one malformed upstream row
-  // can't poison the batch.
-  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-  const observations: FredObservation[] = [];
-  for (const item of rawObs) {
-    if (!item || typeof item !== "object") continue;
-    const rec = item as { date?: unknown; value?: unknown };
-    if (typeof rec.date !== "string" || !ISO_DATE.test(rec.date)) continue;
-    if (typeof rec.value !== "string") continue;
-    if (rec.value === ".") {
-      observations.push({ date: rec.date, value: null });
-      continue;
-    }
-    const parsed = Number(rec.value);
-    if (!Number.isFinite(parsed)) continue; // skip malformed rows
-    observations.push({ date: rec.date, value: parsed });
-  }
-
-  if (observations.length === 0) {
     return {
       series_id: seriesId,
       observations: [],
       latest: null,
       window: [],
-      fetch_status: "partial",
-      error: "no observations after parsing",
+      fetch_status: "error",
+      error: message,
       fetched_at: new Date().toISOString(),
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  // Find the index of the most recent non-null observation. FRED returns
-  // observations chronologically, so iterate from the end.
-  let latestIndex = -1;
-  for (let i = observations.length - 1; i >= 0; i--) {
-    if (observations[i].value !== null) {
-      latestIndex = i;
-      break;
-    }
-  }
-
-  if (latestIndex === -1) {
-    // All values are the "." sentinel — upstream effectively has no data.
-    return {
-      series_id: seriesId,
-      observations,
-      latest: null,
-      window: [],
-      fetch_status: "partial",
-      error: "all observations are missing (FRED '.' sentinel)",
-      fetched_at: new Date().toISOString(),
-    };
-  }
-
-  const latest = observations[latestIndex];
-  const window: number[] = [];
-  for (let i = 0; i < latestIndex; i++) {
-    const v = observations[i].value;
-    if (v !== null) window.push(v);
-  }
-
-  return {
-    series_id: seriesId,
-    observations,
-    latest,
-    window,
-    fetch_status: "success",
-    fetched_at: new Date().toISOString(),
-  };
-}
-
-function makeErrorResult(seriesId: string, message: string): FredFetchResult {
-  return {
-    series_id: seriesId,
-    observations: [],
-    latest: null,
-    window: [],
-    fetch_status: "error",
-    error: message,
-    fetched_at: new Date().toISOString(),
-  };
 }
