@@ -5,25 +5,15 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-interface NavItem {
-  href: string;
-  label: string;
-  group: string;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "오늘 시장 상황", group: "홈" },
-  { href: "/asset/us-equity", label: "미국주식", group: "자산군" },
-  { href: "/asset/kr-equity", label: "한국주식", group: "자산군" },
-  { href: "/asset/crypto", label: "암호화폐", group: "자산군" },
-  { href: "/asset/global-etf", label: "글로벌 ETF", group: "자산군" },
-  { href: "/changelog", label: "변화 로그", group: "히스토리" },
-];
-
-const GROUP_ORDER = ["홈", "자산군", "히스토리"] as const;
+import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
 
 /**
+ * Desktop sidebar (blueprint §6.2: renders on `md+` only).
+ *
  * Client Component — active-link highlighting requires `usePathname()`.
+ * On `<md` viewports this sidebar is hidden by its parent in
+ * `src/app/(protected)/layout.tsx`; mobile users get the same nav
+ * via `src/components/layout/mobile-nav.tsx` (Sheet drawer).
  *
  * Visual: Kraken-inspired. Brand mark in Kraken Purple with tight
  * negative tracking, nav groups labeled in tiny caps, active item

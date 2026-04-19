@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -23,6 +23,28 @@ export const metadata: Metadata = {
   title: "Investment Advisor Dashboard",
   description:
     "가족용 투자 어드바이저 대시보드 — 매크로·기술적·온체인 데이터로 비중 확대/유지/축소 판단을 제공합니다.",
+};
+
+/**
+ * Viewport configuration (blueprint §6.2, Step 9.5 v2.2).
+ *
+ * `width: "device-width"` + `initialScale: 1` is the standard mobile
+ * rendering directive — without it, iOS Safari assumes a 980px canvas
+ * and shrinks the page to fit, producing unreadable 9pt text on a
+ * 360px phone.
+ *
+ * `maximumScale: 5` preserves the user's right to pinch-zoom for
+ * accessibility (WCAG 1.4.4 Resize Text). Setting `maximumScale: 1`
+ * — common in "app-like" templates — actively breaks low-vision users
+ * and is a documented anti-pattern; we explicitly permit up to 5×.
+ *
+ * Next.js would add a minimal default if this export were omitted,
+ * but being explicit documents the intent and guards against regressions.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({

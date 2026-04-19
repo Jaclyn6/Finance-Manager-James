@@ -30,18 +30,33 @@ export default function ProtectedLayout({
       <DisclaimerBanner />
       <div className="flex flex-1 min-h-0">
         {/*
-          Sidebar uses `usePathname()` for active-link highlighting,
-          which is a runtime routing API. Under `cacheComponents: true`,
-          any dynamic API must live inside a Suspense boundary so the
-          static shell can prerender around it. Fallback is a Sidebar-
-          shaped skeleton so layout doesn't shift when nav hydrates.
+          Sidebar (blueprint §6.2): visible only on `md+` (≥768px).
+          On `<md` the whole sidebar column is removed from the layout
+          and mobile users get nav via the hamburger drawer in `<Header>`
+          (`src/components/layout/mobile-nav.tsx`). Wrapping the Suspense
+          boundary in a `hidden md:flex` container ensures the skeleton
+          fallback is also hidden on mobile — otherwise a brief flash of
+          the 224px skeleton would appear on hydration.
+
+          Why Suspense: Sidebar uses `usePathname()`, a runtime routing
+          API. Under `cacheComponents: true`, any dynamic API must live
+          inside a Suspense boundary so the static shell can prerender
+          around it.
         */}
-        <Suspense fallback={<Skeleton className="h-full w-56 rounded-none border-r" />}>
-          <Sidebar />
-        </Suspense>
+        <div className="hidden md:flex">
+          <Suspense
+            fallback={
+              <Skeleton className="h-full w-56 rounded-none border-r" />
+            }
+          >
+            <Sidebar />
+          </Suspense>
+        </div>
         <div className="flex flex-1 min-w-0 flex-col">
           <Header />
-          <main className="flex-1 overflow-auto bg-background px-6 py-6">
+          {/* Main padding (blueprint §6.2): tighter on mobile to reclaim
+              horizontal space on 360px screens; standard on md+. */}
+          <main className="flex-1 overflow-auto bg-background px-4 py-6 md:px-6 md:py-8">
             {children}
           </main>
         </div>

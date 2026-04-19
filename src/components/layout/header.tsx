@@ -1,13 +1,19 @@
 import { Suspense } from "react";
 
+import { MobileNav } from "@/components/layout/mobile-nav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 import { UserDisplay } from "./user-display";
 
 /**
- * Top bar inside the protected shell. Holds the page-context label on
- * the left and the user controls on the right.
+ * Top bar inside the protected shell. On mobile (`<md`), shows the
+ * hamburger drawer trigger next to a short page-context label. On
+ * desktop (`md+`), the hamburger is hidden via MobileNav's internal
+ * `md:hidden`, and the fixed sidebar takes over navigation.
+ *
+ * Padding (blueprint §6.2): `px-4` on mobile, `md:px-6` on desktop —
+ * tighter horizontal space on 360-wide viewports, normal on laptops.
  *
  * The right-side cluster (theme toggle + user display) lives inside a
  * single `<Suspense>` boundary. Two reasons this is required under
@@ -27,12 +33,20 @@ import { UserDisplay } from "./user-display";
  *
  * One boundary covers both. The fallback matches the final footprint
  * (icon button + user pill) so hydration doesn't shift the layout.
+ *
+ * MobileNav itself is a Client Component (it uses `usePathname` +
+ * `useState`) but base-ui's dialog root doesn't trigger the same
+ * Math.random flag as base-ui Button until its Content renders under
+ * the portal, so it can live outside the Suspense boundary.
  */
 export function Header() {
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-6">
-      <div className="text-sm font-medium text-muted-foreground">
-        오늘의 투자 환경
+    <header className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 md:px-6">
+      <div className="flex items-center gap-2">
+        <MobileNav />
+        <div className="text-sm font-medium text-muted-foreground">
+          오늘의 투자 환경
+        </div>
       </div>
       <Suspense fallback={<HeaderRightSkeleton />}>
         <div className="flex items-center gap-2">
