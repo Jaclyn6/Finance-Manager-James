@@ -47,7 +47,12 @@ export async function UserDisplay() {
 
   return (
     <div className="flex items-center gap-3">
-      <div className="hidden text-right sm:block">
+      {/* Email visible only on `md+` (blueprint §6.2 single primary
+          breakpoint). Previously used `sm:` but that created a mixed
+          state at 640-767px where the sidebar was still hidden while
+          the header showed the full email — inconsistent with the
+          "one breakpoint" rule. */}
+      <div className="hidden text-right md:block">
         <p className="text-xs text-muted-foreground">{email}</p>
       </div>
       <Badge variant="secondary">{PERSONA_LABELS[persona] ?? persona}</Badge>

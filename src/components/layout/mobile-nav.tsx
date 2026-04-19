@@ -58,7 +58,11 @@ export function MobileNav() {
           />
         }
       >
-        <Menu className="size-5" />
+        {/* `aria-hidden` on the decorative icon so screen readers don't
+            read Lucide's embedded `<title>Menu</title>` after the
+            button's own `aria-label` ("내비게이션 메뉴 열기"),
+            avoiding a "menu, 내비게이션 메뉴 열기" double-read. */}
+        <Menu aria-hidden="true" focusable="false" className="size-5" />
       </SheetTrigger>
       <SheetContent side="left" className="w-72 p-0">
         <SheetHeader className="border-b px-5 py-6">

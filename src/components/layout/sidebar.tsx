@@ -8,12 +8,17 @@ import { cn } from "@/lib/utils";
 import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
 
 /**
- * Desktop sidebar (blueprint §6.2: renders on `md+` only).
+ * Desktop sidebar — intended for `md+` viewports (blueprint §6.2).
+ *
+ * The component itself is viewport-agnostic; it renders the same
+ * `<aside>` regardless of screen size. Visibility on `<md` is
+ * enforced by its PARENT wrapper in `src/app/(protected)/layout.tsx`,
+ * which wraps this Suspense boundary in `<div className="hidden md:flex">`.
+ * Mobile users get the same nav items via the drawer in
+ * `src/components/layout/mobile-nav.tsx` — both surfaces import
+ * from the shared `./nav-items` module so they can never drift.
  *
  * Client Component — active-link highlighting requires `usePathname()`.
- * On `<md` viewports this sidebar is hidden by its parent in
- * `src/app/(protected)/layout.tsx`; mobile users get the same nav
- * via `src/components/layout/mobile-nav.tsx` (Sheet drawer).
  *
  * Visual: Kraken-inspired. Brand mark in Kraken Purple with tight
  * negative tracking, nav groups labeled in tiny caps, active item
