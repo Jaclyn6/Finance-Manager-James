@@ -115,7 +115,11 @@ export async function DashboardContent({
           {DASHBOARD_ASSET_ORDER.map((assetType) => {
             const snapshot = snapshotByAsset.get(assetType);
             return snapshot ? (
-              <AssetCard key={assetType} snapshot={snapshot} />
+              <AssetCard
+                key={assetType}
+                snapshot={snapshot}
+                currentDate={selectedDate}
+              />
             ) : null;
           })}
         </div>

@@ -1,8 +1,26 @@
+import { Suspense } from "react";
+
+import { ChangelogContent } from "./changelog-content";
+import { ChangelogSkeleton } from "./changelog-skeleton";
+
 /**
- * Phase 1 changelog stub. Real content (date-sorted score deltas with
- * band-change highlight + top-mover indicators) is Step 11's job.
+ * Phase 1 Step 11 — Changelog page (date-aware).
+ *
+ * Static shell + `<Suspense>`-gated dynamic body, same Partial
+ * Prerender pattern as the dashboard and asset-detail pages.
+ * `searchParams.date` is awaited only inside the suspended subtree so
+ * the shell prerenders.
+ *
+ * Window is centered on the `?date=` anchor (or today in latest
+ * mode), 14 days each side, matching the dashboard's RecentChanges
+ * window so the "top 3 around this date" preview on the dashboard
+ * and the full list here stay conceptually aligned.
  */
-export default function ChangelogPage() {
+export default function ChangelogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string | string[] }>;
+}) {
   return (
     <div className="mx-auto max-w-5xl space-y-6 md:space-y-8">
       <div>
@@ -10,13 +28,14 @@ export default function ChangelogPage() {
           변화 로그
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          일자별 점수 변화와 주요 기여 지표는 데이터 파이프라인이 가동된 뒤
-          누적됩니다.
+          선택한 날짜를 기준으로 ±14일 범위에서 기록된 점수 변화와 원인
+          지표입니다. 밴드가 전환된 기록은 좌측에 브랜드 컬러로 강조됩니다.
         </p>
       </div>
-      <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground md:p-12">
-        아직 기록된 변화가 없습니다.
-      </div>
+
+      <Suspense fallback={<ChangelogSkeleton />}>
+        <ChangelogContent searchParams={searchParams} />
+      </Suspense>
     </div>
   );
 }

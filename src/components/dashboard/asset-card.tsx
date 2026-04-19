@@ -1,6 +1,10 @@
+import Link from "next/link";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { StalenessBadge } from "@/components/shared/staleness-badge";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
+import { ASSET_SLUGS } from "@/lib/utils/asset-slug";
+import { buildNavHref } from "@/lib/utils/nav-href";
 import { cn } from "@/lib/utils";
 import { scoreToBand, type BandIntensity } from "@/lib/utils/score-band";
 import type { Tables } from "@/types/database";
@@ -24,15 +28,39 @@ import type { Tables } from "@/types/database";
  */
 export interface AssetCardProps {
   snapshot: Tables<"composite_snapshots">;
+  /**
+   * Optional `?date=` value to preserve when the card's link navigates
+   * to `/asset/[slug]`. Caller (dashboard-content) passes the already-
+   * sanitized selected date so the user's chosen history anchor
+   * survives the drill-down (blueprint §6.1 URL contract).
+   */
+  currentDate?: string | null;
 }
 
-export function AssetCard({ snapshot }: AssetCardProps) {
+export function AssetCard({ snapshot, currentDate = null }: AssetCardProps) {
   const band = scoreToBand(snapshot.score_0_100);
   const score = Math.round(snapshot.score_0_100 * 10) / 10;
   const label = ASSET_LABELS[snapshot.asset_type];
 
-  return (
-    <Card size="sm" className="p-5 md:p-6">
+  // `common` has no dedicated page (it's the dashboard hero), so the
+  // slug lookup can be undefined. In practice the dashboard grid
+  // filters out common via DASHBOARD_ASSET_ORDER, so this branch is
+  // defensive — if the filter ever regresses, we want to render a
+  // non-linked card rather than crash.
+  const slug =
+    snapshot.asset_type === "common"
+      ? null
+      : (ASSET_SLUGS[snapshot.asset_type] ?? null);
+
+  const cardInner = (
+    <Card
+      size="sm"
+      className={cn(
+        "p-5 md:p-6 transition-colors",
+        slug &&
+          "hover:bg-muted/40 group-focus-visible/asset-link:ring-2 group-focus-visible/asset-link:ring-ring",
+      )}
+    >
       <CardContent className="flex flex-col gap-3 p-0">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm font-semibold text-foreground">{label}</p>
@@ -61,6 +89,24 @@ export function AssetCard({ snapshot }: AssetCardProps) {
         </p>
       </CardContent>
     </Card>
+  );
+
+  if (!slug) return cardInner;
+
+  // Wrap the whole card in a Link so the entire surface is tappable —
+  // blueprint §6.2 touch-target rule is automatically satisfied
+  // because the hit area becomes the card footprint (well beyond
+  // 44×44). `buildNavHref` preserves `?date=` so historical-date
+  // drill-down keeps the user anchored. `group/asset-link` + focus
+  // ring className above gives a visible keyboard focus state.
+  return (
+    <Link
+      href={buildNavHref(`/asset/${slug}`, currentDate)}
+      className="group/asset-link block rounded-xl outline-none"
+      aria-label={`${label} 상세 보기`}
+    >
+      {cardInner}
+    </Link>
   );
 }
 

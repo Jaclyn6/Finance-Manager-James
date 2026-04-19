@@ -172,6 +172,71 @@ export async function getCompositeSnapshotsForDate(
 }
 
 /**
+ * Returns every snapshot for one `asset_type` within the last `days`
+ * days ending at `endDate`, ordered oldest-first for chart plotting.
+ *
+ * Rationale for a third reader (vs. `getCompositeSnapshotsForDate` or
+ * a `.filter()` on all-assets results): the trend chart on
+ * `/asset/[slug]` wants an asset-scoped rolling window, and fetching
+ * all five asset_types for 90 days (5×90 = 450 rows) just to drop
+ * 80% of them in memory is wasteful. A scoped query lets Postgres
+ * narrow on `(asset_type, snapshot_date)` — indexed via the primary
+ * unique key — and returns only the asset's own ~90 rows.
+ *
+ * Cache cadence: `cacheLife('days')` same as `getLatestCompositeSnapshots`,
+ * because if `endDate` is today the newest row moves daily with the
+ * cron, and the cron's `revalidateTag('macro-snapshot', { expire: 0 })`
+ * invalidates this reader too. Historical rolling windows also
+ * benefit from daily-life eviction — slightly wasteful vs. weeks for
+ * the oldest segments, but consistent and simple, and the cost is
+ * negligible for a 4-user dashboard.
+ *
+ * @param assetType the `asset_type_enum` value — caller has already
+ *   resolved the URL slug via `slugToAssetType()`
+ * @param endDate inclusive upper bound (`YYYY-MM-DD`)
+ * @param days non-negative window size (e.g. 90 for "last 90 days");
+ *   malformed inputs clamp to 30 so the chart always renders
+ *   something rather than 500-ing on a caller bug
+ */
+export async function getCompositeSnapshotsForAssetRange(
+  assetType: AssetType,
+  endDate: string,
+  days: number,
+): Promise<CompositeSnapshot[]> {
+  "use cache";
+  cacheTag(CACHE_TAGS.macroSnapshot);
+  cacheLife("days");
+
+  const safeDays = Number.isFinite(days) && days > 0 ? Math.floor(days) : 30;
+  const endMs = Date.parse(`${endDate}T00:00:00Z`);
+  // On malformed endDate, fall back to a tiny window that produces an
+  // empty result rather than spanning the whole table.
+  const startDate = Number.isFinite(endMs)
+    ? new Date(endMs - safeDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10)
+    : endDate;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("composite_snapshots")
+    .select("*")
+    .eq("asset_type", assetType)
+    .eq("model_version", MODEL_VERSION)
+    .gte("snapshot_date", startDate)
+    .lte("snapshot_date", endDate)
+    .order("snapshot_date", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `getCompositeSnapshotsForAssetRange(${assetType}, ${endDate}, ${days}) failed: ${error.message} (${error.code ?? "no code"})`,
+    );
+  }
+
+  return data ?? [];
+}
+
+/**
  * Returns the most recent `snapshot_date` strictly before `date`,
  * across any asset_type. Used by the no-snapshot empty state to offer
  * a "jump to 2026-04-18" link when the user picks a day without data.
