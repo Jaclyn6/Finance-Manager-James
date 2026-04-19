@@ -4,6 +4,14 @@
  * glance away from knowing this is a reference/interpretation tool,
  * not a definitive financial recommendation.
  *
+ * Responsive copy (blueprint v2.2 §6.2 follow-up): on `<md` viewports
+ * the full sentence wraps to 3 lines and dominates the first fold.
+ * We show a **compact one-liner** there ("해석 도구 — 확정적 자문
+ * 아님") so the disclaimer survives as a persistent reminder without
+ * eating the first screen-height. Desktop (`md+`) shows the full
+ * sentence with context about the three data layers, matching the
+ * original PRD §11.5 language.
+ *
  * Kraken-inspired styling: calm neutral surface with a purple "참고용"
  * chip and near-black body. The Kraken aesthetic reserves alarmist
  * colors for real problems; a standing reminder should feel
@@ -13,10 +21,15 @@ export function DisclaimerBanner() {
   return (
     <div className="border-b bg-muted/60 px-4 py-2 text-xs text-foreground/75">
       <div className="mx-auto flex max-w-7xl items-center gap-3">
-        <span className="inline-flex items-center rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark uppercase">
+        <span className="inline-flex shrink-0 items-center rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold tracking-wide text-brand-dark uppercase">
           참고용
         </span>
-        <span>
+        {/* Mobile (`<md`): one-liner. Short enough to fit 360px without
+            wrapping, long enough to keep the "해석 도구 / 자문 아님"
+            contrast that PRD §2.3 wants. */}
+        <span className="md:hidden">해석 도구 — 확정적 자문 아님</span>
+        {/* Desktop (`md+`): the full PRD §11.5 sentence. */}
+        <span className="hidden md:inline">
           매크로·기술적·온체인 데이터를 결합한 해석 도구입니다. 확정적 투자
           자문이 아니며, 모든 투자 결정의 책임은 사용자에게 있습니다.
         </span>

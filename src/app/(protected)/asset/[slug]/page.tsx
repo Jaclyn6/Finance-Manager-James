@@ -74,17 +74,19 @@ async function AssetDetailSlot({ params }: { params: AssetParams }) {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       <div>
         <div className="inline-flex rounded-md bg-brand-subtle px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brand-dark">
           자산군
         </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">{label}</h1>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">
+          {label}
+        </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
           자산군별 합성 점수·기여 지표·30일 추이 차트는 Step 10에서 연결됩니다.
         </p>
       </div>
-      <div className="rounded-2xl border bg-card p-12 text-center text-sm text-muted-foreground">
+      <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground md:p-12">
         이 자산군에 대한 스냅샷은 아직 집계되지 않았습니다.
       </div>
     </div>
@@ -93,11 +95,11 @@ async function AssetDetailSlot({ params }: { params: AssetParams }) {
 
 function AssetDetailSkeleton() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 md:space-y-8">
       <div className="space-y-2">
         <Skeleton className="h-4 w-16 rounded-md" />
-        <Skeleton className="h-9 w-40" />
-        <Skeleton className="h-4 w-[420px]" />
+        <Skeleton className="h-8 w-40 md:h-9" />
+        <Skeleton className="h-4 w-full max-w-[420px]" />
       </div>
       <Skeleton className="h-48 w-full rounded-2xl" />
     </div>
