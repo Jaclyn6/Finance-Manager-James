@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { computeDateWindow, formatIsoDate, isValidIsoDate } from "./date";
+import {
+  PROJECT_EPOCH,
+  computeDateWindow,
+  formatIsoDate,
+  isValidIsoDate,
+  sanitizeDateParam,
+} from "./date";
 
 describe("isValidIsoDate", () => {
   it("accepts well-formed calendar dates", () => {
@@ -80,5 +86,36 @@ describe("computeDateWindow", () => {
       start: "2026-04-19",
       end: "2026-04-19",
     });
+  });
+});
+
+describe("sanitizeDateParam", () => {
+  const TODAY = "2026-04-20";
+
+  it("returns the date when valid and in-range", () => {
+    expect(sanitizeDateParam("2026-04-19", TODAY)).toBe("2026-04-19");
+    expect(sanitizeDateParam(PROJECT_EPOCH, TODAY)).toBe(PROJECT_EPOCH);
+    expect(sanitizeDateParam(TODAY, TODAY)).toBe(TODAY);
+  });
+
+  it("collapses undefined / arrays / non-strings to null", () => {
+    expect(sanitizeDateParam(undefined, TODAY)).toBeNull();
+    // Duplicated query params come through as a string[].
+    expect(sanitizeDateParam(["a", "b"], TODAY)).toBeNull();
+  });
+
+  it("collapses malformed strings to null", () => {
+    expect(sanitizeDateParam("", TODAY)).toBeNull();
+    expect(sanitizeDateParam("2026/04/19", TODAY)).toBeNull();
+    expect(sanitizeDateParam("tomorrow", TODAY)).toBeNull();
+    // Impossible calendar dates (round-trip reject).
+    expect(sanitizeDateParam("2026-02-30", TODAY)).toBeNull();
+  });
+
+  it("collapses out-of-range dates to null", () => {
+    // Before PROJECT_EPOCH (2026-01-01).
+    expect(sanitizeDateParam("2025-12-31", TODAY)).toBeNull();
+    // After today.
+    expect(sanitizeDateParam("2026-04-21", TODAY)).toBeNull();
   });
 });

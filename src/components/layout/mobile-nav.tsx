@@ -2,7 +2,7 @@
 
 import { Menu } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { buildNavHref } from "@/lib/utils/nav-href";
 
 import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
 
@@ -45,6 +46,10 @@ import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  // Same `?date=` preservation logic as the desktop Sidebar — keeps
+  // drawer taps from losing the user's selected date (blueprint §6.1).
+  const searchParams = useSearchParams();
+  const currentDate = searchParams.get("date");
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -87,7 +92,7 @@ export function MobileNav() {
                   return (
                     <li key={item.href}>
                       <Link
-                        href={item.href}
+                        href={buildNavHref(item.href, currentDate)}
                         onClick={() => setOpen(false)}
                         className={cn(
                           "flex min-h-11 items-center rounded-md px-2.5 text-sm transition-colors",

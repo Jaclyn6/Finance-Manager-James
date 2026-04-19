@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { DatePicker } from "@/components/layout/date-picker";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -43,13 +44,45 @@ export function Header() {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 md:px-6">
       <div className="flex items-center gap-2">
-        <MobileNav />
-        <div className="text-sm font-medium text-muted-foreground">
+        {/*
+          MobileNav reads `useSearchParams()` (Step 10.5 — to preserve
+          `?date=` across drawer taps). Under `cacheComponents: true`,
+          `useSearchParams` consumers must sit inside a Suspense
+          boundary so the static shell can prerender around them —
+          otherwise Next bails the entire route out with "Uncached data
+          was accessed outside of <Suspense>". The skeleton is `size-11`
+          (44×44, matches the hamburger's footprint) and `md:hidden`
+          because the component itself is mobile-only.
+        */}
+        <Suspense
+          fallback={<Skeleton className="size-11 rounded-md md:hidden" />}
+        >
+          <MobileNav />
+        </Suspense>
+        {/*
+          Static label — hidden on `<md` because the hamburger already
+          establishes page context and the DatePicker immediately to its
+          right carries its own visual weight; stacking a third piece of
+          text-only furniture crowded the 375px header. Desktop still
+          shows it as a quiet breadcrumb anchor (handoff §7 flagged
+          dynamic per-route labeling as a follow-up — keeping this
+          static for now to avoid scope creep).
+        */}
+        <div className="hidden text-sm font-medium text-muted-foreground md:block">
           오늘의 투자 환경
         </div>
       </div>
       <Suspense fallback={<HeaderRightSkeleton />}>
         <div className="flex items-center gap-2">
+          {/*
+            DatePicker is a Client Component that reads `useSearchParams`.
+            Under `cacheComponents: true`, any access to
+            `searchParams` (server side) or `useSearchParams` (client
+            side) requires a Suspense boundary in the render path —
+            reusing the one that already wraps the right-hand cluster
+            avoids fragmenting the fallback footprint.
+          */}
+          <DatePicker />
           <ThemeToggle />
           <UserDisplay />
         </div>
@@ -61,6 +94,8 @@ export function Header() {
 function HeaderRightSkeleton() {
   return (
     <div className="flex items-center gap-2">
+      {/* DatePicker placeholder — rough width for the date button. */}
+      <Skeleton className="h-9 w-28 rounded-md" />
       <Skeleton className="size-9 rounded-md" />
       <Skeleton className="h-9 w-56 rounded-md" />
     </div>

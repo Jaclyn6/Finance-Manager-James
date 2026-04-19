@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { cn } from "@/lib/utils";
+import { buildNavHref } from "@/lib/utils/nav-href";
 
 import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
 
@@ -26,6 +27,11 @@ import { GROUP_ORDER, NAV_ITEMS } from "./nav-items";
  */
 export function Sidebar() {
   const pathname = usePathname();
+  // Preserve `?date=` across sidebar navigation (blueprint §6.1 URL
+  // contract) so picking a historical date then clicking "미국주식"
+  // keeps the user anchored at that date on the destination page.
+  const searchParams = useSearchParams();
+  const currentDate = searchParams.get("date");
 
   return (
     <aside className="w-60 shrink-0 border-r bg-sidebar px-5 py-6">
@@ -51,7 +57,7 @@ export function Sidebar() {
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={buildNavHref(item.href, currentDate)}
                       className={cn(
                         "block rounded-md px-2.5 py-2 text-sm transition-colors",
                         isActive

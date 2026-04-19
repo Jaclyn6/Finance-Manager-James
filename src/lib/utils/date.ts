@@ -18,6 +18,31 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * Earliest date the date-navigation UI will accept.
+ *
+ * Chosen as 2026-01-01 — safely before the first real cron run
+ * (2026-04-19 smoke test) and giving Phase 2 / 3 headroom for
+ * backfill. When a user picks a date ≥ epoch but < the first real
+ * snapshot, the page falls through to the empty-state notice rather
+ * than silently snapping back to today.
+ *
+ * A calendar constant (not a runtime-computed "N years ago") so
+ * the picker's min-date is deterministic under `'use cache'` and
+ * across server/client renders.
+ */
+export const PROJECT_EPOCH = "2026-01-01";
+
+/**
+ * Returns today's date in UTC as `YYYY-MM-DD`. All `new Date()`
+ * calls in the app go through this helper so UTC vs local-time
+ * confusion stays at one audit point. Call site must already be in
+ * a request-scoped (non-cached) context under `cacheComponents`.
+ */
+export function todayIsoUtc(): string {
+  return formatIsoDate(new Date());
+}
+
+/**
  * Returns true iff `s` parses as a valid `YYYY-MM-DD` calendar date.
  *
  * Rejects:
@@ -74,4 +99,34 @@ export function computeDateWindow(
     start: formatIsoDate(startDate),
     end: formatIsoDate(endDate),
   };
+}
+
+/**
+ * Sanitize a `?date=` query-param value for the date-aware pages.
+ *
+ * Returns the raw string only if it's a valid ISO date inside
+ * `[PROJECT_EPOCH, today]`. Everything else — `undefined`, malformed,
+ * out-of-range, arrays (`?date=a&date=b`) — collapses to `null`,
+ * which callers interpret as "latest mode".
+ *
+ * Blueprint §6.1: "Invalid input falls back to 'latest' with a toast
+ * (Phase 2) or silent fallback (Phase 1)." This helper is the silent
+ * fallback: the caller renders "latest" without signalling the
+ * rejection. A user-visible surface can be added in Phase 2 by
+ * returning a discriminated union instead.
+ *
+ * @param raw — the `searchParams.date` value (already awaited on the
+ *   server side)
+ * @param today — `YYYY-MM-DD` upper bound (usually `todayIsoUtc()`),
+ *   passed explicitly so the helper stays pure
+ */
+export function sanitizeDateParam(
+  raw: string | string[] | undefined,
+  today: string,
+): string | null {
+  if (typeof raw !== "string") return null;
+  if (!isValidIsoDate(raw)) return null;
+  if (raw < PROJECT_EPOCH) return null;
+  if (raw > today) return null;
+  return raw;
 }

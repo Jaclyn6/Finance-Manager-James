@@ -4,29 +4,30 @@ import { DashboardContent } from "./dashboard-content";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 
 /**
- * Phase 1 Step 10 — Dashboard UI (latest-only, mobile-first).
+ * Phase 1 Step 10 + 10.5 — Dashboard UI (date-aware, mobile-first).
  *
  * Layered rendering model:
  *
  * - THIS file is the **static shell**: headline + blurb + Suspense
  *   boundary. Under `cacheComponents: true` this prerenders at build
- *   time because it has no runtime-API dependencies.
+ *   time because it has no runtime-API dependencies. The `searchParams`
+ *   Promise is passed down without being awaited here — awaiting it at
+ *   the top level would force the whole page dynamic.
  *
- * - `DashboardContent` is the **dynamic subtree**: it calls
- *   `await connection()` to opt out of prerender, then `new Date()`
- *   (today in UTC) becomes the cache key for the changelog reader.
- *   Under the hood the two data readers are still `'use cache'`, so
- *   same-day reloads are cache hits even though the subtree renders
- *   dynamically.
- *
- * This is the Partial Prerender pattern from blueprint §5: static shell
- * + Suspense-gated dynamic content. When `?date=` navigation lands at
- * Step 10.5, this page will start accepting `searchParams`, the
- * `connection()` dependency moves to use `searchParams.date ??
- * today`, and the dashboard transitions toward fully-cacheable
- * `'use cache'(date)` territory.
+ * - `DashboardContent` is the **dynamic subtree**: it awaits
+ *   `searchParams`, sanitizes the `date` value, and calls the
+ *   appropriate data reader — `getLatestCompositeSnapshots()` when
+ *   `date` is null, `getCompositeSnapshotsForDate(date)` otherwise.
+ *   Both underlying readers are `'use cache'` so same-day reloads and
+ *   same-historical-day scrubbing hit cache. Historical dates also
+ *   stay cached for weeks since those rows are immutable — see
+ *   `src/lib/data/indicators.ts`.
  */
-export default function DashboardPage() {
+export default function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string | string[] }>;
+}) {
   return (
     <div className="mx-auto max-w-5xl space-y-6 md:space-y-8">
       <div>
@@ -40,7 +41,7 @@ export default function DashboardPage() {
       </div>
 
       <Suspense fallback={<DashboardSkeleton />}>
-        <DashboardContent />
+        <DashboardContent searchParams={searchParams} />
       </Suspense>
     </div>
   );
