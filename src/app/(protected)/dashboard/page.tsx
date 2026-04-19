@@ -1,14 +1,30 @@
+import { Suspense } from "react";
+
+import { DashboardContent } from "./dashboard-content";
+import { DashboardSkeleton } from "./dashboard-skeleton";
+
 /**
- * Phase 1 dashboard stub. Real content (composite state card, asset
- * cards, recent changes) is Step 10's job; for now this proves the
- * protected shell renders and navigation works.
+ * Phase 1 Step 10 — Dashboard UI (latest-only, mobile-first).
  *
- * Typography leans Kraken-display: bold tracking-tight headline with a
- * near-black tone, muted secondary line, and a calm placeholder card.
+ * Layered rendering model:
  *
- * Responsive tokens (blueprint §6.2, v2.2): mobile-first scale —
- * `text-2xl` headline and tighter card padding at `<md`, scaling to
- * `text-3xl` and roomier padding at `md+`.
+ * - THIS file is the **static shell**: headline + blurb + Suspense
+ *   boundary. Under `cacheComponents: true` this prerenders at build
+ *   time because it has no runtime-API dependencies.
+ *
+ * - `DashboardContent` is the **dynamic subtree**: it calls
+ *   `await connection()` to opt out of prerender, then `new Date()`
+ *   (today in UTC) becomes the cache key for the changelog reader.
+ *   Under the hood the two data readers are still `'use cache'`, so
+ *   same-day reloads are cache hits even though the subtree renders
+ *   dynamically.
+ *
+ * This is the Partial Prerender pattern from blueprint §5: static shell
+ * + Suspense-gated dynamic content. When `?date=` navigation lands at
+ * Step 10.5, this page will start accepting `searchParams`, the
+ * `connection()` dependency moves to use `searchParams.date ??
+ * today`, and the dashboard transitions toward fully-cacheable
+ * `'use cache'(date)` territory.
  */
 export default function DashboardPage() {
   return (
@@ -18,14 +34,14 @@ export default function DashboardPage() {
           오늘 시장 상황
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          매크로 코어와 자산군별 합성 점수가 데이터 파이프라인 가동 이후
-          여기에 표시됩니다.
+          매크로 코어와 자산군별 합성 점수입니다. 확정적 투자 자문이 아닌
+          해석 도구로 사용해 주세요.
         </p>
       </div>
-      <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground md:p-12">
-        아직 수집된 스냅샷이 없습니다. 크론이 처음 실행되면 오늘의 상태가
-        표시됩니다.
-      </div>
+
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
     </div>
   );
 }
