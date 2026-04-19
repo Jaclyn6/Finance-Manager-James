@@ -13,5 +13,18 @@
         "repo": "anthropics/claude-plugins-official"
       }
     }
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "^/clear\\b",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/auto-handoff-on-clear.sh"
+          }
+        ]
+      }
+    ]
   }
 }

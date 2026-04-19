@@ -10,7 +10,13 @@ At the beginning of every session (including `/clear` resumes), if `docs/handoff
 
 When the user signals that context is running thin (phrases like "handoff", "context 정리", "clear 하기 전에 정리"), or when you sense the conversation is about to exceed a comfortable remaining budget, run the `/handoff` slash command (defined at `.claude/commands/handoff.md`). It snapshots the current state into `docs/handoff.md`, commits it, and pushes — so a fresh session can resume from the same point with zero briefing.
 
-Do not rely on memory files under `~/.claude/projects/...` for this — those are durable high-level project facts, not live session state. `docs/handoff.md` is the live state; it is git-tracked and survives worktree switches and clones.
+**Safety net:** a `UserPromptSubmit` hook registered in `.claude/settings.json` fires when the user types `/clear`. It runs `.claude/hooks/auto-handoff-on-clear.sh`, which:
+- **Skips** if `docs/handoff.md` was modified within the last 10 minutes (assumes the user just ran `/handoff` manually and preserves the richer narrative).
+- **Otherwise writes a MECHANICAL fallback** — git state only, no synthesized narrative (hooks cannot invoke Claude) — and commits + pushes. Better than losing everything.
+
+This means: if a new session's first read of `docs/handoff.md` is a mechanical snapshot (recognizable by the banner "auto-generated on /clear"), you are working from reduced context. Ask the user what they were doing and rebuild from git history before proceeding.
+
+Do not rely on memory files under `~/.claude/projects/...` for session continuity — those are durable high-level project facts, not live session state. `docs/handoff.md` is the live state; it is git-tracked and survives worktree switches and clones.
 
 ## Code review workflow
 
