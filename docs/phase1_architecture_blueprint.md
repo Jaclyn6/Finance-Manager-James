@@ -337,17 +337,46 @@ export async function getCompositeSnapshotsForDate(date: string) {
 
 **Why a separate function rather than an optional param on `getLatestCompositeSnapshots`:** cache keys are derived from function arguments in Next.js's `'use cache'`. A single function with an optional date would cache `undefined` and `"2026-03-15"` as different keys, which works, but splitting makes the cadence explicit: `latest` recycles daily with the cron, `forDate` persists for weeks since history is immutable.
 
-Example page-level pattern (`src/app/(protected)/dashboard/page.tsx`):
+Example page-level pattern — **Partial Prerender** (used by `src/app/(protected)/dashboard/page.tsx` as of Step 10, commit `ce23056`):
 
-```ts
-'use cache'
-cacheTag('macro-snapshot')
-cacheLife('days')
+```tsx
+// page.tsx  — static shell, prerendered at build
+import { Suspense } from "react";
+import { DashboardContent } from "./dashboard-content";
+import { DashboardSkeleton } from "./dashboard-skeleton";
+
+export default function DashboardPage() {
+  return (
+    <>
+      <h1>오늘 시장 상황</h1>
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </>
+  );
+}
+
+// dashboard-content.tsx  — dynamic subtree, gated by connection()
+import { connection } from "next/server";
+
+export async function DashboardContent() {
+  await connection();                              // opt out of prerender
+  const today = new Date().toISOString().slice(0, 10);
+  const [snaps, changes] = await Promise.all([
+    getLatestCompositeSnapshots(),                 // 'use cache'
+    getChangelogAroundDate(today, 14),             // 'use cache' (keyed on today)
+  ]);
+  // …render…
+}
 ```
+
+**Why the split (not one-file `'use cache'`):** under Next 16 `cacheComponents: true`, calling `new Date()` (or any wall-clock API) inside a `'use cache'` body throws `next-prerender-current-time` because the prerender pass cannot pick a stable "today". The page-level split pushes `'use cache'` down to the data readers (`src/lib/data/indicators.ts`, `src/lib/data/changelog.ts`), which already tag with `cacheTag('macro-snapshot')` / `cacheTag('changelog')` and set `cacheLife('days')`. `cron → revalidateTag('macro-snapshot', { expire: 0 })` still evicts on new data as intended. The `connection()` call opts this specific render path out of the static prerender pass, not out of runtime cache hits — same-day reloads still hit the cached readers.
+
+**Step 10.5 migration:** once `searchParams.date` lands, `DashboardContent` will accept a `date: string` prop (its own cache key) and `page.tsx` will read `await searchParams` and pass it down. The `connection()` call can then disappear because `date` becomes request-derived, not wall-clock-derived.
 
 **Constraint:** `'use cache'` **cannot** appear at the top of a Route Handler body. For the cron handler, keep the cache-invalidation call (`revalidateTag('macro-snapshot', { expire: 0 })`) in the handler and extract any read-only helper that needs caching into a separate `'use cache'`-directive function.
 
-**Open item to verify at implementation time:** captured values inside a `'use cache'` scope must be serializable. A `SupabaseClient` instance is not. The pattern above calls `getSupabaseServerClient()` inside the cached scope, which in turn awaits `cookies()`. If this breaks the static shell (it may, under `cacheComponents`), the fix is to pull cookies/client-creation outside the cached function and pass a serializable query-argument set in. Test on first dev-server start; fall back to a thin uncached Server Component wrapper that fetches and then passes data into a `'use cache'` pure transformer if needed.
+**Resolved (formerly open) — admin client inside `'use cache'` scopes:** Data readers use the admin (service_role) client, not the user-authenticated server client. Rationale: (1) the data is family-wide, not per-user; (2) the user-auth client awaits `cookies()` which is a runtime API banned in cached scopes; (3) the admin client is cache-compatible because it captures nothing from the outer request context. Landed at commit `6aab776` (Step 8).
 
 ## 8. Secrets
 
@@ -392,7 +421,7 @@ Steps are ordered so the repo never enters a broken state. ✔ marks steps alrea
    - Retrofit existing dashboard placeholder page: replace `p-12` with `p-4 md:p-12`, `text-3xl` with `text-2xl md:text-3xl`. The stub stays; Step 10 replaces it with the real composite UI.
    - Verify no regressions in dev (`npm run dev`) at DevTools viewports 360 / 375 / 768 / 1280. Verify iOS edge-swipe-back is not intercepted.
    - **No DB / cron / data-layer changes** in this step — it's UI plumbing only.
-10. **Dashboard UI (latest-only variant, mobile-first)** — `dashboard/page.tsx` reads from `getLatestCompositeSnapshots`; `CompositeStateCard`, `AssetCard`, `RecentChanges` components; `StalenessBadge` renders `ingested_at` + `fetch_status`. Cards use `grid-cols-1 md:grid-cols-2` (v2.2). At this step the page is always "today"; the `?date=` support lands at Step 10.5.
+10. **Dashboard UI (latest-only variant, mobile-first)** — `dashboard/page.tsx` is a static shell + Suspense-gated `DashboardContent` (calls `await connection()` then reads from `getLatestCompositeSnapshots`). Components: `CompositeStateCard`, `AssetCard`, `RecentChanges`. `StalenessBadge` derives age from `snapshot_date` and combines it with `fetch_status` into a 4-state label (최신 / N일 지연 amber / N일 지연 destructive / non-success). `composite_snapshots` has no `ingested_at` column (see §4) so `snapshot_date` is the freshness proxy — this is the "business day age" semantic documented in §10 acceptance. Cards use `grid-cols-1 md:grid-cols-2` (v2.2). At this step the page is always "today"; the `?date=` support lands at Step 10.5.
 10.5. **Date-navigation UI (v2.1 + v2.2)** — `src/components/layout/date-picker.tsx` (Client Component) renders the hybrid picker per §6.1: native `<input type="date">` on `<md`, shadcn `Popover + Calendar` on `md+`. `?date=YYYY-MM-DD` query param plumbed through the header and preserved by all sidebar + mobile-nav `<Link>`s via a `buildNavHref` helper. `getCompositeSnapshotsForDate(date)` read function in `src/lib/data/indicators.ts` (already landed in Step 8). Dashboard page branches on `searchParams.date` (inside its Suspense boundary) between "latest" and "forDate" reads. `src/components/shared/no-snapshot-notice.tsx` empty-state with a link to the closest earlier `snapshot_date`.
 11. **Asset detail & changelog UI** — `asset/[slug]/page.tsx` (async params + async searchParams); `ScoreTrendLine` Recharts Client Component shows a rolling window ending at the selected date; changelog page renders deltas around the selected date with `band_changed` highlight; both pages consume the `?date=` param already plumbed in Step 10.5.
 12. **Vercel deploy + smoke test** — push to GitHub → Vercel auto-deploys. Add all env vars (service role / FRED / CRON_SECRET Production-only). Manually trigger cron from Vercel UI; verify data in Supabase; verify dashboard renders with `revalidateTag` working; verify `?date=` navigation round-trips correctly on production build.
@@ -422,7 +451,7 @@ Every PRD §16 criterion mapped to the specific file / test that proves it. v2.2
 | Criterion | Proving file / evidence |
 |---|---|
 | 점수 산식 버전이 추적 가능해야 한다 | `MODEL_VERSION` in `weights.ts` flows into every row's `model_version` column; `SELECT DISTINCT model_version FROM composite_snapshots` shows version history. |
-| 데이터 출처가 화면에 표시되어야 한다 | `AssetCard` tooltip shows `source_url` from `INDICATOR_CONFIG`; `StalenessBadge` shows `ingested_at`. |
+| 데이터 출처가 화면에 표시되어야 한다 | `AssetCard` tooltip shows `source_url` from `INDICATOR_CONFIG` (Phase 2 — lands with the contributing-indicator breakdown in Step 11); `StalenessBadge` shows `fetch_status` + days since `snapshot_date` (the `composite_snapshots` table's business-day column; no separate `ingested_at` column exists on that table). |
 | 사용자 문구는 확정적 자문처럼 보이지 않아야 한다 | `DisclaimerBanner` fixed to layout; band labels are "비중 확대 / 유지 / 축소" not "매수 / 매도"; all copy reviewed against PRD §2.3 and §11.5. |
 
 ## 11. Key Trade-off Decisions

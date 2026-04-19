@@ -8,10 +8,14 @@ import type { Tables } from "@/types/database";
  * The "오늘 투자 환경" hero card on the dashboard.
  *
  * PRD §11.1 target: "홈 화면에서 5초 내 현재 상태를 이해". That's why the
- * score is rendered at `text-5xl`/`md:text-6xl` and the band label sits
- * directly beneath in a color-coded pill — the two highest-value
- * signals get the most visual weight. Everything else (snapshot date,
- * model version, staleness) is intentionally quiet.
+ * score is rendered with fluid typography `clamp(2.5rem, 10vw, 4rem)`
+ * (inline style, not a Tailwind utility — Tailwind's discrete
+ * `text-5xl`/`text-6xl` steps would jump at the md breakpoint instead
+ * of scaling smoothly with viewport width on the many phone sizes
+ * between 360-428 px) and the band label sits directly beneath in a
+ * color-coded pill — the two highest-value signals get the most
+ * visual weight. Everything else (snapshot date, model version,
+ * staleness) is intentionally quiet.
  *
  * Takes the `common` composite specifically — the caller in
  * `dashboard/page.tsx` extracts it from `getLatestCompositeSnapshots()`

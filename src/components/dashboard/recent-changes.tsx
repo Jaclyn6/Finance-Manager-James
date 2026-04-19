@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/types/database";
@@ -27,7 +27,17 @@ export function RecentChanges({ rows }: RecentChangesProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>최근 밴드 전환</CardTitle>
+        {/*
+          Semantic `<h2>` rather than shadcn's `CardTitle` (which renders
+          a `<div>`) so this section is reachable via the screen-reader
+          heading outline — pairs with the `<h2>` "자산군별 상태" above
+          (WCAG 2.4.6 Headings and Labels / 1.3.1 Info and Relationships).
+          Same visual classes as `CardTitle` so the Kraken look is
+          preserved.
+        */}
+        <h2 className="font-heading text-base leading-snug font-medium">
+          최근 밴드 전환
+        </h2>
         <p className="text-xs text-muted-foreground">
           최근 14일 범위에서 자산군별 상태가 바뀐 기록입니다.
         </p>
