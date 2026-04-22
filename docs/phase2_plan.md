@@ -37,7 +37,7 @@ This plan is designed to be executed consecutively across multiple chat contexts
 | Score engine v1 | Blueprint v2.3 §4 lines 146–155 | 7 FRED / MODEL_VERSION v1.0.0 / 5y z-score / zScoreTo0100 / bands 80-60-40-20 |
 | server-only invariant | Blueprint v2.3 line 414, 429 | `admin.ts` + `fred.ts` guarded; `fred-parse.ts` guard-free for Node scripts |
 | Admin-in-cache decision | Blueprint v2.3 line 380 (commit `6aab776`) | 데이터 family-wide → admin client inside `'use cache'` 허용 |
-| Composite snapshot invariant | Blueprint v2.3 trade-off #7 | `(asset_type, snapshot_date, model_version)` 유니크; 가중합 재계산 금지 |
+| Composite snapshot invariant | Blueprint v2.3 §2 Supabase Schema — `composite_snapshots` unique index `(asset_type, snapshot_date, model_version)` + §11 trade-off #7 (별도 스냅샷 테이블) | 같은 키 한 번만 쓰임; 가중합 재계산 금지; model_version 공존 구조적 허용 |
 
 ### 0.2 Known ambiguities the PRD does NOT resolve
 
@@ -129,7 +129,7 @@ These MUST be resolved at the start of Phase B (Phase 2 blueprint authorship) be
    **Why greenfield over replay:**
    - Bitbo MVRV/SOPR, CoinGlass ETF flow의 과거 데이터 가용성이 비공식 API라 불확실. 신뢰도 낮은 숫자로 replay 시 되돌리기 비쌈.
    - PRD §11.6 "Phase 2 이후 180일 이상" 요구는 시간이 지나면서 자연 축적으로 충족. 배포 즉시 180일 요구 아님.
-   - 블루프린트 v2.3 trade-off #7 "model_version 공존" 합의를 그대로 활용.
+   - 블루프린트 v2.3 §2 스키마 — `composite_snapshots` unique index `(asset_type, snapshot_date, model_version)` 가 이미 model_version 공존을 구조적으로 허용.
 
    **Cutover checklist (Phase C Step 6):**
    - `MODEL_VERSION` 상수 bump (`src/lib/score-engine/weights.ts`)
@@ -137,6 +137,8 @@ These MUST be resolved at the start of Phase B (Phase 2 blueprint authorship) be
    - 대시보드 헤더에 "모델 v2.0.0" 뱃지 + hover 툴팁으로 변경 이유 설명
    - `/asset/[slug]` trend line이 모델 전환일에 수직 구분선 렌더
    - 30일 기존 backfill은 DB에 남겨두되 readers가 v1.0.0 행을 건너뜀
+
+10. **US equity "valuation" (§10.1, weight 10) 데이터 소스** — PRD §10.1은 "밸류에이션: 10" 가중치를 명시하지만 구체 지표/소스 미지정. 후보: Shiller P/E (비공식 `multpl.com` 스크래핑 또는 `MULTPL` series), FRED `SP500PE` (공식이지만 저빈도 갱신), Alpha Vantage fundamentals endpoint (Free Tier 25/day 부담 가중). **상태: 미해소**. Phase 2 블루프린트 §12 trade-off 7에서 임시 처리(sentiment 카테고리에 10 흡수)로 Phase 3까지 이연하되, Phase C Step 6 전에 공식 결정 필요. 흡수 방식을 유지할지(단순), 정식 밸류에이션 소스를 Phase 2에 통합할지(정확) 선택.
 
 ### 0.3 Anti-patterns to avoid (from handoff + blueprint)
 
@@ -349,7 +351,7 @@ Before moving to Phase C:
 - Bump `MODEL_VERSION` to `v2.0.0` in `weights.ts`.
 - New weight tables per asset (PRD §10.1–10.3): US 35/45/10/10, BTC/ETH 35/25/25/15, KR 45/25/20/10.
 - Composite writer now multi-category: macro score + technical score + onchain score + sentiment modifier → weighted 0–100.
-- v1 rows preserved; v2 rows coexist per blueprint v2.3 trade-off #7.
+- v1 rows preserved; v2 rows coexist via `composite_snapshots` unique index on `(asset_type, snapshot_date, model_version)`.
 - Backfill: replay against `raw_payload` if Phase B chose rewrite, else greenfield from deploy.
 
 ### C.7 (draft) Cron strategy v2
