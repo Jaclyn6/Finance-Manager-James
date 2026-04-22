@@ -8,7 +8,9 @@
 -- Corrections happen via MODEL_VERSION bump, not in-place UPDATE.
 --
 -- Exception: `price_readings` has no `model_version` — it's visualization-only
--- (PRD §8.5 line 188, blueprint §8.1) and re-fetches overwrite bars.
+-- (PRD §8.5 line 188, blueprint §7.4 "Price history — visualization-only invariant")
+-- and re-fetches overwrite bars. The §7.4 invariant also forbids imports from
+-- `@/lib/data/prices` inside `src/lib/score-engine/**`.
 
 -- ============================================================
 -- technical_readings
@@ -40,9 +42,18 @@ CREATE INDEX technical_readings_ticker_obs
 
 -- ============================================================
 -- onchain_readings
--- Bitbo (MVRV_Z, SOPR), CoinGlass (BTC_ETF_NETFLOW), alternative.me (CRYPTO_FG),
--- CNN (CNN_FG — lives here because it's a sentiment-ish input to the on-chain
--- category signal math; physical source split is documented in blueprint §3.1).
+-- Bitbo (MVRV_Z, SOPR), CoinGlass (BTC_ETF_NETFLOW), alternative.me (CRYPTO_FG).
+--
+-- CNN_FG placement: blueprint §5 routing table left the CNN F&G destination
+-- "TBD at Step 2" (onchain_readings vs news_sentiment). Step 1 DDL resolves
+-- it here as a practical convenience — CNN F&G is hourly-refresh like the
+-- on-chain sources, and the row shape (single `score_0_100` number per day,
+-- no ticker, no article_count) matches `onchain_readings` more closely than
+-- `news_sentiment`. CNN F&G is NOT an on-chain category score input
+-- (blueprint §4.1 classifies it as a Sentiment modifier); it is a
+-- cross-category signal input consumed by `EXTREME_FEAR` in the signal
+-- engine (blueprint §4.5). Readers must route CNN_FG rows to the sentiment
+-- category aggregator + the signal engine, not the on-chain aggregator.
 -- ============================================================
 
 CREATE TABLE public.onchain_readings (

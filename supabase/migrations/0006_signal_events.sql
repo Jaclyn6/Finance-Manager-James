@@ -2,24 +2,34 @@
 -- Populated by `src/lib/score-engine/signals.ts` (Step 7.5) after every ingest
 -- path whose inputs touch any of the 6 signals defined in PRD §10.4.
 --
--- Composite PK `(snapshot_date, signal_rules_version)` choice:
---   Snapshot immutability (blueprint §2.2 tenet 2, §4.5) — a given
---   calendar day's signal evaluation under a given rules version is
---   immutable. Tuning threshold values requires a SIGNAL_RULES_VERSION
---   bump (e.g. v1.0.0 → v1.1.0), which creates a parallel row for the
---   same date rather than overwriting the old evaluation. This keeps
---   the historical "what did we see?" auditable even as thresholds
---   evolve — mirroring the MODEL_VERSION discipline on
---   `composite_snapshots`. SIGNAL_RULES_VERSION is intentionally
---   independent from MODEL_VERSION (blueprint §2.3, §4.5) because the
---   threshold tuning cadence differs from composite weight tuning.
+-- Composite PK `(snapshot_date, signal_rules_version)` choice — two
+-- distinct semantics are layered on this PK:
 --
--- UPDATE policy (0007 RLS): the writer may upsert with ON CONFLICT
--- DO UPDATE within a single (snapshot_date, signal_rules_version) when
--- re-running a cron for the same day (e.g. technical cron finishes
--- after macro cron and the signal re-eval needs to land). This is the
--- one permitted UPDATE vector; other corrections require a version
--- bump.
+--   (a) Cross-version immutability: tuning threshold values requires a
+--       SIGNAL_RULES_VERSION bump (e.g. v1.0.0 → v1.1.0), which creates
+--       a PARALLEL row for the same date rather than mutating the old
+--       evaluation's row. The old evaluation's (snapshot_date, old
+--       version) row remains untouched — auditable history of "what
+--       did we see under v1.0.0 rules?" mirrors the MODEL_VERSION
+--       discipline on `composite_snapshots`. SIGNAL_RULES_VERSION is
+--       intentionally independent from MODEL_VERSION (blueprint §2.3,
+--       §4.5) because threshold tuning cadence differs from composite
+--       weight tuning.
+--
+--   (b) Within-version idempotent overwrite: per blueprint §7.3
+--       ("Idempotency — Multiple daily invocations on the same date
+--       overwrite each other deterministically — the last computed
+--       state wins"), multiple crons in the same day under the same
+--       SIGNAL_RULES_VERSION upsert the row via ON CONFLICT DO UPDATE.
+--       This is NOT snapshot immutability — within a (snapshot_date,
+--       signal_rules_version) pair the row is last-write-wins, which is
+--       acceptable because signal inputs only change hourly at most
+--       and the last run reflects the latest ingestion state.
+--
+-- 0007 RLS enforces this split: service_role INSERT + UPDATE are both
+-- granted (0007 `service_role_write_signal_events` +
+-- `service_role_update_signal_events`) to enable (b); no UPDATE
+-- vector exists that crosses version boundaries (a).
 
 CREATE TABLE public.signal_events (
   snapshot_date         DATE        NOT NULL,
