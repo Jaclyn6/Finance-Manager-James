@@ -156,8 +156,12 @@ export function rollingStdDev(
  * 3. For each subsequent change, apply Wilder's recurrence:
  *    `avg = (avg_prev * (period - 1) + current) / period`.
  * 4. `RS = avgGain / avgLoss`, `RSI = 100 - 100 / (1 + RS)`.
- *    If `avgLoss === 0` → RSI = 100 (no downward movement).
- *    If `avgGain === 0` AND `avgLoss > 0` → RSI = 0.
+ *    If `avgGain === 0` AND `avgLoss === 0` → RSI = 50 (flat /
+ *      zero-volatility series — no directional movement, so neutral,
+ *      not overbought). Order matters: the flat-series check must
+ *      come first so the divide-by-zero guards don't mis-classify.
+ *    If `avgLoss === 0` (with avgGain > 0) → RSI = 100 (pure uptrend).
+ *    If `avgGain === 0` (with avgLoss > 0) → RSI = 0 (pure downtrend).
  *
  * Reference: Wilder, J.W. (1978), "New Concepts in Technical Trading
  * Systems". Matches TA-Lib `RSI_EMA` mode.
@@ -186,6 +190,9 @@ export function rsi(closes: number[], period: number): number | null {
     avgLoss = (avgLoss * (period - 1) + loss) / period;
   }
 
+  // Flat / zero-volatility series: both sums are 0. Neutral, not overbought.
+  // This check MUST precede the single-sided zero guards below.
+  if (avgGain === 0 && avgLoss === 0) return 50;
   if (avgLoss === 0) return 100;
   if (avgGain === 0) return 0;
   const rs = avgGain / avgLoss;
@@ -322,15 +329,22 @@ export function macdSeries(
  * therefore more favorable.
  *
  * `histogramHistory` should be the histogram values excluding the
- * current bar. Returns `null` if fewer than 2 history values (no
- * meaningful variance).
+ * current bar. The last 90 entries are used for the rolling stddev —
+ * anything older is ignored per blueprint §4.3 ("90-day rolling
+ * stdev"). Slicing internally (rather than requiring the caller to
+ * pre-slice) is defensive: Step 6 composite wiring can pass a full
+ * multi-year histogram without silently widening the z-score window.
+ * Returns `null` if fewer than 2 history values (no meaningful
+ * variance).
  */
+export const MACD_SCORE_WINDOW = 90;
 export function macdToScore(
   current: MacdResult,
   histogramHistory: number[],
 ): number | null {
-  if (histogramHistory.length < 2) return null;
-  const z = computeZScore(histogramHistory, current.histogram);
+  const window = histogramHistory.slice(-MACD_SCORE_WINDOW);
+  if (window.length < 2) return null;
+  const z = computeZScore(window, current.histogram);
   return zScoreTo0100(z, true);
 }
 
@@ -420,8 +434,14 @@ export function bollingerToScore(
     // Map [middle, upper] → [50, 0].
     return lerp(50, 0, (currentClose - middle) / (upper - middle));
   }
-  // Map [lower, middle] → [100, 50].
-  return lerp(100, 50, (middle - currentClose) / (middle - lower));
+  // Map [lower, middle] → [100, 50]. The t-argument grows as
+  // currentClose rises from `lower` toward `middle`, so lerp(100, 50, t)
+  // decreases the score from 100 (oversold = favorable) to 50 (neutral).
+  // A previous version used `(middle - currentClose) / (middle - lower)`
+  // which inverted the monotonicity — the midpoint-symmetric test
+  // (close = 95 → 75) passed regardless, masking the bug at off-center
+  // values like close = 91 (should score ~95, not 55).
+  return lerp(100, 50, (currentClose - lower) / (middle - lower));
 }
 
 // ---------------------------------------------------------------------------

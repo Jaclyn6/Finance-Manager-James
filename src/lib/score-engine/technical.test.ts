@@ -125,6 +125,15 @@ describe("rsi", () => {
   it("returns null for zero period", () => {
     expect(rsi([1, 2, 3], 0)).toBeNull();
   });
+
+  it("returns 50 (neutral) on a flat / zero-volatility series", () => {
+    // All closes identical → avgGain=0, avgLoss=0. No directional
+    // movement means neutral, NOT overbought. A previous buggy branch
+    // order hit `if (avgLoss === 0) return 100` first and mis-classified
+    // halted / untraded symbols as extreme overbought.
+    const closes = Array.from({ length: 20 }, () => 100);
+    expect(rsi(closes, 14)).toBe(50);
+  });
 });
 
 describe("rsiToScore (piecewise per blueprint §4.3)", () => {
@@ -243,6 +252,25 @@ describe("macdToScore", () => {
     const score = macdToScore(current, history);
     expect(score).not.toBeNull();
     expect(score as number).toBeLessThan(50);
+  });
+
+  it("internally caps the rolling-stddev window at 90 entries per blueprint §4.3", () => {
+    // Caller passes 200 entries; result should be identical to passing
+    // only the last 90. Anything older is ignored per §4.3.
+    const current: MacdResult = { macd: 1, signal: 0, histogram: 0.5 };
+    const last90 = Array.from({ length: 90 }, (_, i) =>
+      Math.sin(i / 10) * 0.5,
+    );
+    // Prepend 110 distinctly-distributed old values that would shift
+    // the mean/stddev if naively included.
+    const ancientNoise = Array.from({ length: 110 }, (_, i) =>
+      Math.cos(i / 5) * 10,
+    );
+    const fullHistory = [...ancientNoise, ...last90];
+
+    const scoreFull = macdToScore(current, fullHistory);
+    const scoreCapped = macdToScore(current, last90);
+    expect(scoreFull).toBe(scoreCapped);
   });
 });
 
@@ -377,6 +405,38 @@ describe("bollingerToScore", () => {
     const bands = { middle: 100, upper: 110, lower: 90 };
     // Halfway from lower to middle → halfway from 100 to 50 = 75.
     expect(bollingerToScore(95, bands)).toBe(75);
+  });
+
+  it("is monotonically decreasing as currentClose rises within the lower half", () => {
+    // A previous implementation flipped the lerp t-argument so that
+    // close=91 scored 55 and close=99 scored 95 — the opposite of the
+    // intended direction. The midpoint test above (close=95 → 75) passes
+    // regardless of inversion due to symmetry. These off-center fixtures
+    // pin down the monotonicity explicitly.
+    const bands = { middle: 100, upper: 110, lower: 90 };
+    // close near lower → close to 100 (oversold = favorable)
+    expect(bollingerToScore(91, bands)).toBeCloseTo(95, 5);
+    // close near middle → close to 50 (neutral)
+    expect(bollingerToScore(99, bands)).toBeCloseTo(55, 5);
+    // Strict monotonicity: as close rises, score should fall.
+    expect(bollingerToScore(91, bands)).toBeGreaterThan(
+      bollingerToScore(95, bands),
+    );
+    expect(bollingerToScore(95, bands)).toBeGreaterThan(
+      bollingerToScore(99, bands),
+    );
+  });
+
+  it("is monotonically decreasing as currentClose rises within the upper half", () => {
+    // Sanity pair for the upper half too, so a future accidental
+    // inversion there would also be caught.
+    const bands = { middle: 100, upper: 110, lower: 90 };
+    expect(bollingerToScore(101, bands)).toBeGreaterThan(
+      bollingerToScore(105, bands),
+    );
+    expect(bollingerToScore(105, bands)).toBeGreaterThan(
+      bollingerToScore(109, bands),
+    );
   });
 });
 
