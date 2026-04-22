@@ -65,7 +65,13 @@ export function zScoreTo0100(z: number, inverted = false): number {
   return clamp(raw, 0, 100);
 }
 
-function clamp(value: number, min: number, max: number): number {
+/**
+ * Clamp `value` into `[min, max]`. Exported so the technical-indicator
+ * engine (`technical.ts`) can reuse the same bound helper the Z-score
+ * mapper already depends on — keeps a single definition of "bounded
+ * linear interpolation" across the score engine.
+ */
+export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
