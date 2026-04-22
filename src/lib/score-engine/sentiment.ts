@@ -138,10 +138,14 @@ export function finnhubSentimentToScore(
   if (!Number.isFinite(bullishPercent) || !Number.isFinite(bearishPercent)) {
     return null;
   }
+  // Negative article count is physically impossible — treat as a
+  // data-bug upstream and surface null (not 50) so the missing-data
+  // pipeline picks it up rather than masking the anomaly as neutral.
+  if (articleCount < 0) return null;
   // Zero-articles path: legitimate "no news" response. Per
   // finnhub-parse.ts contract, this is NOT a missing-data error — we
   // surface the information-neutral score 50 rather than null.
-  if (articleCount <= 0) return 50;
+  if (articleCount === 0) return 50;
 
   const raw = 50 + (bullishPercent - bearishPercent) * 50;
   return clamp(raw, 0, 100);

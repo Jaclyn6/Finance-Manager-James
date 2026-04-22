@@ -55,6 +55,16 @@ describe("finnhubSentimentToScore", () => {
     expect(finnhubSentimentToScore(0.0, 1.0, 0)).toBe(50);
   });
 
+  it("returns null for negative articleCount (physically impossible — data error)", () => {
+    // A negative article count cannot be produced by any legitimate
+    // upstream source. Treat it as a data-bug indicator (missing /
+    // corrupt) rather than masking it as the same "no news" neutral
+    // as articleCount=0. Surfacing null lets the staleness pipeline
+    // pick up the anomaly.
+    expect(finnhubSentimentToScore(0.5, 0.5, -1)).toBeNull();
+    expect(finnhubSentimentToScore(0.8, 0.2, -5)).toBeNull();
+  });
+
   it("defensively clamps pathological upstream values to [0, 100]", () => {
     // If a parser-contract drift ever lets a >1 percent through, the
     // score engine must still return a bounded value — no composite
@@ -109,6 +119,31 @@ describe("cnnFearGreedToScore", () => {
 // ---------------------------------------------------------------------------
 // Combined sentiment category score
 // ---------------------------------------------------------------------------
+
+describe("sentimentCategoryScore — NaN integration paths", () => {
+  it("falls through to Finnhub when cnnFearGreedScore is NaN (treated as missing)", () => {
+    // NaN reaches cnnFearGreedToScore → null. Combiner then sees
+    // Finnhub=60 + CNN=null → passthrough Finnhub value.
+    const score = sentimentCategoryScore({
+      finnhubBullishPercent: 0.6,
+      finnhubBearishPercent: 0.4,
+      finnhubArticleCount: 50,
+      cnnFearGreedScore: Number.NaN,
+    });
+    expect(score).toBe(60);
+  });
+
+  it("returns null when Finnhub is null AND cnnFearGreedScore is NaN", () => {
+    // Both sources effectively missing (NaN CNN → null via converter).
+    const score = sentimentCategoryScore({
+      finnhubBullishPercent: null,
+      finnhubBearishPercent: null,
+      finnhubArticleCount: 0,
+      cnnFearGreedScore: Number.NaN,
+    });
+    expect(score).toBeNull();
+  });
+});
 
 describe("sentimentCategoryScore", () => {
   it("averages Finnhub and CNN when both are present", () => {
