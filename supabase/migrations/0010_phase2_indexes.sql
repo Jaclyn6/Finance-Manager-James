@@ -1,0 +1,14 @@
+-- Placeholder for query-optimized indexes discovered at Phase 2 Steps 7–11
+-- (blueprint §8.6). Intentionally empty at Step 1 — the right index shapes are
+-- a function of actual reader query plans (`src/lib/data/*` readers added at
+-- Steps 7–11), and premature indexes cost write throughput on the cron path.
+--
+-- Populate once:
+--   - Step 9 readers are implemented and EXPLAIN ANALYZE on the slowest query
+--     shows a seq scan that a composite index would eliminate.
+--   - The Step 11 dashboard cold-start latency is profiled against production
+--     row counts (after the first week of v2 data accumulates).
+--
+-- Placeholder statement so the Supabase MCP `apply_migration` call accepts the
+-- file as a valid (non-empty) migration.
+SELECT 1;

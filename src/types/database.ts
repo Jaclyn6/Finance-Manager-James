@@ -146,6 +146,156 @@ export type Database = {
         }
         Relationships: []
       }
+      model_version_history: {
+        Row: {
+          created_at: string
+          cutover_date: string
+          model_version: string
+          notes: string | null
+        }
+        Insert: {
+          created_at?: string
+          cutover_date: string
+          model_version: string
+          notes?: string | null
+        }
+        Update: {
+          created_at?: string
+          cutover_date?: string
+          model_version?: string
+          notes?: string | null
+        }
+        Relationships: []
+      }
+      news_sentiment: {
+        Row: {
+          article_count: number
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status: Database["public"]["Enums"]["fetch_status_enum"]
+          id: string
+          ingested_at: string
+          model_version: string
+          observed_at: string
+          raw_payload: Json | null
+          score_0_100: number
+          source_name: string
+          ticker: string | null
+        }
+        Insert: {
+          article_count?: number
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          ingested_at?: string
+          model_version: string
+          observed_at: string
+          raw_payload?: Json | null
+          score_0_100: number
+          source_name: string
+          ticker?: string | null
+        }
+        Update: {
+          article_count?: number
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          ingested_at?: string
+          model_version?: string
+          observed_at?: string
+          raw_payload?: Json | null
+          score_0_100?: number
+          source_name?: string
+          ticker?: string | null
+        }
+        Relationships: []
+      }
+      onchain_readings: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status: Database["public"]["Enums"]["fetch_status_enum"]
+          id: string
+          indicator_key: string
+          ingested_at: string
+          model_version: string
+          observed_at: string
+          raw_payload: Json | null
+          score_0_100: number | null
+          source_name: string
+          value_normalized: number | null
+          value_raw: number | null
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          indicator_key: string
+          ingested_at?: string
+          model_version: string
+          observed_at: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          source_name: string
+          value_normalized?: number | null
+          value_raw?: number | null
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          indicator_key?: string
+          ingested_at?: string
+          model_version?: string
+          observed_at?: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          source_name?: string
+          value_normalized?: number | null
+          value_raw?: number | null
+        }
+        Relationships: []
+      }
+      price_readings: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          close: number
+          high: number | null
+          id: string
+          ingested_at: string
+          low: number | null
+          open: number | null
+          price_date: string
+          source_name: string
+          ticker: string
+          volume: number | null
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          close: number
+          high?: number | null
+          id?: string
+          ingested_at?: string
+          low?: number | null
+          open?: number | null
+          price_date: string
+          source_name: string
+          ticker: string
+          volume?: number | null
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          close?: number
+          high?: number | null
+          id?: string
+          ingested_at?: string
+          low?: number | null
+          open?: number | null
+          price_date?: string
+          source_name?: string
+          ticker?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
       score_changelog: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type_enum"]
@@ -188,6 +338,81 @@ export type Database = {
           previous_band?: string | null
           previous_score?: number | null
           top_movers?: Json | null
+        }
+        Relationships: []
+      }
+      signal_events: {
+        Row: {
+          active_signals: Json
+          alignment_count: number
+          computed_at: string
+          per_signal_detail: Json
+          signal_rules_version: string
+          snapshot_date: string
+        }
+        Insert: {
+          active_signals: Json
+          alignment_count: number
+          computed_at?: string
+          per_signal_detail: Json
+          signal_rules_version: string
+          snapshot_date: string
+        }
+        Update: {
+          active_signals?: Json
+          alignment_count?: number
+          computed_at?: string
+          per_signal_detail?: Json
+          signal_rules_version?: string
+          snapshot_date?: string
+        }
+        Relationships: []
+      }
+      technical_readings: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status: Database["public"]["Enums"]["fetch_status_enum"]
+          id: string
+          indicator_key: string
+          ingested_at: string
+          model_version: string
+          observed_at: string
+          raw_payload: Json | null
+          score_0_100: number | null
+          source_name: string
+          ticker: string
+          value_normalized: number | null
+          value_raw: number | null
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          indicator_key: string
+          ingested_at?: string
+          model_version: string
+          observed_at: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          source_name: string
+          ticker: string
+          value_normalized?: number | null
+          value_raw?: number | null
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          indicator_key?: string
+          ingested_at?: string
+          model_version?: string
+          observed_at?: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          source_name?: string
+          ticker?: string
+          value_normalized?: number | null
+          value_raw?: number | null
         }
         Relationships: []
       }

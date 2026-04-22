@@ -4,18 +4,54 @@ import type { IndicatorConfig } from "./types";
  * Semantic version of the score model.
  *
  * Every row written by the cron — `indicator_readings`,
- * `composite_snapshots`, `score_changelog` — stores this value in
- * its `model_version` column so that bumping this constant creates a
- * parallel history of scores rather than overwriting the old ones
- * (PRD §16.2, blueprint §4.2). When weights or formulas change,
- * bump the version.
+ * `composite_snapshots`, `score_changelog`, and the Phase 2 reading
+ * tables (`technical_readings`, `onchain_readings`, `news_sentiment`)
+ * — stores this value in its `model_version` column so that bumping
+ * this constant creates a parallel history of scores rather than
+ * overwriting the old ones (PRD §16.2, blueprint §4.2). When weights
+ * or formulas change, bump the version.
  *
  * Versioning policy:
  * - MAJOR: new indicators added or removed; band thresholds changed
  * - MINOR: weight redistribution within the same indicator set
  * - PATCH: bug fixes that shouldn't change normal-case outputs
+ *
+ * `v2.0.0` (Phase 2 cutover, 2026-04-23): MAJOR bump. Moves from the
+ * Phase 1 flat 7-macro-indicator composite to the 4-category model
+ * (macro / technical / on-chain / sentiment) with per-asset-type
+ * weight tables defined by PRD §10. The v1 → v2 cutover is recorded
+ * in the `model_version_history` DB table (migration 0009) so the
+ * dashboard badge and `/asset/[slug]` trend `ReferenceLine` can read
+ * the date at runtime rather than hard-coding it (blueprint §4.4).
  */
-export const MODEL_VERSION = "v1.0.0";
+export const MODEL_VERSION = "v2.0.0";
+
+/**
+ * Semantic version of the Signal Alignment engine rule set
+ * (blueprint §2.3, §4.5; PRD §10.4).
+ *
+ * Independent from {@link MODEL_VERSION} — signal threshold tuning
+ * and composite weight tuning run on different cadences. A weight
+ * tweak (MODEL_VERSION bump) should not invalidate the signal
+ * history; a signal threshold tweak (SIGNAL_RULES_VERSION bump)
+ * should not force a composite-score re-version. The `signal_events`
+ * table keys its composite PK on `(snapshot_date,
+ * signal_rules_version)` so both versions evolve independently while
+ * preserving snapshot immutability (blueprint §2.2 tenet 2).
+ */
+export const SIGNAL_RULES_VERSION = "v1.0.0";
+
+/**
+ * Snapshot marker for the 22-ticker registry that Phase 2 scoring
+ * depends on (blueprint §2.3, §3.2).
+ *
+ * Bumping this version requires a blueprint revision — silent edits
+ * to the ticker list are forbidden (blueprint §11 risk row 5, §12
+ * trade-off 5). The date suffix is the blueprint's authoring date
+ * (2026-04-23) so a grep of the string finds the exact frozen-at
+ * moment without a git-blame dance.
+ */
+export const TICKER_LIST_VERSION = "v1.0.0-2026-04-23";
 
 /**
  * Phase 1 macro-only indicator set. All seven FRED series from

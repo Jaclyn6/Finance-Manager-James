@@ -1,0 +1,20 @@
+-- Intentionally empty. Phase 1's "indicator_config" is actually the TS INDICATOR_CONFIG constant in src/lib/score-engine/weights.ts (not a DB table). Phase 2 preserves this pattern — no new DB rows needed. File reserved for future config-as-data migration if needed.
+--
+-- Discovery: blueprint §8.4 references "(Phase 1) indicator_config table" as if it
+-- existed in the DB, but 0001_initial_schema.sql never created one. Phase 1 kept
+-- indicator metadata (descriptionKo, sourceName, weights, normalization hints) in
+-- the `INDICATOR_CONFIG` TypeScript constant so the score engine stays
+-- framework-agnostic and the `import "server-only"` boundary is cleaner —
+-- backfill scripts can import the same source of truth without a DB round-trip.
+--
+-- Phase 2 continues that pattern: Step 6 ("score engine v2") will restructure
+-- `INDICATOR_CONFIG` into the 4-category model directly in TypeScript. No
+-- matching DB migration is needed at Step 1.
+--
+-- If a future phase wants config-as-data (e.g. to let non-devs tune weights via
+-- a dashboard form without a deploy), this file number is reserved for the
+-- `CREATE TABLE public.indicator_config (...)` migration that would land then.
+--
+-- Placeholder statement so the Supabase MCP `apply_migration` call accepts the
+-- file as a valid (non-empty) migration.
+SELECT 1;
