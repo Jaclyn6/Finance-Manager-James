@@ -79,19 +79,35 @@ export interface CompositeResult {
 }
 
 /**
- * The four Phase 2 score categories. Their weighted sum is the
- * composite — per-asset weights live in CATEGORY_WEIGHTS (weights.ts).
+ * The Phase 2 score categories. Their weighted sum is the composite —
+ * per-asset weights live in CATEGORY_WEIGHTS (weights.ts).
  *
- * Blueprint §4.1 defines the category model: macro (FRED indicators),
- * technical (RSI/MACD/MA/Bollinger/Disparity), on-chain (MVRV Z / SOPR
- * / ETF flow / Crypto F&G), and sentiment (Finnhub news + CNN F&G,
- * capped weight per PRD §8.4).
+ * Blueprint §4.1 + §4.2 enumerate:
+ *   - `macro`              (FRED macro-economic indicators)
+ *   - `technical`          (RSI / MACD / MA / Bollinger / Disparity)
+ *   - `onchain`            (MVRV / SOPR / ETF flow / Crypto F&G — crypto only)
+ *   - `sentiment`          (Finnhub + CNN F&G; capped per §4.1 + PRD §8.4)
+ *   - `valuation`          (Phase 3 module; at Phase 2 pinned to neutral 50
+ *                           per §4.4 trade-off 7 — weight 10 on US / ETF)
+ *   - `regional_overlay`   (DTWEXBGS + DEXKOUS; KR-only; weight 20 per §4.2)
+ *
+ * `valuation` and `regional_overlay` are first-class categories rather
+ * than collapsed into `sentiment` / `macro` so the blueprint §4.2 weight
+ * table is honoured verbatim and the capped-sentiment invariant (§4.1)
+ * holds — collapsing valuation into sentiment would let sentiment drag
+ * the composite by 20 pts, not the prescribed 10.
  */
-export type CategoryName = "macro" | "technical" | "onchain" | "sentiment";
+export type CategoryName =
+  | "macro"
+  | "technical"
+  | "onchain"
+  | "sentiment"
+  | "valuation"
+  | "regional_overlay";
 
 /**
  * Map of category → 0-100 score. `null` means "missing / unknown" —
- * propagates per blueprint §4.5 tenet 1 (missing inputs → unknown,
+ * propagates per blueprint §2.2 tenet 1 (missing inputs → unknown,
  * never defaulted to neutral or zero). The composite renormalizes
  * weights across present categories only, preserving dynamic range
  * during gradual rollout.

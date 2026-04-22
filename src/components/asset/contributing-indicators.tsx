@@ -155,27 +155,50 @@ function Metric({
  * rejects rows with missing or non-finite numeric fields, but keeps
  * the ones that do parse cleanly. One corrupt indicator shouldn't
  * blank the whole card.
+ *
+ * **Supports both Phase 1 and Phase 2 JSONB shapes.** Phase 1 (v1.0.0)
+ * stores indicators at the top level: `{ FEDFUNDS: { score, weight,
+ * contribution }, ... }`. Phase 2 (v2.0.0) wraps them by category:
+ * `{ macro: { score, weight, contribution, indicators: { FEDFUNDS: {...}
+ * } }, technical: {...}, ... }`. We detect the v2 shape by the
+ * presence of a nested `indicators` map on any top-level value and
+ * flatten the indicator-level entries up. At Phase 2 Step 6 only the
+ * `macro` category populates its `indicators` map; other categories
+ * land empty/absent until Steps 7–8 wire them.
+ *
+ * Category-level rendering (showing "Macro: 47" / "Technical: 62" at
+ * the top level instead of / alongside the FRED rows) is Step 8's
+ * scope. For Step 6 we preserve Phase 1 indicator-level UX on both
+ * v1 and v2 rows so the contributing breakdown never regresses
+ * during the v1→v2 transition.
  */
 function parseContributing(raw: Json): ParsedContribution[] {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
   const rows: ParsedContribution[] = [];
-  for (const [key, value] of Object.entries(raw)) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const v = value as Record<string, unknown>;
-    const score = v.score;
-    const weight = v.weight;
-    const contribution = v.contribution;
-    if (
-      typeof score !== "number" ||
-      typeof weight !== "number" ||
-      typeof contribution !== "number" ||
-      !Number.isFinite(score) ||
-      !Number.isFinite(weight) ||
-      !Number.isFinite(contribution)
-    ) {
+  for (const [topKey, topValue] of Object.entries(raw)) {
+    if (!topValue || typeof topValue !== "object" || Array.isArray(topValue)) {
       continue;
     }
-    rows.push({ key, score, weight, contribution });
+    const v = topValue as Record<string, unknown>;
+    const nestedIndicators = v.indicators;
+    if (
+      nestedIndicators &&
+      typeof nestedIndicators === "object" &&
+      !Array.isArray(nestedIndicators)
+    ) {
+      // v2 nested shape: drill into this category's indicators map
+      // and surface each indicator as a row. The category-level
+      // { score, weight, contribution } fields are intentionally
+      // dropped here — Step 8 UI will consume them directly.
+      for (const [indKey, indValue] of Object.entries(
+        nestedIndicators as Record<string, unknown>,
+      )) {
+        collectRow(rows, indKey, indValue);
+      }
+    } else {
+      // v1 flat shape: topKey is an indicator key.
+      collectRow(rows, topKey, v);
+    }
   }
   rows.sort((a, b) => {
     const byMagnitude = Math.abs(b.contribution) - Math.abs(a.contribution);
@@ -183,6 +206,29 @@ function parseContributing(raw: Json): ParsedContribution[] {
     return a.key < b.key ? -1 : 1;
   });
   return rows;
+}
+
+function collectRow(
+  rows: ParsedContribution[],
+  key: string,
+  value: unknown,
+): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const v = value as Record<string, unknown>;
+  const score = v.score;
+  const weight = v.weight;
+  const contribution = v.contribution;
+  if (
+    typeof score !== "number" ||
+    typeof weight !== "number" ||
+    typeof contribution !== "number" ||
+    !Number.isFinite(score) ||
+    !Number.isFinite(weight) ||
+    !Number.isFinite(contribution)
+  ) {
+    return;
+  }
+  rows.push({ key, score, weight, contribution });
 }
 
 function formatScore(n: number): string {

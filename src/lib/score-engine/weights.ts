@@ -233,48 +233,61 @@ export const PHASE2_ACTIVE_FRED_SIGNAL_KEYS: readonly string[] = Object.entries(
  * input to `computeCompositeV2`. PRD v3.4 initial values; backtest-
  * driven re-tuning is a Phase 3 task per PRD §10 line 240.
  *
- * Phase 2 trade-offs folded in here:
+ * Phase 2 policy per blueprint §4.2 table verbatim — NO weight folding.
  *
- * 1. **Valuation → Sentiment (US equity, Global ETF).** PRD §10.1 and
- *    §10.4 allocate 10 pts to a "Valuation" sub-score. Phase 2 does
- *    not implement a dedicated valuation module (blueprint §4.4
- *    trade-off 7 — deferred to Phase 3). Those 10 pts fold into
- *    Sentiment, bringing Sentiment from 10 → 20 for both asset types.
- *    Documented decision, not silent default; see §4.2 line 207.
+ * 1. **Valuation stays first-class for US equity + Global ETF (§4.4
+ *    trade-off 7).** PRD §10.1 and §10.4 allocate 10 pts to a
+ *    "Valuation" sub-score. Phase 2 does not implement a dedicated
+ *    valuation module, but the 10-pt weight is kept here so the cron
+ *    pins `valuation` to a neutral 50 at write time. Critically, the
+ *    weight is NOT folded into Sentiment — that would let sentiment
+ *    drag the composite by 20 pts instead of the blueprint §4.1
+ *    capped 10, violating "sentiment never drives the composite
+ *    alone". Phase 3 replaces the 50-pin with a real Shiller-P/E-
+ *    class module.
  *
- * 2. **Regional overlay → Macro (KR equity).** PRD §10.3 allocates 20
- *    pts to a regional overlay (DTWEXBGS 10 + DEXKOUS 10). Both are
- *    FRED daily series and economically function as macro-liquidity /
- *    FX signals on the KR equity complex — foreign-capital outflow
- *    and FX-debt burden dominate the export-benefit counterargument
- *    (plan §0.2 #3). Phase 2 rolls the 20-point overlay into Macro
- *    (45 + 20 = 65); Technical 25 and Sentiment 10 are unchanged.
+ * 2. **Regional overlay stays first-class for KR equity (plan §0.2
+ *    #3).** PRD §10.3 allocates 20 pts to a regional overlay
+ *    (DTWEXBGS 10 + DEXKOUS 10). Both are FRED daily series; the
+ *    plan §0.2 #3 resolution says they are macro-source but the
+ *    blueprint §4.2 table keeps them as a distinct category so the
+ *    per-category story on the dashboard stays auditable (a dollar-
+ *    strength spike is a different story than a rate shock even if
+ *    both come from FRED). Macro stays 45, overlay is a separate 20,
+ *    Technical 25, Sentiment 10. Cron wires `regional_overlay` at
+ *    Step 7; until then it is null → amber "missing" chip.
  *
- * 3. **Crypto (BTC/ETH)** uses all four categories: on-chain 35,
- *    macro 25, technical 25, sentiment 15. PRD §10.2 verbatim.
+ * 3. **Crypto (BTC/ETH)** uses four categories: on-chain 35, macro 25,
+ *    technical 25, sentiment 15. PRD §10.2 verbatim. No valuation /
+ *    regional overlay at this asset class.
  *
  * 4. **`common`** (the dashboard hero "전체 시장" composite) mirrors
- *    US-equity weights. Rationale: the hero card represents a broad
- *    risk-on / risk-off read dominated by US macro and US tech
- *    leadership — the same driver mix that US equity uses. This is
- *    the decision the §4.2 anti-pattern warns against silently making
- *    for Global ETF; landing it HERE in code comments IS the
- *    documentation, identical in rigor to the Global ETF carve-out
- *    in §4.2 line 235.
+ *    US-equity weights including the 10-pt valuation anchor. Rationale:
+ *    the hero card represents a broad risk-on / risk-off read dominated
+ *    by US macro and US tech leadership — the same driver mix that US
+ *    equity uses. This is the decision the §4.2 anti-pattern warns
+ *    against silently making for Global ETF; landing it HERE in code
+ *    comments IS the documentation, identical in rigor to the Global
+ *    ETF carve-out in §4.2 line 235.
  *
  * Each asset type's weights need NOT sum to 100. `computeCompositeV2`
  * renormalizes across PRESENT categories so a null/missing category
- * (blueprint §4.5 tenet 1) doesn't distort the composite's dynamic
+ * (blueprint §2.2 tenet 1) doesn't distort the composite's dynamic
  * range. A category absent from this map is "not applicable" for the
  * asset (e.g. on-chain for US equity) — computeCompositeV2 skips it
  * without adding to `missingCategories`. Null score for an applicable
  * category, on the other hand, lands in `missingCategories` so the UI
- * can surface "N/4 categories active" transparency.
+ * can surface "N/6 categories active" transparency.
  */
 export const CATEGORY_WEIGHTS: Record<AssetType, PerAssetCategoryWeights> = {
-  us_equity: { macro: 45, technical: 35, sentiment: 20 },
-  kr_equity: { macro: 65, technical: 25, sentiment: 10 },
+  us_equity: { macro: 45, technical: 35, sentiment: 10, valuation: 10 },
+  kr_equity: {
+    macro: 45,
+    technical: 25,
+    regional_overlay: 20,
+    sentiment: 10,
+  },
   crypto: { macro: 25, technical: 25, onchain: 35, sentiment: 15 },
-  global_etf: { macro: 45, technical: 35, sentiment: 20 },
-  common: { macro: 45, technical: 35, sentiment: 20 },
+  global_etf: { macro: 45, technical: 35, sentiment: 10, valuation: 10 },
+  common: { macro: 45, technical: 35, sentiment: 10, valuation: 10 },
 };

@@ -18,6 +18,8 @@ const CATEGORY_ORDER: readonly CategoryName[] = [
   "technical",
   "onchain",
   "sentiment",
+  "valuation",
+  "regional_overlay",
 ];
 
 /**
@@ -34,7 +36,7 @@ const CATEGORY_ORDER: readonly CategoryName[] = [
  *
  * Design principles:
  *
- * 1. **Null-propagation with renormalization (blueprint §4.5 tenet 1).**
+ * 1. **Null-propagation with renormalization (blueprint §2.2 tenet 1).**
  *    A missing category (null score) is REMOVED from the weighted sum
  *    and the remaining weights are normalized to 1. This preserves the
  *    composite's dynamic range — at Step 6 cutover only `macro` is

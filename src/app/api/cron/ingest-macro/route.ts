@@ -175,19 +175,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         // series moved the score.
         const macroComposite = computeComposite(scoredIndicators, assetType);
 
-        // Wrap the macro-only result in the v2 composite. Other three
-        // categories are null at Step 6 — they come online via Steps
-        // 7-8 (technical / on-chain / sentiment cron endpoints). The
-        // null-propagation + renormalization in computeCompositeV2
-        // means the v2 composite equals the macro score exactly while
-        // those three are missing, then gradually shifts toward the
-        // §4.2 blend as each source lands.
+        // Wrap the macro-only result in the v2 composite.
+        //
+        // - `technical` / `onchain` / `sentiment` / `regional_overlay`
+        //   are null at Step 6 — they come online via Steps 7-8 (the
+        //   technical / on-chain / sentiment cron endpoints). Null-
+        //   propagation + renormalization in computeCompositeV2 means
+        //   the v2 composite equals the macro score exactly while
+        //   those four are missing, then gradually shifts toward the
+        //   §4.2 blend as each source lands.
+        //
+        // - `valuation` is pinned to neutral 50 for asset types that
+        //   carry a valuation weight (us_equity, global_etf, common).
+        //   Phase 3 replaces the pin with a real Shiller-P/E-class
+        //   module (blueprint §4.4 trade-off 7). Pinning (rather than
+        //   null) prevents the valuation weight from being silently
+        //   removed via renormalization; keeping it in the weighted
+        //   sum at a neutral score preserves the blueprint §4.1
+        //   capped-sentiment invariant (sentiment can drag the
+        //   composite by at most its prescribed 10 pts, not 20).
+        const pinValuation =
+          assetType === "us_equity" ||
+          assetType === "global_etf" ||
+          assetType === "common";
         const compositeV2 = computeCompositeV2(
           {
             macro: macroComposite.score0to100,
             technical: null,
             onchain: null,
             sentiment: null,
+            valuation: pinValuation ? 50 : null,
+            regional_overlay: null,
           },
           assetType,
         );

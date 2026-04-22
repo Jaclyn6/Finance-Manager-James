@@ -51,7 +51,20 @@ import { MODEL_VERSION } from "@/lib/score-engine/weights";
  *   so keyboard-only users get the cutover-date context too.
  */
 export async function ModelVersionBadge() {
-  const row = await getModelVersionRow(MODEL_VERSION);
+  // Defensive: getModelVersionRow throws on Supabase connection errors.
+  // Unhandled throws from async Server Components inside a Suspense
+  // boundary surface as render errors (→ 500 on the dashboard hero
+  // block). A transient DB hiccup should degrade this badge to the
+  // same graceful no-row fallback used when migration 0009 isn't
+  // seeded, not take down the whole page. We intentionally do NOT
+  // re-throw — the badge is a supporting affordance, not a data
+  // source the rest of the page depends on.
+  let row: Awaited<ReturnType<typeof getModelVersionRow>> = null;
+  try {
+    row = await getModelVersionRow(MODEL_VERSION);
+  } catch {
+    row = null;
+  }
 
   const versionLabel = `모델 ${MODEL_VERSION}`;
   const cutoverDate = row?.cutover_date ?? null;

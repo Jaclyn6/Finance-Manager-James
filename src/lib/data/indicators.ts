@@ -1,6 +1,5 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-import { MODEL_VERSION } from "@/lib/score-engine/weights";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -59,21 +58,26 @@ import { CACHE_TAGS } from "./tags";
  * and with `"2026-04-19"` gets two cache entries. Splitting them makes
  * the cadence difference explicit in the signature.
  *
- * ─ `model_version` filter ────────────────────────────────────────
+ * ─ `model_version` cross-version policy ─────────────────────────
  *
- * Every reader filters on `model_version = MODEL_VERSION`
- * (current). Blueprint §4.2 says bumping `MODEL_VERSION` "writes new
- * rows that coexist with old under a different version tag", i.e. old
- * and new can share the same (asset_type, snapshot_date). Without
- * this filter, the dashboard would non-deterministically mix versions
- * per asset card after a bump. Explicit filtering also means a
- * `MODEL_VERSION` bump immediately cuts off stale composites even if
- * the cache hasn't been invalidated yet.
+ * Readers DO NOT filter on `model_version`. Blueprint §4.2 plus plan
+ * §0.2 #9 (greenfield cutover) specify that v1 and v2 rows coexist
+ * in the table but never share a (asset_type, snapshot_date) tuple —
+ * v1 covers pre-cutover dates, v2 covers post-cutover. Returning
+ * every version lets the dashboard show historical v1 data at
+ * `/dashboard?date=2026-04-01` after the cutover to v2.0.0, which
+ * blueprint §4.4 Step 4 explicitly requires. The composite_snapshots
+ * unique index `(asset_type, snapshot_date, model_version)`
+ * guarantees no dupes within one date; callers that dedupe by
+ * (asset, date) need no version tiebreak under the greenfield
+ * policy.
  *
- * If Phase 3 ever wants to browse historical versions side-by-side
- * (blueprint §4.2 mentions backtest replay), add a parallel
- * `getCompositeSnapshotsForDateAndVersion(date, version)` reader
- * rather than loosening this filter.
+ * The UI surfaces which version produced each displayed row via the
+ * `ScoreTrendLine` cutover ReferenceLine (Step 6) and the header
+ * `ModelVersionBadge`. Phase 3 backtest replay against a pinned
+ * historical version should add a parallel version-scoped reader
+ * (`getCompositeSnapshotsForDateAndVersion`) rather than re-adding
+ * the hard filter here.
  */
 
 type CompositeSnapshot = Tables<"composite_snapshots">;
@@ -117,7 +121,14 @@ export async function getLatestCompositeSnapshots(): Promise<
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("*")
-    .eq("model_version", MODEL_VERSION)
+    // Intentionally NOT filtered on model_version — blueprint §4.4 Step 4
+    // + plan §0.2 #9 (greenfield cutover) require historical v1 rows to
+    // remain visible after MODEL_VERSION bumps. v1 and v2 rows don't
+    // overlap by date under the greenfield policy, so returning every
+    // version and then deduping by latest-per-asset_type produces the
+    // correct "most recent row per asset" regardless of which regime
+    // was live at that time. The UI staleness badge + model-version
+    // badge (Step 6 §4.4) surface the regime transparently.
     .order("snapshot_date", { ascending: false })
     .limit(LATEST_LOOKBACK_DAYS * ASSET_TYPE_COUNT);
 
@@ -159,8 +170,9 @@ export async function getCompositeSnapshotsForDate(
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("*")
-    .eq("snapshot_date", date)
-    .eq("model_version", MODEL_VERSION);
+    .eq("snapshot_date", date);
+    // No model_version filter — see getLatestCompositeSnapshots for
+    // rationale (greenfield v1↔v2 coexistence per plan §0.2 #9).
 
   if (error) {
     throw new Error(
@@ -222,7 +234,11 @@ export async function getCompositeSnapshotsForAssetRange(
     .from("composite_snapshots")
     .select("*")
     .eq("asset_type", assetType)
-    .eq("model_version", MODEL_VERSION)
+    // No model_version filter — rolling windows that span the v1→v2
+    // cutover MUST show both versions so the trend chart's
+    // ReferenceLine at the cutover date makes sense (blueprint §3.4).
+    // Without this, the 90-day window on day N post-cutover shows
+    // only N points instead of 90 and the chart looks broken.
     .gte("snapshot_date", startDate)
     .lte("snapshot_date", endDate)
     .order("snapshot_date", { ascending: true });
@@ -258,7 +274,10 @@ export async function getClosestEarlierSnapshotDate(
   const { data, error } = await supabase
     .from("composite_snapshots")
     .select("snapshot_date")
-    .eq("model_version", MODEL_VERSION)
+    // No model_version filter — the no-snapshot notice needs to offer a
+    // jump-link to the CLOSEST valid date regardless of regime; a user
+    // picking 2026-02-01 (before Phase 1's 2026-03-21 epoch) should get
+    // a link to 2026-03-21 (v1), not "no data ever".
     .lt("snapshot_date", date)
     .order("snapshot_date", { ascending: false })
     .limit(1);
