@@ -324,7 +324,7 @@ async function main() {
           current_band: band.label,
           delta,
           band_changed: bandChanged,
-          top_movers: topMovers as TablesInsert<"score_changelog">["top_movers"],
+          top_movers: topMovers as unknown as TablesInsert<"score_changelog">["top_movers"],
           model_version: MODEL_VERSION,
         });
       }
