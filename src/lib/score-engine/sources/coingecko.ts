@@ -61,6 +61,7 @@ export interface FetchCoinGeckoMarketChartOptions {
 const COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3";
 const FETCH_TIMEOUT_MS = 15_000;
 const DEFAULT_DAYS = 365;
+const COIN_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
 
 /**
  * Fetch one CoinGecko coin's daily price chart and return a parsed,
@@ -73,6 +74,20 @@ export async function fetchCoinGeckoMarketChart(
   options: FetchCoinGeckoMarketChartOptions = {},
 ): Promise<CoinGeckoFetchResult> {
   const days = options.days ?? DEFAULT_DAYS;
+
+  // Guard: `id` is interpolated into the URL path (not a searchParams
+  // value), so a bad string could path-traverse or inject extra query
+  // params. Our Phase 2 callers always pass one of the three
+  // blueprint §3.2 IDs (`bitcoin`, `ethereum`, `solana`), but this
+  // allow-list regex future-proofs against cron refactors that might
+  // accept external input. CoinGecko coin slugs are lowercase
+  // alphanumeric + hyphens.
+  if (!COIN_ID_PATTERN.test(id)) {
+    return makeErrorResult(
+      id,
+      `Invalid CoinGecko coin id (expected /^[a-z0-9-]{1,64}$/)`,
+    );
+  }
 
   const url = new URL(`${COINGECKO_BASE_URL}/coins/${id}/market_chart`);
   url.searchParams.set("vs_currency", "usd");

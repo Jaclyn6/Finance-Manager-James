@@ -15,11 +15,12 @@ import "server-only";
  *   - 429 (rate limit) → retry
  *   - 5xx (server error) → retry
  *   - 4xx other than 429 (client error, invalid request) → no retry
- *   - Network errors → no retry here; the per-attempt AbortController
- *     + `timeoutMs` handles hung connections, and the outer fetcher
- *     catches the rejection to return `fetch_status: "error"`. Wrapping
- *     network-error retry logic in here would double-handle the concern
- *     and mask real connectivity issues during cron runs.
+ *   - Network errors / per-attempt timeouts → retried up to `maxRetries`
+ *     with the same exponential delay as HTTP-level retries. On the
+ *     final attempt the error is re-thrown so the outer fetcher can
+ *     fold it into its standard `fetch_status: "error"` result. This
+ *     matches how 429/5xx are handled (both are transient-ish); a
+ *     single unlucky DNS blip shouldn't zero out a cron cycle.
  *   - JSON parse errors → not our concern; caller parses.
  *
  * Delay: exponential, starting at `initialDelayMs` and doubling each
@@ -88,10 +89,18 @@ export async function fetchWithBackOff(
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      // Honour the caller's signal if they passed one; otherwise use ours.
+      // Always pass the per-attempt controller's signal to fetch — a
+      // `init.signal ?? controller.signal` merge would silently bypass
+      // the timeout whenever a caller happens to set `signal` on init
+      // (our Phase 2 callers currently don't, but the merge is a
+      // latent foot-gun). If a future caller needs parent-cancel
+      // chaining, extend this helper to `addEventListener("abort", ...)`
+      // on `init.signal` and forward to `controller.abort()`.
+      const { signal: _callerSignalIgnored, ...initWithoutSignal } = init;
+      void _callerSignalIgnored;
       const response = await fetch(url, {
-        ...init,
-        signal: init.signal ?? controller.signal,
+        ...initWithoutSignal,
+        signal: controller.signal,
       });
       lastResponse = response;
       lastError = null;

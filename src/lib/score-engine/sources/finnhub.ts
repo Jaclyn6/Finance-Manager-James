@@ -6,6 +6,7 @@ import {
   type FinnhubSentimentResult,
   type FinnhubFetchStatus,
 } from "./finnhub-parse";
+import { redactSecretsFromErrorMessage } from "./_redact";
 
 /**
  * Finnhub news-sentiment fetcher for Phase 2 sentiment-layer ingest
@@ -88,12 +89,14 @@ export async function fetchFinnhubSentiment(
     const body = (await response.json()) as unknown;
     return parseFinnhubSentimentResponse(ticker, body);
   } catch (err) {
+    // Scrub `?token=<key>` from the error message in case undici
+    // embedded the request URL — see `_redact.ts` for rationale.
     const message =
       err instanceof Error && err.name === "AbortError"
         ? `Finnhub request timed out after ${FETCH_TIMEOUT_MS}ms`
         : err instanceof Error
-          ? err.message
-          : String(err);
+          ? redactSecretsFromErrorMessage(err.message)
+          : redactSecretsFromErrorMessage(String(err));
     return makeErrorResult(ticker, message);
   } finally {
     clearTimeout(timeoutId);

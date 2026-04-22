@@ -15,10 +15,13 @@
  *
  * alternative.me Crypto F&G quirks this parser handles:
  *
- * 1. The upstream returns newest-first. We reverse to chronological
- *    ascending to match the Phase 1 FRED convention and make
- *    `latest = observations[observations.length - 1]` the canonical
- *    selection.
+ * 1. The upstream returns newest-first. We sort the parsed rows by
+ *    date ascending (not `.reverse()`) to match the Phase 1 FRED
+ *    convention and make `latest = observations[observations.length - 1]`
+ *    the canonical selection. Sorting rather than reversing is
+ *    defensive against any future upstream re-ordering — a simple
+ *    reverse would only be correct if alternative.me always emits
+ *    strictly newest-first.
  * 2. `value` is a stringly-typed integer 0-100. We coerce and bounds-
  *    check; out-of-range values drop the row rather than poison the
  *    batch (mirrors the FRED "one bad row doesn't kill the parse"

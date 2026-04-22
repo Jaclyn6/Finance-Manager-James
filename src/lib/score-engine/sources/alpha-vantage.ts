@@ -7,6 +7,7 @@ import {
   type AlphaVantageFetchResult,
   type AlphaVantageFetchStatus,
 } from "./alpha-vantage-parse";
+import { redactSecretsFromErrorMessage } from "./_redact";
 
 /**
  * Alpha Vantage TIME_SERIES_DAILY fetcher for Phase 2 technical-layer
@@ -105,12 +106,14 @@ export async function fetchAlphaVantageDaily(
     const body = (await response.json()) as unknown;
     return parseAlphaVantageDailyResponse(ticker, body);
   } catch (err) {
+    // Scrub `?apikey=<key>` from the error message in case undici
+    // embedded the request URL — see `_redact.ts` for rationale.
     const message =
       err instanceof Error && err.name === "AbortError"
         ? `Alpha Vantage request timed out after ${FETCH_TIMEOUT_MS}ms`
         : err instanceof Error
-          ? err.message
-          : String(err);
+          ? redactSecretsFromErrorMessage(err.message)
+          : redactSecretsFromErrorMessage(String(err));
     return makeErrorResult(ticker, message);
   } finally {
     clearTimeout(timeoutId);
