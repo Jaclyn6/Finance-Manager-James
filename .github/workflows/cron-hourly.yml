@@ -1,0 +1,72 @@
+# Phase 2 hourly cron bundle — blueprint §3.3 + plan §0.2 #8.
+#
+# Vercel Hobby gives us exactly ONE cron slot per day, already used by
+# the macro cron. Every non-daily ingestion lives in GitHub Actions
+# scheduled workflows, which hit the production Next.js API with the
+# shared `CRON_SECRET` bearer.
+#
+# This workflow bundles the three unofficial / sentiment-ish sources
+# that refresh hourly:
+#   1. ingest-onchain  — Bitbo MVRV_Z + SOPR, CoinGlass ETF flow,
+#                         alternative.me crypto F&G   (Agent B)
+#   2. ingest-cnn-fg   — CNN Markets Data stock F&G                (Agent B)
+#   3. ingest-news     — Finnhub news sentiment                    (Agent C)
+#
+# continue-on-error: true on every step — blueprint §0.5 tenet 1
+# "partial success > no data". If Bitbo is flapping we still want
+# CNN F&G + news to ingest; each endpoint's own `ingest_runs` row
+# records per-source success/failure regardless of the curl exit.
+#
+# The job itself does not fail even if all three endpoints fail; the
+# audit trail in `ingest_runs` is the source of truth. A missing
+# `ingest_runs` row (no audit written) is what a postmortem flags, not
+# a red GHA badge.
+#
+# CRON_SECRET is synced into GitHub Actions secrets manually
+# (plan §0.2 #8 — no OIDC). PRODUCTION_URL points at the current
+# Vercel production deployment.
+
+name: Hourly cron (onchain / cnn-fg / news)
+
+on:
+  schedule:
+    # Every hour, on the hour, UTC. GHA scheduled workflows have a
+    # documented ~10-minute drift under load, which is fine — our
+    # staleness threshold is 2h per blueprint §3.1.
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: ingest-onchain
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-onchain"
+
+      - name: ingest-cnn-fg
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-cnn-fg"
+
+      - name: ingest-news
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-news"

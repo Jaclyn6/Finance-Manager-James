@@ -27,24 +27,38 @@ import {
   INDICATOR_CONFIG,
   INDICATOR_KEYS,
   MODEL_VERSION,
+  PHASE2_ACTIVE_FRED_SIGNAL_KEYS,
+  PHASE2_FRED_REGIONAL_OVERLAY,
+  PHASE2_FRED_REGIONAL_OVERLAY_KEYS,
+  PHASE2_FRED_SIGNAL_INPUTS,
 } from "@/lib/score-engine/weights";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { scoreToBand } from "@/lib/utils/score-band";
 import { Constants, type Json, type TablesInsert } from "@/types/database";
 
 /**
- * Ingest cron — blueprint v2.2 §9 Step 9.
+ * Ingest cron — blueprint v2.2 §9 Step 9 (Phase 1) + Phase 2 §9 Step 7 extension.
  *
  * Pipeline (from blueprint §3):
  *   1. Authenticate `Authorization: Bearer ${CRON_SECRET}`
- *   2. Fetch all 7 FRED series in parallel
- *   3. Normalize (Z-Score over 5y -> clamp 0-100)
- *   4. Write indicator_readings (one row per series -- success OR error)
+ *   2. Fetch all 7 INDICATOR_CONFIG FRED series in parallel (macro
+ *      composite inputs).
+ *   3. Normalize (Z-Score over 5y -> clamp 0-100).
+ *   3.5a. (Phase 2) Fetch PHASE2_ACTIVE_FRED_SIGNAL_KEYS (ICSA, WDTGAL)
+ *         — raw-only, no 0-100 mapping. Stored in indicator_readings for
+ *         the Step 7.5 signal engine to consume.
+ *   3.5b. (Phase 2) Fetch PHASE2_FRED_REGIONAL_OVERLAY_KEYS (DTWEXBGS,
+ *         DEXKOUS), z-score each, weighted-average to produce the
+ *         kr_equity regional_overlay category score.
+ *   4. Write indicator_readings (one row per series -- success OR error).
  *   5. For each asset_type in asset_type_enum:
- *      a. computeComposite -> write composite_snapshots
- *      b. Look up prior snapshot -> build changelog delta -> upsert score_changelog
- *   6. Write ingest_runs audit row
- *   7. Invalidate macro-snapshot + changelog cache tags
+ *      a. computeComposite (macro) -> feeds category score.
+ *      b. computeCompositeV2 (with regional_overlay for kr_equity only)
+ *         -> write composite_snapshots.
+ *      c. Look up prior snapshot -> build changelog delta -> upsert
+ *         score_changelog.
+ *   6. Write ingest_runs audit row.
+ *   7. Invalidate macro-snapshot + changelog cache tags.
  *
  * Failure model (blueprint §3 + PRD §8.1 "partial data > no data"):
  *   - One indicator's HTTP / parse error -> that indicator's reading row
@@ -151,6 +165,155 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
+    // ---- 3.5a. Fetch + persist PHASE 2 FRED signal-only inputs ----
+    //
+    // ICSA + WDTGAL feed the Signal Alignment engine at Step 7.5, not
+    // the composite. We fetch them here so they land in
+    // `indicator_readings` alongside the INDICATOR_CONFIG series (one
+    // ingest run = one consistent slice of FRED state). They carry:
+    //   - `value_raw`: the raw observation (signals compute thresholds
+    //     directly on this — no 0-100 mapping).
+    //   - `score_0_100`: NULL (blueprint §4.5 tenet 1 — a category
+    //     that isn't a composite input must not synthesize a score).
+    //   - `fetch_status`: 'success' / 'error' / 'partial' as usual, so
+    //     Step 7.5 can skip any signal whose input row is stale.
+    //
+    // Fetch failures here DO NOT count toward successCount / failCount
+    // — those track composite-input indicators only, because the
+    // composite-v2 pipeline's success story is about the 7-FRED macro
+    // composite. Signal-input fetch errors are logged to their
+    // respective rows; the signal engine at Step 7.5 handles the
+    // null-propagation story.
+    const signalFetches = await Promise.all(
+      PHASE2_ACTIVE_FRED_SIGNAL_KEYS.map((key) =>
+        fetchFredSeries(key, {
+          windowYears: PHASE2_FRED_SIGNAL_INPUTS[key].windowYears,
+        }).then((result) => ({ key, result })),
+      ),
+    );
+
+    for (const { key, result } of signalFetches) {
+      const config = PHASE2_FRED_SIGNAL_INPUTS[key];
+      const rawValue = result.latest?.value ?? null;
+      readings.push({
+        indicator_key: key,
+        model_version: MODEL_VERSION,
+        observed_at: result.latest?.date ?? today,
+        source_name: config.sourceName,
+        source_url: config.sourceUrl,
+        frequency: config.frequency,
+        window_used: `${config.windowYears}y`,
+        fetch_status:
+          result.fetch_status === "success" && rawValue !== null
+            ? "success"
+            : result.fetch_status === "error"
+              ? "error"
+              : "partial",
+        value_raw: rawValue,
+        value_normalized: null,
+        // Signal-only inputs deliberately leave score_0_100 null. The
+        // Step 7.5 signal engine computes its thresholds on the raw
+        // value; synthesizing a 0-100 score here would invite someone
+        // to fold it into the composite (blueprint §4.5 violation).
+        score_0_100: null,
+        raw_payload:
+          result.fetch_status !== "success"
+            ? ({ error: result.error ?? "unknown" } as Json)
+            : null,
+      });
+    }
+
+    // ---- 3.5b. Fetch + score PHASE 2 regional_overlay inputs (KR) ----
+    //
+    // DTWEXBGS (Broad dollar index) + DEXKOUS (USD/KRW) feed the
+    // `regional_overlay` composite category for kr_equity only (plan
+    // §0.2 #3, blueprint §4.2 row 2). Both series:
+    //   - fetched + z-scored over 5y (same normalization as the 7
+    //     INDICATOR_CONFIG series);
+    //   - individually scored to 0-100 via zScoreTo0100 with
+    //     inverted=false (higher = worse for KR per plan §0.2 #3);
+    //   - averaged with the 0.5 / 0.5 weights from
+    //     PHASE2_FRED_REGIONAL_OVERLAY to produce a single category
+    //     score handed to computeCompositeV2 below.
+    //
+    // Individual readings are still written to `indicator_readings`
+    // with their own score_0_100 so the UI's category drill-down can
+    // explain WHY regional_overlay moved (same pattern as the 7 macro
+    // FRED series informing the macro category via macroComposite.contributing).
+    const overlayFetches = await Promise.all(
+      PHASE2_FRED_REGIONAL_OVERLAY_KEYS.map((key) =>
+        fetchFredSeries(key, {
+          windowYears: PHASE2_FRED_REGIONAL_OVERLAY[key].windowYears,
+        }).then((result) => ({ key, result })),
+      ),
+    );
+
+    // Per-series 0-100 scores. null-entries are preserved so the
+    // weighted-average step can skip them and renormalize over
+    // whichever series succeeded.
+    const overlayScores: Array<{ key: string; score: number; weight: number }> =
+      [];
+
+    for (const { key, result } of overlayFetches) {
+      const config = PHASE2_FRED_REGIONAL_OVERLAY[key];
+
+      if (result.fetch_status !== "success" || !result.latest) {
+        readings.push({
+          indicator_key: key,
+          model_version: MODEL_VERSION,
+          observed_at: result.latest?.date ?? today,
+          source_name: config.sourceName,
+          source_url: config.sourceUrl,
+          frequency: config.frequency,
+          window_used: `${config.windowYears}y`,
+          fetch_status: result.fetch_status === "error" ? "error" : "partial",
+          value_raw: null,
+          value_normalized: null,
+          score_0_100: null,
+          raw_payload: { error: result.error ?? "unknown" } as Json,
+        });
+        continue;
+      }
+
+      const rawValue = result.latest.value as number;
+      const zScore = computeZScore(result.window, rawValue);
+      const score = zScoreTo0100(zScore, config.inverted);
+
+      readings.push({
+        indicator_key: key,
+        model_version: MODEL_VERSION,
+        observed_at: result.latest.date,
+        source_name: config.sourceName,
+        source_url: config.sourceUrl,
+        frequency: config.frequency,
+        window_used: `${config.windowYears}y`,
+        fetch_status: "success",
+        value_raw: rawValue,
+        value_normalized: Number.isFinite(zScore) ? zScore : null,
+        score_0_100: score,
+      });
+
+      overlayScores.push({ key, score, weight: config.weight });
+    }
+
+    // Weighted average across present series. If both series failed,
+    // regional_overlay stays null and computeCompositeV2 will add it
+    // to missingCategories (loud degradation, blueprint §4.5 tenet 1).
+    // If one succeeded, the single score becomes the category score
+    // (renormalizing 0.5 → 1.0). This mirrors computeCompositeV2's
+    // own null-propagation policy one layer down.
+    const overlayWeightSum = overlayScores.reduce(
+      (acc, s) => acc + s.weight,
+      0,
+    );
+    const krRegionalOverlayScore: number | null =
+      overlayWeightSum > 0
+        ? overlayScores.reduce(
+            (acc, s) => acc + (s.score * s.weight) / overlayWeightSum,
+            0,
+          )
+        : null;
+
     // ---- 4. Write readings (single round-trip, upsert on dedup idx) ----
     await writeIndicatorReadings(readings);
 
@@ -198,6 +361,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           assetType === "us_equity" ||
           assetType === "global_etf" ||
           assetType === "common";
+        // `regional_overlay` only applies to kr_equity (blueprint §4.2
+        // — other asset types have no weight for it, so passing non-
+        // null here would be silently ignored by computeCompositeV2's
+        // not-applicable guard). For kr_equity, pass the averaged
+        // DTWEXBGS+DEXKOUS score computed at §3.5b; a null there
+        // lands in `missingCategories` and triggers the amber chip.
         const compositeV2 = computeCompositeV2(
           {
             macro: macroComposite.score0to100,
@@ -205,7 +374,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             onchain: null,
             sentiment: null,
             valuation: pinValuation ? 50 : null,
-            regional_overlay: null,
+            regional_overlay:
+              assetType === "kr_equity" ? krRegionalOverlayScore : null,
           },
           assetType,
         );

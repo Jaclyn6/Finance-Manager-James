@@ -360,4 +360,32 @@ describe("computeCompositeV2", () => {
     // composite = (35*50 + 10*50 + 10*50)/55 = 50
     expect(result.score0to100).toBeCloseTo(50, 5);
   });
+
+  // -------------------------------------------------------------------
+  // kr_equity populated regional_overlay (Phase C Step 7 wiring)
+  // -------------------------------------------------------------------
+
+  it("kr_equity — macro + regional_overlay populated (Step 7 ingest-macro path)", () => {
+    // Simulates the state of the cron between Step 7 (this commit) and
+    // Step 8: macro category fully computed from 7 FRED series, and
+    // regional_overlay averaged from DTWEXBGS + DEXKOUS scores.
+    // Technical + sentiment remain null until their ingest endpoints
+    // land at Step 7 (hourly workflow, Agents A/B).
+    //
+    // weights: macro 45, regional_overlay 20 → subset sum 65
+    //          (technical 25 + sentiment 10 land in missingCategories)
+    // scores : macro 60,  regional_overlay 40
+    // = (45*60 + 20*40) / 65 = (2700 + 800) / 65 = 3500 / 65
+    const result = computeCompositeV2(
+      scores({ macro: 60, regional_overlay: 40 }),
+      "kr_equity",
+    );
+    expect(result.score0to100).toBeCloseTo(3500 / 65, 5);
+    expect(result.contributing.macro?.weight).toBeCloseTo(45 / 65, 5);
+    expect(result.contributing.regional_overlay?.weight).toBeCloseTo(
+      20 / 65,
+      5,
+    );
+    expect(result.missingCategories.sort()).toEqual(["sentiment", "technical"]);
+  });
 });

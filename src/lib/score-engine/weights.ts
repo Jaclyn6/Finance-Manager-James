@@ -229,6 +229,75 @@ export const PHASE2_ACTIVE_FRED_SIGNAL_KEYS: readonly string[] = Object.entries(
   .map(([key]) => key);
 
 /**
+ * Phase 2 FRED series that feed the `regional_overlay` composite
+ * category for KR equity (plan §0.2 #3, blueprint §4.2 row 2, PRD
+ * §10.3).
+ *
+ * Design split from {@link PHASE2_FRED_SIGNAL_INPUTS}:
+ * - SIGNAL inputs (ICSA, WDTGAL) feed the Signal Alignment engine's
+ *   boolean thresholds — raw values in, boolean signals out. No
+ *   `score_0_100` normalization at ingest time.
+ * - REGIONAL_OVERLAY inputs (DTWEXBGS, DEXKOUS) feed the composite
+ *   score pipeline for KR equity — raw values in, 0-100 score out,
+ *   averaged across the two series to produce a single
+ *   `regional_overlay` category score at write time (cron §7).
+ *
+ * Weights sum to 1.0 across the two series so the cron can compute
+ * the category score as a straight weighted average without an outer
+ * normalization pass. Blueprint §10.3 assigns 10 + 10 out of KR's 20-
+ * point regional overlay budget — expressed here as fractions of the
+ * within-category budget (0.5 + 0.5 = 1.0) so the composite-v2 engine
+ * can handle the "20 of 100 pts" allocation at its own layer via
+ * {@link CATEGORY_WEIGHTS}.
+ *
+ * `inverted: false` for both — higher dollar strength + weaker KRW =
+ * WORSE for KR equity (foreign selling pressure + FX-debt burden per
+ * plan §0.2 #3 bullet 3). The standard Z-score-to-0-100 mapping with
+ * `inverted=false` flips "high raw value" to "low score", which
+ * matches the intuition.
+ */
+export const PHASE2_FRED_REGIONAL_OVERLAY: Record<
+  string,
+  {
+    descriptionKo: string;
+    sourceName: "FRED";
+    sourceUrl: string;
+    frequency: "daily";
+    windowYears: number;
+    inverted: boolean;
+    /** Fraction of the regional_overlay category weight. Sum = 1.0. */
+    weight: number;
+  }
+> = {
+  DTWEXBGS: {
+    descriptionKo: "Broad 달러 지수 — 외국인 원화 자산 매도 압력",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/DTWEXBGS",
+    frequency: "daily",
+    windowYears: 5,
+    inverted: false,
+    weight: 0.5,
+  },
+  DEXKOUS: {
+    descriptionKo: "USD/KRW 환율 — 외국인 자금 이탈 + 외화부채 부담",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/DEXKOUS",
+    frequency: "daily",
+    windowYears: 5,
+    inverted: false,
+    weight: 0.5,
+  },
+};
+
+/**
+ * Keys in {@link PHASE2_FRED_REGIONAL_OVERLAY}, ordered canonically.
+ * Matches the pattern set by {@link INDICATOR_KEYS} so the cron can
+ * iterate in a stable sequence.
+ */
+export const PHASE2_FRED_REGIONAL_OVERLAY_KEYS: readonly string[] =
+  Object.keys(PHASE2_FRED_REGIONAL_OVERLAY);
+
+/**
  * Per-asset category weights per blueprint §4.2 — the authoritative
  * input to `computeCompositeV2`. PRD v3.4 initial values; backtest-
  * driven re-tuning is a Phase 3 task per PRD §10 line 240.

@@ -1,0 +1,76 @@
+# Phase 2 Step 7 — Daily Technical & Prices cron.
+#
+# Triggers the Vercel-hosted `/api/cron/ingest-technical` endpoint,
+# which fetches Alpha Vantage daily bars for 19 tickers (blueprint §3.2)
+# and writes to BOTH `technical_readings` and `price_readings`
+# (shared-fetch design — see route.ts docstring). Then triggers
+# `/api/cron/ingest-prices`, which handles the 3 CoinGecko crypto IDs
+# (CoinGecko quota is independent of Alpha Vantage, so the two routes
+# don't share a budget).
+#
+# Schedule: `0 22 * * *` UTC = 1 hour after US market close (21:00 UTC)
+# so Alpha Vantage's daily bars are settled before we pull. Blueprint
+# §3.3 row for the daily workflow mandates this window.
+#
+# Secrets required on the GitHub repo (Settings → Secrets → Actions):
+#   - CRON_SECRET:    same value as the Vercel env var. Sync manually
+#                     (plan §0.2 #8 — no OIDC federation at Phase 2).
+#   - PRODUCTION_URL: base URL of the Vercel production deployment.
+#                     Expected value today:
+#                       https://finance-manager-james.vercel.app
+#                     Documented here so a new maintainer sees the
+#                     source-of-truth without digging through handoff.md.
+#                     ADD THIS SECRET BEFORE ENABLING THE WORKFLOW —
+#                     otherwise the curl invocation resolves to
+#                     `https:///api/cron/...` and fails loudly (good).
+#
+# curl flags rationale:
+#   -s    : silent (no progress bar in Actions log)
+#   -S    : but do show errors
+#   -f    : fail the step on non-2xx HTTP (surfaces a Vercel 500 or a
+#           401 misauth to the Actions run without us grep'ing the body)
+#   -H    : Bearer token header — verified server-side by
+#           `verifyCronSecret` in `src/lib/auth/cron-secret.ts`
+
+name: Technical & Prices Cron (daily)
+
+on:
+  schedule:
+    # 22:00 UTC = 07:00 KST next day. US market closed ~1h earlier.
+    - cron: "0 22 * * *"
+  # Manual-dispatch button in the Actions UI for Step 7 acceptance
+  # testing (blueprint §9 Step 7 acceptance: "A single GHA workflow
+  # manual-dispatch from the Actions UI succeeds end-to-end on a
+  # preview deployment").
+  workflow_dispatch:
+
+# Make concurrency explicit: never overlap two runs of this workflow,
+# and cancel any in-flight run when a newer one starts. A race would
+# have both runs hitting Alpha Vantage's 5/min ceiling simultaneously
+# and tripping the rate-limit payload detector.
+concurrency:
+  group: cron-technical
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Route's own maxDuration is 300s; add headroom for curl connect +
+    # the CoinGecko leg. 10 minutes is plenty and bounds a hung request.
+    timeout-minutes: 10
+    steps:
+      - name: Trigger /api/cron/ingest-technical
+        run: |
+          curl -sSf \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.PRODUCTION_URL }}/api/cron/ingest-technical"
+
+      # Prices cron runs right after technical. CoinGecko budget is
+      # independent of Alpha Vantage so there's no spacing concern;
+      # sequential-not-parallel keeps the Supabase write graph simple
+      # (one writer at a time against `price_readings`).
+      - name: Trigger /api/cron/ingest-prices
+        run: |
+          curl -sSf \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.PRODUCTION_URL }}/api/cron/ingest-prices"
