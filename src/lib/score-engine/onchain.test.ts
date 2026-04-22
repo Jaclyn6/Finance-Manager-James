@@ -221,6 +221,44 @@ describe("etfFlowToScore", () => {
     expect(score as number).toBeLessThan(50);
   });
 
+  it("returns null when currentNetFlow is non-finite (blueprint §4.5 tenet 1)", () => {
+    // NaN / Infinity inputs must surface as null ("unknown" state),
+    // never as a misleading neutral 50. Otherwise a missing feed
+    // would look indistinguishable from a neutral reading on the UI.
+    const history = Array.from({ length: 30 }, (_, i) => 1_000_000 + i * 10_000);
+    expect(etfFlowToScore(Number.NaN, history)).toBeNull();
+    expect(etfFlowToScore(Number.POSITIVE_INFINITY, history)).toBeNull();
+    expect(etfFlowToScore(Number.NEGATIVE_INFINITY, history)).toBeNull();
+  });
+
+  it("returns null when the in-window history contains any non-finite value", () => {
+    // A NaN in the rolling window would propagate silently through
+    // computeZScore (mean/stddev become NaN), collapsing to 50 via
+    // zScoreTo0100. Guard at the parser layer: surface null so the
+    // caller treats it as unknown, not neutral.
+    const good = Array.from({ length: 30 }, (_, i) => 1_000 + i);
+    const withNaN = [...good, Number.NaN];
+    expect(etfFlowToScore(1_500, withNaN)).toBeNull();
+    const withInf = [...good, Number.POSITIVE_INFINITY];
+    expect(etfFlowToScore(1_500, withInf)).toBeNull();
+  });
+
+  it("ignores non-finite values that fall OUTSIDE the 90-day window", () => {
+    // The guard only fires for non-finite entries in the active
+    // window. Old NaNs that would be sliced off are irrelevant.
+    const ancientBadData = Array.from({ length: 10 }, () => Number.NaN);
+    const recent = Array.from(
+      { length: ETF_FLOW_SCORE_WINDOW },
+      (_, i) => 1_000 + i,
+    );
+    const history = [...ancientBadData, ...recent];
+    // Current = mean of recent window → z = 0 → score = 50.
+    const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const score = etfFlowToScore(mean, history);
+    expect(score).not.toBeNull();
+    expect(score as number).toBeCloseTo(50, 5);
+  });
+
   it(
     "slices history internally to the last ETF_FLOW_SCORE_WINDOW entries " +
       "(blueprint §4.3: 90-day rolling)",

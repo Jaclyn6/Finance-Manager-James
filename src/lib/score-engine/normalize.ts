@@ -66,13 +66,34 @@ export function zScoreTo0100(z: number, inverted = false): number {
 }
 
 /**
- * Clamp `value` into `[min, max]`. Exported so the technical-indicator
- * engine (`technical.ts`) can reuse the same bound helper the Z-score
- * mapper already depends on — keeps a single definition of "bounded
- * linear interpolation" across the score engine.
+ * Clamp `value` into `[min, max]`. Exported so the technical- and
+ * on-chain-indicator engines (`technical.ts`, `onchain.ts`) can reuse
+ * the same bound helper the Z-score mapper already depends on — keeps
+ * a single definition of "bounded linear interpolation" across the
+ * score engine.
  */
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+/**
+ * Linear interpolation between `a` and `b` parameterized by `t`.
+ *
+ *   lerp(a, b, 0) === a
+ *   lerp(a, b, 1) === b
+ *   lerp(a, b, t) === a + (b - a) * t
+ *
+ * Does NOT clamp `t` to [0, 1]; callers that want bounded output
+ * should wrap with {@link clamp}. This lets piecewise-linear score
+ * transforms extrapolate explicitly rather than hide a silent bound.
+ *
+ * Exported for use across the score engine — Step 3 (`technical.ts`)
+ * and Step 4 (`onchain.ts`) both needed the same 1-line helper;
+ * pulling it into normalize.ts removes the two private copies that
+ * would otherwise drift if one call site's formula ever changed.
+ */
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }

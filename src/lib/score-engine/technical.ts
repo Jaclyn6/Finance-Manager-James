@@ -40,7 +40,7 @@
  * upstream code render a "waiting for data" state instead of crashing).
  */
 
-import { clamp, computeZScore, zScoreTo0100 } from "./normalize";
+import { clamp, computeZScore, lerp, zScoreTo0100 } from "./normalize";
 
 // ---------------------------------------------------------------------------
 // Building-block helpers
@@ -494,10 +494,3 @@ export function isDislocated(
   return disparityValue <= threshold;
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}

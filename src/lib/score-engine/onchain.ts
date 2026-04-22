@@ -57,7 +57,7 @@
  * `any`. Matches the Phase 2 standard set by `technical.ts`.
  */
 
-import { clamp, computeZScore, zScoreTo0100 } from "./normalize";
+import { clamp, computeZScore, lerp, zScoreTo0100 } from "./normalize";
 
 // ---------------------------------------------------------------------------
 // MVRV Z-Score
@@ -253,16 +253,19 @@ export function etfFlowToScore(
   currentNetFlow: number,
   history: number[],
 ): number | null {
+  // Blueprint §4.5 tenet 1: missing data MUST surface as null (amber
+  // "unknown" state), never as a misleading neutral 50. Guard NaN /
+  // Infinity on both current and history — computeZScore would
+  // otherwise propagate NaN through mean/stddev and zScoreTo0100
+  // would collapse it to 50, silently pretending we have a valid
+  // reading when we don't.
+  if (!Number.isFinite(currentNetFlow)) return null;
   const window = history.slice(-ETF_FLOW_SCORE_WINDOW);
   if (window.length < 2) return null;
+  for (const v of window) {
+    if (!Number.isFinite(v)) return null;
+  }
   const z = computeZScore(window, currentNetFlow);
   return zScoreTo0100(z, true);
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
