@@ -147,3 +147,79 @@ export const INDICATOR_CONFIG: Record<string, IndicatorConfig> = {
  * run logs are diff-friendly).
  */
 export const INDICATOR_KEYS = Object.keys(INDICATOR_CONFIG);
+
+/**
+ * Phase 2 additional FRED series used ONLY as signal-engine inputs
+ * (blueprint §4.5), not as composite-score inputs.
+ *
+ * These are kept separate from {@link INDICATOR_CONFIG} because the
+ * Phase 1 `IndicatorConfig.weights` shape is composite-focused —
+ * every entry there contributes to the per-asset composite score.
+ * ICSA and WDTGAL feed the Signal Alignment engine (PRD §10.4) as
+ * boolean-threshold inputs; folding them into INDICATOR_CONFIG with
+ * zero weights would pollute the composite normalization logic.
+ *
+ * The `INDICATOR_CONFIG` restructure (4-category model per §4.2)
+ * lands at Phase C Step 6. If Step 6 decides these FRED series
+ * should ALSO feed the macro composite, they can be migrated then;
+ * for Step 2 they are signal-only.
+ *
+ * WTREGEN is registered as a documented fallback for WDTGAL per
+ * blueprint §3.1 + §4.5 ("WDTGAL daily primary; WTREGEN weekly is
+ * documented fallback if WDTGAL becomes unavailable"). The cron
+ * at Step 7 fetches WDTGAL; if it ever starts returning all-null
+ * observations for multiple consecutive days, the fallback can be
+ * activated by changing `active: false` → `true` here and updating
+ * the signal engine input mapping.
+ */
+export const PHASE2_FRED_SIGNAL_INPUTS: Record<
+  string,
+  {
+    descriptionKo: string;
+    sourceName: "FRED";
+    sourceUrl: string;
+    frequency: "weekly" | "daily";
+    windowYears: number;
+    active: boolean;
+    notes?: string;
+  }
+> = {
+  ICSA: {
+    descriptionKo:
+      "주간 실업수당 청구건수 — ECONOMY_INTACT 시그널 입력 (블루프린트 §4.5)",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/ICSA",
+    frequency: "weekly",
+    windowYears: 2,
+    active: true,
+    notes: "ECONOMY_INTACT = ICSA < 300000 && SAHMCURRENT < 0.5",
+  },
+  WDTGAL: {
+    descriptionKo:
+      "재무부 일반계정(TGA) 일일 잔액 — LIQUIDITY_EASING 시그널 입력 primary (블루프린트 §4.5)",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/WDTGAL",
+    frequency: "daily",
+    windowYears: 1,
+    active: true,
+    notes:
+      "LIQUIDITY_EASING = TGA_today < TGA_20d_MA; 20-day SMA needs ≥ 20 daily observations.",
+  },
+  WTREGEN: {
+    descriptionKo:
+      "재무부 일반계정(TGA) 주간 잔액 — WDTGAL이 중단될 시 fallback (현재 비활성)",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/WTREGEN",
+    frequency: "weekly",
+    windowYears: 1,
+    active: false,
+    notes:
+      "Activation procedure: flip active:false→true here + update signal engine LIQUIDITY_EASING input source + bump SIGNAL_RULES_VERSION per blueprint §2.3.",
+  },
+};
+
+export const PHASE2_ACTIVE_FRED_SIGNAL_KEYS: readonly string[] = Object.entries(
+  PHASE2_FRED_SIGNAL_INPUTS,
+)
+  .filter(([, cfg]) => cfg.active)
+  .map(([key]) => key);
