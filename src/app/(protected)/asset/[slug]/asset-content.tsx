@@ -11,6 +11,7 @@ import {
   getCompositeSnapshotsForDate,
   getLatestCompositeSnapshots,
 } from "@/lib/data/indicators";
+import { getCurrentModelCutoverDate } from "@/lib/data/model-version";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { slugToAssetType } from "@/lib/utils/asset-slug";
 import { sanitizeDateParam, todayIsoUtc } from "@/lib/utils/date";
@@ -58,8 +59,13 @@ export async function AssetContent({
 
   // Three cached reads in parallel. Each has its own cache key so
   // same-date reloads are hits on all three. Trend window is keyed
-  // on (assetType, anchorDate, TREND_WINDOW_DAYS).
-  const [snapshots, trendSeries] = await Promise.all([
+  // on (assetType, anchorDate, TREND_WINDOW_DAYS). The cutover-date
+  // reader is tagged `modelVersion` with daily cache-life, so it
+  // joins the parallel batch cheaply and lets us pass the date as a
+  // plain string prop to the client Recharts wrapper (which must
+  // not touch Supabase itself — that would ship the admin client to
+  // the browser).
+  const [snapshots, trendSeries, cutoverDate] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
       : getCompositeSnapshotsForDate(selectedDate),
@@ -68,6 +74,7 @@ export async function AssetContent({
       anchorDate,
       TREND_WINDOW_DAYS,
     ),
+    getCurrentModelCutoverDate(),
   ]);
 
   const snapshot = snapshots.find((s) => s.asset_type === assetType) ?? null;
@@ -131,6 +138,7 @@ export async function AssetContent({
           score_0_100: s.score_0_100,
         }))}
         rangeDays={TREND_WINDOW_DAYS}
+        cutoverDate={cutoverDate}
       />
 
       <ContributingIndicators

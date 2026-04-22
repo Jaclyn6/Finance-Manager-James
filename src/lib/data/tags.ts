@@ -27,6 +27,18 @@ export const CACHE_TAGS = {
   macroSnapshot: "macro-snapshot",
   /** All score_changelog reads. */
   changelog: "changelog",
+  /**
+   * All `model_version_history` reads (blueprint §4.4).
+   *
+   * Cutover rows are INSERT-only and extremely rare (two rows today —
+   * v1.0.0 and v2.0.0). No cron path invalidates this tag; the
+   * `cacheLife('days')` boundary is the only refresh trigger. Listed
+   * in the registry anyway so a future manual SQL INSERT of a v3.0.0
+   * cutover row can be paired with a one-line
+   * `revalidateTag(CACHE_TAGS.modelVersion, { expire: 0 })` instead
+   * of waiting up to 24h for the cache to roll.
+   */
+  modelVersion: "model-version",
 } as const;
 
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];

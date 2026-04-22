@@ -13,10 +13,16 @@ import {
   writeScoreChangelog,
 } from "@/lib/data/snapshot";
 import { computeComposite } from "@/lib/score-engine/composite";
+import { computeCompositeV2 } from "@/lib/score-engine/composite-v2";
 import { fetchFredSeries } from "@/lib/score-engine/indicators/fred";
 import { computeZScore, zScoreTo0100 } from "@/lib/score-engine/normalize";
 import { computeTopMovers } from "@/lib/score-engine/top-movers";
-import type { IndicatorScore } from "@/lib/score-engine/types";
+import type {
+  CategoryContribution,
+  CategoryName,
+  CompositeResult,
+  IndicatorScore,
+} from "@/lib/score-engine/types";
 import {
   INDICATOR_CONFIG,
   INDICATOR_KEYS,
@@ -162,16 +168,54 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const supabase = getSupabaseAdminClient();
 
       for (const assetType of assetTypes) {
-        const composite = computeComposite(scoredIndicators, assetType);
-        const band = scoreToBand(composite.score0to100);
+        // Phase 1 flat composite: weighted sum of 7 FRED indicators.
+        // At v2 this result IS the "macro category score". The
+        // indicator-level `contributing` map is preserved inside the
+        // v2 nested shape so the dashboard can still show which FRED
+        // series moved the score.
+        const macroComposite = computeComposite(scoredIndicators, assetType);
+
+        // Wrap the macro-only result in the v2 composite. Other three
+        // categories are null at Step 6 — they come online via Steps
+        // 7-8 (technical / on-chain / sentiment cron endpoints). The
+        // null-propagation + renormalization in computeCompositeV2
+        // means the v2 composite equals the macro score exactly while
+        // those three are missing, then gradually shifts toward the
+        // §4.2 blend as each source lands.
+        const compositeV2 = computeCompositeV2(
+          {
+            macro: macroComposite.score0to100,
+            technical: null,
+            onchain: null,
+            sentiment: null,
+          },
+          assetType,
+        );
+
+        // Nest the Phase 1 indicator-level breakdown under macro so
+        // the JSONB preserves drill-down. Shape per blueprint §4.4:
+        //   { macro: { score, weight, contribution, indicators: {...} } }
+        // v1.0.0 rows in the same column are FLAT; model_version
+        // discriminates — UI reader (Agent B + Step 8) branches on it.
+        const contributingForDb: Partial<
+          Record<CategoryName, CategoryContribution>
+        > = { ...compositeV2.contributing };
+        if (contributingForDb.macro) {
+          contributingForDb.macro = {
+            ...contributingForDb.macro,
+            indicators: macroComposite.contributing,
+          };
+        }
+
+        const band = scoreToBand(compositeV2.score0to100);
 
         await writeCompositeSnapshot({
           asset_type: assetType,
           snapshot_date: today,
-          score_0_100: composite.score0to100,
+          score_0_100: compositeV2.score0to100,
           band: band.label,
           model_version: MODEL_VERSION,
-          contributing_indicators: composite.contributing as unknown as Json,
+          contributing_indicators: contributingForDb as unknown as Json,
           fetch_status: compositeStatus,
         });
         snapshotsWritten++;
@@ -206,22 +250,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           continue;
         }
 
+        // Top-movers operate at the INDICATOR level (FRED series), not
+        // the category level — a user watching "score moved +3 today"
+        // wants to know which FRED series drove it, not "macro
+        // category moved". Unpack both sides' macro.indicators blob
+        // before diffing.
+        //
+        // Prior row's contributing_indicators is v2 nested (we just
+        // filtered priorRows on MODEL_VERSION === 'v2.0.0'), so the
+        // macro indicator breakdown lives under `.macro.indicators`.
+        // Defensive extractor tolerates malformed JSONB.
+        const priorMacroIndicators = extractMacroIndicators(
+          prior.contributing_indicators,
+        );
+
         const previousBand = prior.band;
         const currentBand = band.label;
         const topMovers = computeTopMovers(
-          composite.contributing,
-          prior.contributing_indicators,
+          macroComposite.contributing,
+          priorMacroIndicators,
         );
 
         await writeScoreChangelog({
           asset_type: assetType,
           change_date: today,
           model_version: MODEL_VERSION,
-          current_score: composite.score0to100,
+          current_score: compositeV2.score0to100,
           current_band: currentBand,
           previous_score: prior.score_0_100,
           previous_band: previousBand,
-          delta: composite.score0to100 - prior.score_0_100,
+          delta: compositeV2.score0to100 - prior.score_0_100,
           band_changed: previousBand !== currentBand,
           top_movers: topMovers as unknown as Json,
         });
@@ -282,6 +340,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     { status: httpStatus },
   );
+}
+
+/**
+ * Pulls the indicator-level contribution map out of a v2-nested
+ * `composite_snapshots.contributing_indicators` JSONB blob.
+ *
+ * v2 shape: `{ macro: { score, weight, contribution, indicators: {
+ *   FEDFUNDS: {...}, ... } } }`. This extractor walks down to the
+ * nested `indicators` object so `computeTopMovers` can diff today's
+ * indicator-level breakdown against yesterday's — otherwise top-
+ * movers would see a single "macro" key moving by its full
+ * contribution, which is useless signal.
+ *
+ * Returns `null` on any shape mismatch; `computeTopMovers` already
+ * tolerates a null prior (treats all current keys as new).
+ */
+function extractMacroIndicators(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const macro = (raw as Record<string, unknown>).macro;
+  if (!macro || typeof macro !== "object" || Array.isArray(macro)) return null;
+  const indicators = (macro as Record<string, unknown>).indicators;
+  if (!indicators || typeof indicators !== "object" || Array.isArray(indicators)) {
+    return null;
+  }
+  return indicators as CompositeResult["contributing"];
 }
 
 /**

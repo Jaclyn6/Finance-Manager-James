@@ -77,3 +77,78 @@ export interface CompositeResult {
     }
   >;
 }
+
+/**
+ * The four Phase 2 score categories. Their weighted sum is the
+ * composite — per-asset weights live in CATEGORY_WEIGHTS (weights.ts).
+ *
+ * Blueprint §4.1 defines the category model: macro (FRED indicators),
+ * technical (RSI/MACD/MA/Bollinger/Disparity), on-chain (MVRV Z / SOPR
+ * / ETF flow / Crypto F&G), and sentiment (Finnhub news + CNN F&G,
+ * capped weight per PRD §8.4).
+ */
+export type CategoryName = "macro" | "technical" | "onchain" | "sentiment";
+
+/**
+ * Map of category → 0-100 score. `null` means "missing / unknown" —
+ * propagates per blueprint §4.5 tenet 1 (missing inputs → unknown,
+ * never defaulted to neutral or zero). The composite renormalizes
+ * weights across present categories only, preserving dynamic range
+ * during gradual rollout.
+ */
+export type CategoryScores = Record<CategoryName, number | null>;
+
+/**
+ * Per-asset category weights per blueprint §4.2. Total per asset need
+ * not sum to 100 — the composite renormalizes.
+ *
+ * `Partial` because not every asset type has every category — US
+ * equity has no on-chain category, crypto leans on all four, etc. A
+ * category absent from this map is "not applicable" for the asset,
+ * distinct from "applicable but currently null" (blueprint §4.5).
+ */
+export type PerAssetCategoryWeights = Partial<Record<CategoryName, number>>;
+
+/**
+ * Per-category breakdown in {@link CompositeResultV2.contributing}.
+ * Mirrors the Phase 1 `{ score, weight, contribution }` shape at the
+ * category level. Nested `indicators` preserves the Phase 1
+ * indicator-level breakdown when available (macro today; other
+ * categories will populate `indicators` as Phase C Steps 7-8 wire up
+ * the rest of the pipeline).
+ */
+export interface CategoryContribution {
+  /** 0-100 category score. */
+  score: number;
+  /** Renormalized weight — sums to 1.0 across present categories. */
+  weight: number;
+  /** score × weight — what this category adds to the composite. */
+  contribution: number;
+  /**
+   * Optional indicator-level breakdown, same shape as the Phase 1
+   * {@link CompositeResult.contributing} map. Populated for categories
+   * whose ingestion path computes per-indicator scores (macro already
+   * does; technical / on-chain / sentiment will fill this in as their
+   * cron endpoints come online in Steps 7-8).
+   */
+  indicators?: CompositeResult["contributing"];
+}
+
+/**
+ * Output of `computeCompositeV2`. Persisted to
+ * `composite_snapshots.contributing_indicators` (same column as Phase
+ * 1) in a NESTED shape — `model_version` on the row discriminates v1
+ * flat from v2 nested when the UI reader branches on historical rows.
+ */
+export interface CompositeResultV2 {
+  /** 0-100 weighted composite across present categories. */
+  score0to100: number;
+  /** Per-category breakdown. Missing categories are omitted. */
+  contributing: Partial<Record<CategoryName, CategoryContribution>>;
+  /**
+   * Categories that were null/missing when the composite was computed.
+   * Feeds the "N/4 categories active" transparency chip so silent
+   * degradation doesn't look like a valid reading (§0.5 tenet 1).
+   */
+  missingCategories: CategoryName[];
+}

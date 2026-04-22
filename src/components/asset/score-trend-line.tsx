@@ -41,9 +41,31 @@ export interface ScoreTrendLineProps {
    * fetched with so the visible framing matches the data. Default 90.
    */
   rangeDays?: number;
+  /**
+   * `YYYY-MM-DD` — the v1→v2 `MODEL_VERSION` cutover date, read by
+   * the parent Server Component from `getCurrentModelCutoverDate()`
+   * and passed in as a plain string (no client-side DB call).
+   *
+   * When provided AND the cutover falls inside the rendered window,
+   * a vertical Recharts `ReferenceLine` marks the v2 transition so
+   * the user can visually distinguish v1-era scores (pre-line) from
+   * v2-era scores (post-line). See blueprint §3.4:
+   *
+   * > `/asset/[slug]` trend line renders a vertical separator at
+   * > the v2 cutover date.
+   *
+   * Omit (or pass `null`) to render without a separator — used for
+   * test fixtures and the fresh-DB fallback case where migration 0009
+   * hasn't run.
+   */
+  cutoverDate?: string | null;
 }
 
-export function ScoreTrendLine({ data, rangeDays = 90 }: ScoreTrendLineProps) {
+export function ScoreTrendLine({
+  data,
+  rangeDays = 90,
+  cutoverDate = null,
+}: ScoreTrendLineProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground md:p-12">
@@ -68,9 +90,32 @@ export function ScoreTrendLine({ data, rangeDays = 90 }: ScoreTrendLineProps) {
   const latestScore = scores[scores.length - 1];
   const minScore = Math.min(...scores);
   const maxScore = Math.max(...scores);
-  const ariaSummary = isSparse
+  const baseAriaSummary = isSparse
     ? `최근 ${rangeDays}일 점수 추이. 데이터 1개 — ${data[0].snapshot_date} 기준 ${latestScore.toFixed(1)}점.`
     : `최근 ${rangeDays}일 점수 추이. ${data.length}개 데이터. 최저 ${minScore.toFixed(1)}점, 최고 ${maxScore.toFixed(1)}점, 가장 최근 ${latestScore.toFixed(1)}점.`;
+
+  // Only render the v1→v2 cutover separator when the cutover actually
+  // falls inside the rendered window. A cutover entirely before the
+  // window starts (data already all-v2) or entirely after it ends
+  // (all-v1 historical view) draws a line at the chart edge that
+  // looks like a misleading data marker. Skipping in those cases
+  // keeps the chart honest. String comparison works because dates are
+  // ISO `YYYY-MM-DD`, which is lexicographically sortable.
+  const firstDate = data[0].snapshot_date;
+  const lastDate = data[data.length - 1].snapshot_date;
+  const showCutoverLine =
+    typeof cutoverDate === "string" &&
+    cutoverDate.length > 0 &&
+    cutoverDate >= firstDate &&
+    cutoverDate <= lastDate;
+
+  // Append the cutover note to the aria-label so screen-reader users
+  // hear the same visual discontinuity information the ReferenceLine
+  // conveys to sighted users. WCAG 1.1.1 — non-text content needs a
+  // text alternative of equivalent purpose.
+  const ariaSummary = showCutoverLine
+    ? `${baseAriaSummary} ${cutoverDate}에 모델 v2.0.0 전환.`
+    : baseAriaSummary;
 
   return (
     <div className="rounded-2xl border bg-card p-4 md:p-6">
@@ -125,6 +170,29 @@ export function ScoreTrendLine({ data, rangeDays = 90 }: ScoreTrendLineProps) {
             <ReferenceLine y={60} stroke="currentColor" strokeOpacity={0.15} />
             <ReferenceLine y={40} stroke="currentColor" strokeOpacity={0.15} />
             <ReferenceLine y={20} stroke="currentColor" strokeOpacity={0.15} />
+            {/*
+              v1→v2 `MODEL_VERSION` cutover separator (blueprint §3.4,
+              §4.4 Step 4). Dashed so it's visually distinct from the
+              solid horizontal band guidelines above. Label stays at
+              the top of the chart so it doesn't collide with the
+              score line in the middle 40–60 band where scores
+              typically cluster.
+            */}
+            {showCutoverLine ? (
+              <ReferenceLine
+                x={cutoverDate ?? undefined}
+                stroke="currentColor"
+                strokeOpacity={0.45}
+                strokeDasharray="3 3"
+                label={{
+                  value: "v2 전환",
+                  position: "top",
+                  fill: "currentColor",
+                  fontSize: 10,
+                  opacity: 0.7,
+                }}
+              />
+            ) : null}
             <Tooltip
               contentStyle={{
                 borderRadius: 8,
