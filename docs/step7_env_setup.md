@@ -3,57 +3,53 @@
 New environment variables introduced by the Step 7 cron overhaul.
 Read once per provisioning — do not block other work on this.
 
-## FINNHUB_API_KEY (new)
+## Alpha Vantage NEWS_SENTIMENT (Phase 2 news source)
 
-The Step 7 ingest-news cron endpoint (`/api/cron/ingest-news`) requires
-a Finnhub API token. Free tier: 60 calls/minute, 60 calls/month for
-news sentiment.
+Phase 2 uses Alpha Vantage's `NEWS_SENTIMENT` endpoint for per-ticker
+news sentiment — NOT Finnhub's `/news-sentiment` (which is paid-only;
+the production smoke test against the free tier returned
+`{"error":"You don't have access to this resource."}`). Re-uses the
+existing `ALPHA_VANTAGE_API_KEY` already provisioned at Phase 1, so no
+new env variable work is required for this pipeline.
 
-### 1. Obtain the key
+Daily AV budget usage:
 
-Register at <https://finnhub.io/register> (free) → Dashboard → API Key.
-
-### 2. Add to local env
-
-```bash
-echo 'FINNHUB_API_KEY=<your-key>' >> .env.local
+```
+  19 calls  technical (daily bars)
+   2 calls  news sentiment (7 tickers in 2 groups of 4 + 3)
+   ─────
+  21 calls  total (under 25/day free-tier cap, 4 headroom)
 ```
 
-### 3. Add to Vercel Production
+The (4, 3) ticker grouping was discovered empirically during live
+probing: 7-ticker `NEWS_SENTIMENT` calls silently return `items=0`
+(apparent hidden per-call ticker cap), while (4, 3) returns full
+coverage. If you change the ticker list in
+`src/app/api/cron/ingest-news/route.ts`, re-probe AV to confirm the
+grouping still works.
 
-```bash
-vercel env add FINNHUB_API_KEY production
-# paste key when prompted
-vercel env pull .env.vercel
-```
+Finnhub adapter files (`src/lib/score-engine/sources/finnhub*`) stay
+in place as a future fallback if we ever move to a paid Finnhub plan.
+The source-name registered in `news_sentiment.source_name` reads
+`alpha_vantage` under the current pipeline.
 
-### 4. GitHub repo Actions secrets — NOT needed
+### Graceful degradation before key is set
 
-Only `CRON_SECRET` needs to be in GitHub Actions secrets — the Finnhub
-key is read by the Vercel function itself, not the Actions runner. No
-GHA secret update is needed for this key.
-
-### 5. Graceful degradation before key is set
-
-If `FINNHUB_API_KEY` is unset when `/api/cron/ingest-news` runs, the
-endpoint:
+If `ALPHA_VANTAGE_API_KEY` is unset when `/api/cron/ingest-news` runs,
+the endpoint:
 
 - Returns HTTP 200 (not 500) so the hourly workflow's other steps
   (onchain + cnn-fg) do not get aborted by the `set -e` default in GHA
   step runners.
 - Writes a single `ingest_runs` audit row with
-  `error_summary="FINNHUB_API_KEY unset — news sentiment skipped this run"`.
+  `error_summary="ALPHA_VANTAGE_API_KEY unset — news sentiment skipped this run"`.
 - Writes NO rows to `news_sentiment` (distinct from the "empty sentiment
-  run" vs "partial sentiment run" cases — search ingest_runs by that
+  run" vs "partial sentiment run" cases — search `ingest_runs` by that
   exact string to find skipped runs).
 
-This graceful-skip pattern is deliberate: blocking the hourly workflow
-on a missing key would make provisioning the key cost a full hour of
-onchain / CNN F&G staleness.
-
-Once the key is provisioned to Vercel production (step 3 above), the
-NEXT hourly run will auto-start writing `news_sentiment` rows — no
-deploy, no restart.
+Under normal operation the key IS set (Phase 1 provisioning), so this
+branch exists only as a defensive guard against an accidental Vercel-env
+regression.
 
 ## PRODUCTION_URL (new GHA secret)
 
