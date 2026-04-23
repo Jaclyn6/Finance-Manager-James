@@ -124,12 +124,14 @@ export async function getLatestCompositeSnapshots(): Promise<
     // Intentionally NOT filtered on model_version — blueprint §4.4 Step 4
     // + plan §0.2 #9 (greenfield cutover) require historical v1 rows to
     // remain visible after MODEL_VERSION bumps. v1 and v2 rows don't
-    // overlap by date under the greenfield policy, so returning every
-    // version and then deduping by latest-per-asset_type produces the
-    // correct "most recent row per asset" regardless of which regime
-    // was live at that time. The UI staleness badge + model-version
-    // badge (Step 6 §4.4) surface the regime transparently.
+    // overlap by date under the greenfield policy — EXCEPT on the
+    // cutover day itself if the pre-cutover cron fires against an
+    // older deployment before the cutover-day redeploy. Secondary sort
+    // on model_version DESC ensures the Map dedupe below prefers the
+    // newest regime when both versions landed for the same
+    // (asset_type, date) pair.
     .order("snapshot_date", { ascending: false })
+    .order("model_version", { ascending: false })
     .limit(LATEST_LOOKBACK_DAYS * ASSET_TYPE_COUNT);
 
   if (error) {
@@ -239,6 +241,13 @@ export async function getCompositeSnapshotsForAssetRange(
     // ReferenceLine at the cutover date makes sense (blueprint §3.4).
     // Without this, the 90-day window on day N post-cutover shows
     // only N points instead of 90 and the chart looks broken.
+    //
+    // BUT: if both versions landed for the same (asset_type, date)
+    // pair (cutover-day dual cron), the trend chart would plot two
+    // points at that date. The outer reader should dedupe; here we
+    // keep both rows in the ASC stream and document that consumers
+    // expecting one row per date must dedupe on (ticker, date,
+    // MAX(model_version)).
     .gte("snapshot_date", startDate)
     .lte("snapshot_date", endDate)
     .order("snapshot_date", { ascending: true });
