@@ -136,22 +136,37 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         continue;
       }
 
-      const rows: PriceReadingInsert[] = result.bars.map((bar) => ({
-        ticker: target.ticker,
-        asset_type: target.asset_type,
-        price_date: bar.date,
-        // CoinGecko market_chart returns close-only daily ticks.
-        // OHLC channels are only available on the `/coins/{id}/ohlc`
-        // endpoint, which we intentionally skip at Step 7 — the
-        // price-overlay chart (Step 10) only plots closes, so paying
-        // a second API call for OHLC we don't render is premature.
-        open: null,
-        high: null,
-        low: null,
-        close: bar.close,
-        volume: null,
-        source_name: "coingecko",
-      }));
+      // Dedupe by price_date. CoinGecko's `market_chart?days=N` endpoint
+      // has been observed to include the current day twice (one
+      // historical-close tick + one live-price tick sharing the same
+      // YYYY-MM-DD). Postgres 21000 "ON CONFLICT DO UPDATE command
+      // cannot affect row a second time" fires when two rows in a
+      // single upsert statement share the conflict key — so we keep
+      // the LAST bar per date (most recent intra-day quote wins, the
+      // previous historical close is overwritten by the live tick
+      // which is itself upserted once).
+      const barsByDate = new Map<string, (typeof result.bars)[number]>();
+      for (const bar of result.bars) {
+        barsByDate.set(bar.date, bar);
+      }
+      const rows: PriceReadingInsert[] = Array.from(barsByDate.values()).map(
+        (bar) => ({
+          ticker: target.ticker,
+          asset_type: target.asset_type,
+          price_date: bar.date,
+          // CoinGecko market_chart returns close-only daily ticks.
+          // OHLC channels are only available on the `/coins/{id}/ohlc`
+          // endpoint, which we intentionally skip at Step 7 — the
+          // price-overlay chart (Step 10) only plots closes, so paying
+          // a second API call for OHLC we don't render is premature.
+          open: null,
+          high: null,
+          low: null,
+          close: bar.close,
+          volume: null,
+          source_name: "coingecko",
+        }),
+      );
 
       // Chunked upsert: CoinGecko returns ~365 rows per coin; combined
       // with the 3 coins that's ~1095 rows. Well under Supabase's
