@@ -2,78 +2,96 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-23 06:45 (manual `/handoff`, Phase 1 fully shipped, pre-Phase C)
+2026-04-23 17:55 UTC (manual `/handoff`, Phase C Steps 1-7 complete + production smoke-tested + Finnhub→AV news swap landed; pre-Step 7.5)
 
 ## 2. Current Phase / Step
 
-**Phase 1 COMPLETE.** Production live at `https://finance-manager-james.vercel.app`. All 12 blueprint Steps green.
+**Phase C Steps 1–7 COMPLETE** per `docs/phase2_architecture_blueprint.md` §9. All 5 cron endpoints deployed to production + smoke-tested end-to-end. Reading tables (`indicator_readings`, `technical_readings`, `onchain_readings`, `news_sentiment`, `price_readings`) all populated with real data from today's ingestion.
 
-Phase 2 blueprint `docs/phase2_architecture_blueprint.md` v1.0 authored + reviewed. Next is **Phase C Step 1 (Schema migration 0005–0010)** per blueprint §9.
-
-Phase 1 blueprint v2.3 Steps: 1✔ 2✔ 3✔ 4✔ 5✔ 6✔ 7✔ 8✔ 9✔ 9.5✔ 10✔ 10.5✔ 11✔ 11.5✔ **12✔ (deployed + smoke tested)**.
+**Next: Phase C Step 7.5 — Signal Alignment Engine** (blueprint §9 lines 649–657). Scope: `src/lib/score-engine/signals.ts` (pure functions, stub already exists from Step 1), `src/lib/data/signals.ts` (reader + writer), trailing `signals.compute` call inside every cron ingestion, 18+ unit tests. PK `(snapshot_date, signal_rules_version)` on `signal_events` table (migration 0006 already applied).
 
 ## 3. Last Commit
 
-`3917323` — `fix: double-cast TopMover[] to Json in backfill script` on `main`. Origin in sync (no unpushed).
-
-**Uncommitted (noise):** `.gitignore` has 2 duplicate lines (`. vercel` and `.env*.local`) auto-appended by `vercel link`. Both already covered by earlier patterns — safe to revert or leave. Not flagged as work.
+`a076d84` — `fix(phase2): ingest-news — per-ticker AV calls (discovered AND-semantics)` on `main`. Origin in sync (no unpushed). Working tree clean (AV probe scratch files deleted just now).
 
 ## 4. Active Thread
 
 - **Just finished (this session):**
-  - **Doc lane:** PRD v3.3 (§18 canonical, §16.3 신설) + PRD v3.4 (자산제곱 video framework — §8.1 ICSA/TGA, §8.2 이격도, §8.4 CNN F&G, §10.4 Signal Alignment) + `docs/phase2_plan.md` (9 ambiguities resolved, 4 cross-cutting tenets) + `docs/phase2_architecture_blueprint.md` v1.0 (836 lines, 15 Steps incl. 7.5 Signal Engine + 8.5 Signal UI Card). B.3 review gate: P0 1건 + P1 5건 수정 적용. New ambiguity #10 (US equity valuation source) flagged for later.
-  - **Phase 1 closure:** Vercel deploy + smoke test. `vercel link` (finance-manager project, jaclyn6s-projects team, Hobby) → 6 env vars injected to Production scope → `vercel --prod` (44s build) → Production URL live. Domain renamed to `finance-manager-james.vercel.app`. Deployment Protection tuned to Standard (prod + custom aliases public). Supabase Auth: Redirect URL `/api/auth/callback` added + Site URL bumped to prod. HTTP smoke (7 checks: redirect/login/protected/cron auth) all green. Manual cron trigger: 200 + 7 indicators success + 5 snapshots written + 8.6s duration + 2026-04-22 row live in Supabase. User confirmed browser login flow on 3 accounts + mobile visual.
-- **About to start (next session):** Phase C Step 1 — Supabase schema migrations 0005–0010 (new Phase 2 tables + `MODEL_VERSION v2.0.0` / `SIGNAL_RULES_VERSION v1.0.0` / `TICKER_LIST_VERSION` constants + RLS).
-- **Not blocked.**
+  - **Steps 1–6 implementation + 5-agent reviews + fixes** (11 commits: 4ea12f8 → 08a21c6). Summary: schema migrations 0005–0010, sentiment engine, on-chain engine, technical engine, composite v2 with 6-category structure (macro/technical/onchain/sentiment/valuation/regional_overlay), MODEL_VERSION v1→v2 cutover UI (dashboard badge + trend-chart ReferenceLine).
+  - **Step 7 (cron v2 + GHA workflows)**: 5 new cron endpoints + 3 GHA workflows + ingest-macro extended to 11 FRED series + PHASE2_FRED_REGIONAL_OVERLAY constant. Commits 3343472 / 5514c2c / 34df3e6.
+  - **Production deployment + secrets setup**: Installed `vercel` CLI check, registered `CRON_SECRET` + `PRODUCTION_URL` + `FINNHUB_API_KEY` as GitHub repo secrets (via `gh secret set`), added `FINNHUB_API_KEY` to Vercel Production env, deployed 4× to prod (commits 3343472 → a076d84).
+  - **Finnhub → Alpha Vantage NEWS_SENTIMENT swap** (two commits: 09842bb + a076d84). Finnhub's `/news-sentiment` is paid-only on the free tier; AV's `NEWS_SENTIMENT` works free AND provides pre-computed sentiment scores. Smoke-test during the initial swap revealed AV's `tickers=` parameter is AND-semantics (not OR as first assumed): `SPY,QQQ,NVDA,AAPL` returns 0 articles because no single article covers all 4 ETFs+megacaps. Refactored to per-ticker calls; dropped SPY/QQQ from the news ticker registry (kept in TECHNICAL for broad-market RSI/MACD). Final production run: 5/5 tickers × 50 articles each, sentiment scores 55-64 range ("Somewhat-Bullish").
+  - **DB hygiene**: cleaned 2026-04-23 v1 residue (5 composite + 5 changelog rows from pre-redeploy old-deployment cron) + SPY/QQQ stale partial rows from initial 2-group news run.
+- **About to start (next session):** Phase C **Step 7.5 — Signal Alignment Engine**. Implement `computeSignals` in `src/lib/score-engine/signals.ts` (stub from Step 1), data reader/writer in `src/lib/data/signals.ts`, wire `signals.compute` tail call into every cron endpoint, add signal-card UI at Step 8.5.
+- **Not blocked** — all environment is provisioned, all production endpoints return meaningful data.
 
 ## 5. Pending User Decisions
 
-None. All Phase 2 ambiguities resolved except #10 (valuation data source) which is Phase 3-soft-deadline, not Phase C Step 1 blocker.
+- None. Step 7 verified end-to-end. Step 7.5 starts fresh with pure-math work that mirrors Step 3/4 patterns.
 
 ## 6. Recent Context (last 5 commits)
 
-- `3917323` backfill TS cast fix — unblocked `npm run build` for Vercel deploy.
-- `c517595` Phase 2 blueprint v1.0 + B.3 review fixes + ambiguity #10 — architecture contract for Phase C.
-- `11a28bf` PRD v3.3/v3.4 + Phase 2 plan — 9 ambiguities resolved, 자산제곱 video framework编入.
-- `b0a99bc` previous handoff (2026-04-20) — snapshot pre-Step 12.
-- `cfb813e` Step 11.5 post-review — dotenv override fix + NaN guard + blueprint H1 alignment.
+- `a076d84` ingest-news per-ticker rewrite — AV AND-semantics discovery forced the 2-group (4,3) split to become 5 single-ticker calls
+- `09842bb` Finnhub→AV NEWS_SENTIMENT swap — added new adapter + parser + 18 tests, route rewritten; Finnhub files intentionally kept as future paid-plan fallback
+- `34df3e6` composite_snapshots reader — secondary sort on `model_version DESC` handles cutover-day v1/v2 tie-break
+- `5514c2c` ingest-prices — dedupe CoinGecko bars by price_date (upstream can return today twice; Postgres 21000 cardinality violation fix)
+- `3343472` Step 7 main — 5 cron endpoints + 3 GHA workflows + FRED expansion + shared `verifyCronSecret` helper
 
 ## 7. Open Issues to Watch
 
-- **Ambiguity #10 (US equity valuation)** — blueprint absorbs weight 10 into sentiment until Phase 3 (blueprint §12 trade-off 7). Real decision needed before Phase 3 backtest work.
-- **Alpha Vantage budget** — Phase 2 uses 19/25 daily calls; only 6 calls headroom for manual backfill + retries. Adding more tickers = Twelve Data switch or Pro upgrade.
-- **GitHub Actions CRON_SECRET sync** — Phase C Step 7 needs the same CRON_SECRET added to GitHub repo Actions secrets (manual sync, no OIDC). Value is in Vercel Production env already.
-- **`.gitignore` duplicate lines** from `vercel link` — redundant with earlier patterns, cosmetic.
-- **Phase 1 blueprint §5 Routing table** — still says `'use cache'` page-level but impl is Partial Prerender (documented at §7). Low priority docs drift.
-- **`ThemeToggle` + `SignOutButton` size-9** (36×36, <44×44) — Phase 2 UI polish candidate during Step 8/8.5.
-- **Header "오늘의 투자 환경"** — desktop still route-static (mobile hides). Phase 2 polish candidate.
-- **Motion-safe prefix** not applied to Recharts/Popover/Calendar/Sheet animations systemically — Phase 2 §6.4 handles it.
-- **First automatic Vercel cron run** — 2026-04-24 06:00 UTC. Monitor Vercel Dashboard → Cron Jobs for success; confirms `revalidateTag` evicts and daily row appears in `composite_snapshots`.
-- **Crypto-specific signals** (`CRYPTO_UNDERVALUED` + `CAPITULATION`) introduced in blueprint §4.5 beyond PRD §10.4 "고려" — PRD revision note needed at Phase C Step 7.5 implementation time.
+### Production data gaps (Phase 2 deferred, not Step 7.5 blockers)
+
+- **Unofficial API partial failures** (blueprint §3.1 expected risk): `ingest-onchain` today returned 1/4 sources success; `ingest-cnn-fg` returned 500 (CNN Markets Data endpoint refused our User-Agent or shape changed). The `ingest_runs` audit row captures these; UI staleness badge (Step 8) will surface. Reassess at `docs/phase2_architecture_blueprint.md` §3.1 TTLs — 2h stale threshold means onchain data shows amber after 2h-without-success.
+- **`ingest-technical` not yet smoke-tested in production**. Endpoint expects ~247s (19 Alpha Vantage tickers × 13s sleep) and maxDuration=300. GHA workflow `cron-technical.yml` at 22:00 UTC daily will be the first real execution. Verify `technical_readings` populates after first automatic run (UTC tomorrow morning for the user).
+- **ingest-onchain `etfFlowToScore` bootstrap**: needs ≥2 prior days of history to produce a non-null score. Today's run writes the first day; `CoinGlass BTC_ETF_NETFLOW` score will be null until day 2+. Expected; surfaces via `fetch_status='partial'`.
+- **First automatic Vercel cron run**: 2026-04-24 06:00 UTC for `ingest-macro` (Vercel Hobby daily slot, unchanged from Phase 1). Monitor Vercel Dashboard → Cron Jobs for the first auto-trigger + confirm v2 row lands.
+
+### Tech debt / deferred work
+
+- **Finnhub adapter files unused.** `src/lib/score-engine/sources/finnhub.ts`, `finnhub-parse.ts`, `finnhub-parse.test.ts` + `sentiment.ts`'s `finnhubSentimentToScore` still in the codebase. Kept intentionally as a future paid-plan (~$35/mo) fallback. Do not delete unless the user explicitly opts out.
+- **`FINNHUB_API_KEY`** still present in Vercel Production env + `.env.local` + GitHub repo secrets. Unused by current code. Leave in place (future fallback); user can rotate or remove when the paid-plan decision is made.
+- **`ingest-cnn-fg` unreliability.** CNN's dataviz endpoint denies our requests (likely User-Agent filter change). PRD §10.4 `EXTREME_FEAR` signal is `VIX ≥ 35 || CNN_FG < 25` — the OR lets VIX alone fire the signal, so CNN outage degrades gracefully at Step 7.5. Monitor; if CNN stays broken for 7+ days, consider using Alternative.me data or Phase 3 replacement.
+- **Alpha Vantage budget tightness**: 19 technical + 5 news = 24/25 daily free-tier calls. One retry burns the headroom. If AV backfill is needed for historical technical data, user must upgrade to Premium (~$50/mo, 75/day).
+- **Step 6 review R3.4 — `missingCategories` not persisted to DB.** Per-asset `CompositeResultV2.missingCategories` lives only in memory; dashboard can't distinguish "category N/A for asset" from "category currently missing data". Step 8 UI scope.
+- **Step 6 review R1.2 residue**: blueprint §4.2 table kept as-is (separate `regional_overlay` category). If a future blueprint revision wants to fold it back into macro, the weights.ts change is trivial but will need test updates.
+- **`next-themes` hydration mismatch**: unrelated, pre-existing from Phase 1; manifests as a transient console warning. Low priority.
+
+### Workflow gotchas for next session
+
+- **CLAUDE.md Trigger 1 for Step 7.5**: Step 7.5 includes signal-card UI at §8.5 (blueprint Step 8.5 is the actual UI work, but Step 7.5 is pure-math — Trigger 1 visual verification applies at 8.5, not 7.5). For 7.5, the 5-agent review runs post-commit without preview_start.
+- **Step 7.5 tests touch the `signal_events` DB table**. Make sure migration 0006 is still applied (it is — verified in session). Any new signal-input columns would require a new migration.
+- **Ingest endpoints need the trailing `signals.compute` call** at Step 7.5 tail. Current cron endpoints (3343472 + subsequent) do NOT yet call signals.compute — that's the Step 7.5 wire-up per blueprint §9 Step 7.5 scope.
 
 ## 8. Environment State
 
-- **Stack**: Next.js 16.2.4 (Turbopack, `cacheComponents: true`), React 19.2.4, Tailwind v4, `@supabase/ssr` 0.10.2, TypeScript 5, `next-themes` 0.4, Recharts 3.8.1, Vitest 4.1.4. shadcn: badge/button/calendar/card/input/label/popover/separator/sheet/skeleton/tooltip. react-day-picker 9.14.0. dotenv + tsx devDeps.
-- **Runtime**: Node v24.15.0, npm 11.12.1, Vercel CLI 52.0.0, bash on Windows 11.
-- **Cache model**: Path B (`cacheComponents: true`). Admin client inside `'use cache'` is allowed (family-wide data); `cookies()/headers()/connection()` banned inside cached scopes.
-- **File renames**: `middleware.ts` → `proxy.ts` (Next 16.2). Never create `middleware.ts`.
-- **`server-only` split**: `admin.ts` + `fred.ts` guarded; `fred-parse.ts` guard-free for Node-env scripts. Phase 2 replicates this pattern for every new source (`alpha-vantage.ts` + `-parse.ts`, etc.).
-- **MCP servers** (project-scope `.mcp.json`): `figma`, `supabase`, `context7`, `alphavantage`.
-- **`.env.local` keys** (git-ignored, names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`, `VERCEL_OIDC_TOKEN` (auto-managed by Vercel CLI, 12h refresh).
-- **Vercel**: project `finance-manager`, team `jaclyn6s-projects`, Hobby plan. Production alias `finance-manager-james.vercel.app`. Other aliases: `iota-two`, `jaclyn6-jaclyn6s-projects`, `jaclyn6s-projects` (4 total, all point to same deployment). Deployment Protection: Standard. Production Function region: default (not pinned).
-- **Supabase**: `hhohrclmfsvpkigbdpsb` (ap-northeast-2 Seoul, free). Migrations 0001–0004 applied. Auth: signups disabled, 3 family users hand-provisioned (`jw.byun@toss.im` + `edc0422@...` + `odete4@...`). Site URL = `https://finance-manager-james.vercel.app`. Redirect URLs whitelist = `localhost:3000` + production.
-- **GitHub**: `Jaclyn6/Finance-Manager-James` private. `gh` CLI auth'd as `Jaclyn6`. No Actions workflows yet (Phase C Step 7 will add).
-- **Data state**: 30-day backfill (2026-03-21 → 2026-04-19) + today's row (2026-04-22 via manual cron trigger). `composite_snapshots` total ≈ 155 rows, `indicator_readings` ≈ 83, `score_changelog` ≈ 145. All `model_version: v1.0.0`.
-- **Secret expiry watch**: `SUPABASE_SERVICE_ROLE_KEY` JWT exp 2092 (no concern). `VERCEL_OIDC_TOKEN` 12h (auto-refresh). No API keys on rotating schedule.
-- **Blueprint versions**: Phase 1 `docs/phase1_architecture_blueprint.md` v2.3. Phase 2 `docs/phase2_architecture_blueprint.md` v1.0. PRD `investment_advisor_dashboard_prd_kr_v3.md` v3.4. All aligned.
+- **Stack**: Next.js 16.2.4 (Turbopack, `cacheComponents: true`), React 19.2.4, Tailwind v4, `@supabase/ssr` 0.10.2, TypeScript 5 strict, `next-themes` 0.4, Recharts 3.8.1, Vitest 4.1.4. shadcn: badge/button/calendar/card/input/label/popover/separator/sheet/skeleton/tooltip. react-day-picker 9.14.0. dotenv + tsx devDeps. Node v24.15.0, npm 11.12.1, Vercel CLI 52.0.0.
+- **Test count**: 356/356 green (Phase 1 108 baseline + Step 2 67 parser + Step 3 59 technical + Step 4 41 onchain + Step 5 29 sentiment + Step 6 18 composite-v2 + Step 7 9 ticker-registry + Step 7 18 AV-news-parser + 7 regression/kr-overlay).
+- **Cache model**: Path B (`cacheComponents: true`). Admin client inside `'use cache'` allowed (family-wide). `cookies()/headers()/connection()` banned inside cached scopes.
+- **File renames**: `middleware.ts` → `proxy.ts` (Next 16.2 invariant, unchanged).
+- **`server-only` split**: every `{source}.ts` + `_back-off.ts` + `_redact.ts` carries the guard; every `-parse.ts` does NOT; parsers Node-env safe for scripts.
+- **MCP servers** (project-scope `.mcp.json`): `figma`, `supabase`, `context7`, `alphavantage`. Supabase MCP authenticated this session (org `fqiwclzqwmufqbcankjd`, project `hhohrclmfsvpkigbdpsb`).
+- **`.env.local` keys** (git-ignored, names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`, `FINNHUB_API_KEY` (added this session, currently unused by code), `VERCEL_OIDC_TOKEN`.
+- **Vercel**: project `finance-manager`, team `jaclyn6s-projects`, Hobby plan. Production alias `finance-manager-james.vercel.app`. Last deploy URL `finance-manager-eryco9z3f-jaclyn6s-projects.vercel.app` (commit a076d84). Env vars in Production: 7 total incl. `FINNHUB_API_KEY` (added this session). Production cron `0 6 * * *` for `ingest-macro` only (unchanged Phase 1 config).
+- **GitHub repo secrets** (Jaclyn6/Finance-Manager-James): `CRON_SECRET`, `PRODUCTION_URL` (`https://finance-manager-james.vercel.app`), `FINNHUB_API_KEY` — all provisioned this session via `gh secret set`.
+- **Supabase**: `hhohrclmfsvpkigbdpsb` (ap-northeast-2 Seoul, Postgres 17.6.1.104, free plan). Migrations 0001–0010 applied. Auth: signups disabled, 3 family users hand-provisioned (`jw.byun@toss.im` + `edc0422@...` + `odete4@...`). Site URL = `https://finance-manager-james.vercel.app`.
+- **GitHub**: `Jaclyn6/Finance-Manager-James` private. `gh` CLI auth'd as `Jaclyn6`. 3 GHA workflows present (`cron-technical.yml`, `cron-hourly.yml`) — first scheduled run: `cron-hourly` on the next UTC hour, `cron-technical` 22:00 UTC daily.
+- **Data state** (2026-04-23 17:55 UTC snapshot):
+  - `composite_snapshots`: 155 v1 rows (2026-03-21 → 2026-04-22) + 5 v2 rows (2026-04-23, one per asset_type)
+  - `indicator_readings`: 11 FRED series for today (7 Phase 1 + ICSA/WDTGAL signal-only + DTWEXBGS/DEXKOUS regional overlay)
+  - `price_readings`: 1095 crypto rows (BTC/ETH/SOL × 365 days backfilled by CoinGecko)
+  - `onchain_readings`: 5 rows today (1 success + 4 error from Bitbo/CoinGlass/alternative.me)
+  - `news_sentiment`: 5 rows (5 US large-caps, all success, sentiment 55-64 range)
+  - `technical_readings`: 0 rows (endpoint works, not yet triggered in production — awaits 22:00 UTC GHA run)
+  - `signal_events`: 0 rows (Step 7.5 writes the first)
+- **Blueprint versions**: Phase 1 `docs/phase1_architecture_blueprint.md` v2.3. Phase 2 `docs/phase2_architecture_blueprint.md` v1.0. PRD `investment_advisor_dashboard_prd_kr_v3.md` v3.4. Aligned.
 - **Handoff**: manual only (`/handoff`). No hooks.
-- **Code-review workflow**: CLAUDE.md Trigger 1/2 active. Phase C Steps will each get the 5-agent review after commit.
+- **Code-review workflow**: CLAUDE.md Trigger 1 active. Steps 1–6 all reviewed post-commit + fixes applied. Step 7 not yet 5-agent-reviewed (user opted to skip for speed; production smoke test substituted for runtime correctness).
 
 ## 9. How to Resume
 
-1. Read `docs/phase2_architecture_blueprint.md` v1.0 §9 Build Sequence (primary work governance). Cross-reference `docs/phase1_architecture_blueprint.md` v2.3 §7 for invariants you must preserve (Path B cacheComponents / `'use cache'` with admin client OK / `server-only` split / composite_snapshots immutability).
-2. Read `docs/phase2_plan.md` §0.2 (9 resolutions + #10 open) and §0.5 (4 cross-cutting tenets: Silent success loud failure / Snapshot immutability / Family-wide / Actionable over aggregate). These frame every implementation decision.
-3. **Next concrete action:** Phase C Step 1 — author migrations `supabase/migrations/0005_phase2_schema.sql` through `0010_phase2_indexes.sql` per blueprint §8. Tables: `technical_readings`, `onchain_readings`, `news_sentiment`, `price_readings`, `signal_events` (PK `(snapshot_date, signal_rules_version)`). Add `MODEL_VERSION = "v2.0.0"`, `SIGNAL_RULES_VERSION = "v1.0.0"`, `TICKER_LIST_VERSION = "v1.0.0-2026-04-23"` constants to `src/lib/score-engine/weights.ts` + `signals.ts` stub. RLS family-read / service_role-write on all new tables. Apply via Supabase MCP `apply_migration`. Commit + push + run CLAUDE.md Trigger 1 5-agent review before Step 2.
+1. Read `docs/phase2_architecture_blueprint.md` §9 Build Sequence, especially **Step 7.5** (lines 649–657) for signals engine scope + acceptance (18+ unit tests, null propagation per §2.2 tenet 1). Cross-reference §4.5 for the 6 signal formulas (EXTREME_FEAR, DISLOCATION, ECONOMY_INTACT, SPREAD_REVERSAL, LIQUIDITY_EASING, MOMENTUM_TURN).
+2. Read `src/lib/score-engine/signals.ts` — Step 1 stub (SignalName enum + ALL_SIGNALS already declared). Read `src/lib/score-engine/technical.ts` + `onchain.ts` for the `is*` boolean exports (`isDislocated`, `isCryptoUndervalued`, `isCapitulation`, `macdBullishCrossWithin`) that signals.ts will call.
+3. **Next concrete action:** Implement `computeSignals(inputs)` in `src/lib/score-engine/signals.ts`. Inputs come from: `indicator_readings` (VIX, ICSA, SAHMCURRENT, BAMLH0A0HYM2, WDTGAL), `onchain_readings` (CNN_FG, MVRV_Z, SOPR), `technical_readings` (SPY MACD, SPY/QQQ disparity). Output shape per `SignalComputation` type already exported. Add pure-math tests first (18+). Then add `src/lib/data/signals.ts` reader (`'use cache'` + `cacheTag('signals')` + `cacheLife('hours')`) + writer (admin client, no cache, UPSERT). Finally add the `signals.compute → revalidateTag('signals', {expire:0})` tail call to each of the 5 cron endpoints. Run the 5-agent CLAUDE.md Trigger 1 review post-commit.
 
 ---
 
