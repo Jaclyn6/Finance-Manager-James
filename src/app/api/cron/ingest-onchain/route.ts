@@ -5,6 +5,10 @@ import { timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  loadSignalInputs,
+  writeSignalEvents,
+} from "@/lib/data/signals";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import { writeIngestRun } from "@/lib/data/snapshot";
 import {
@@ -14,6 +18,7 @@ import {
   mvrvZScoreToScore,
   soprToScore,
 } from "@/lib/score-engine/onchain";
+import { computeSignals } from "@/lib/score-engine/signals";
 import { fetchAlternativeMeFng } from "@/lib/score-engine/sources/alternative-me";
 import { fetchBitboMetric } from "@/lib/score-engine/sources/bitbo";
 import { fetchCoinGlassEtfFlow } from "@/lib/score-engine/sources/coinglass";
@@ -374,6 +379,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // blank state.
   if (successCount > 0) {
     revalidateTag(CACHE_TAGS.onchain, { expire: 0 });
+  }
+
+  // ---- 6.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
+  //
+  // Runs even on partial ingestion (signals tolerate null inputs via
+  // state:"unknown"). Soft failure — a signals-tail error does NOT
+  // return 500; the main on-chain write already succeeded.
+  try {
+    const supabase = getSupabaseAdminClient();
+    const signalInputs = await loadSignalInputs(supabase, today);
+    const signalComputation = computeSignals(signalInputs);
+    await writeSignalEvents(supabase, today, signalComputation);
+    revalidateTag(CACHE_TAGS.signals, { expire: 0 });
+  } catch (signalsErr) {
+    const msg =
+      signalsErr instanceof Error ? signalsErr.message : String(signalsErr);
+    console.error("[cron ingest-onchain] signals tail failed:", msg);
+    errorSummary = errorSummary
+      ? `${errorSummary}; signals_tail: ${msg}`
+      : `signals_tail: ${msg}`;
   }
 
   // ---- Response ----

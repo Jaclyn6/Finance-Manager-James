@@ -2,8 +2,13 @@ import "server-only";
 
 import { timingSafeEqual } from "node:crypto";
 
+import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  loadSignalInputs,
+  writeSignalEvents,
+} from "@/lib/data/signals";
 import {
   invalidateChangelogCache,
   invalidateMacroSnapshotCache,
@@ -12,10 +17,12 @@ import {
   writeIngestRun,
   writeScoreChangelog,
 } from "@/lib/data/snapshot";
+import { CACHE_TAGS } from "@/lib/data/tags";
 import { computeComposite } from "@/lib/score-engine/composite";
 import { computeCompositeV2 } from "@/lib/score-engine/composite-v2";
 import { fetchFredSeries } from "@/lib/score-engine/indicators/fred";
 import { computeZScore, zScoreTo0100 } from "@/lib/score-engine/normalize";
+import { computeSignals } from "@/lib/score-engine/signals";
 import { computeTopMovers } from "@/lib/score-engine/top-movers";
 import type {
   CategoryContribution,
@@ -502,6 +509,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (snapshotsWritten > 0) {
     invalidateMacroSnapshotCache();
     invalidateChangelogCache();
+  }
+
+  // ---- 7.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
+  //
+  // Runs even if the main ingestion was partial — signals tolerate
+  // null inputs by returning state:"unknown" (blueprint §4.5 line 299
+  // null-propagation). Soft-failure: a signals-tail error does NOT
+  // abort an otherwise successful cron — the main ingestion already
+  // succeeded and signals are a derived artifact (plan §0.5 carve-out).
+  // If writeSignalEvents throws, we log + surface via errorSummary
+  // append rather than returning 500.
+  try {
+    const supabase = getSupabaseAdminClient();
+    const signalInputs = await loadSignalInputs(supabase, today);
+    const signalComputation = computeSignals(signalInputs);
+    await writeSignalEvents(supabase, today, signalComputation);
+    revalidateTag(CACHE_TAGS.signals, { expire: 0 });
+  } catch (signalsErr) {
+    const msg =
+      signalsErr instanceof Error ? signalsErr.message : String(signalsErr);
+    console.error("[cron ingest-macro] signals tail failed:", msg);
+    errorSummary = errorSummary
+      ? `${errorSummary}; signals_tail: ${msg}`
+      : `signals_tail: ${msg}`;
   }
 
   // ---- Response ----

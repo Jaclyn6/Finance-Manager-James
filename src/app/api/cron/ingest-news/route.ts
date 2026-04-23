@@ -4,8 +4,13 @@ import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { verifyCronSecret } from "@/lib/auth/cron-secret";
+import {
+  loadSignalInputs,
+  writeSignalEvents,
+} from "@/lib/data/signals";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import { writeIngestRun } from "@/lib/data/snapshot";
+import { computeSignals } from "@/lib/score-engine/signals";
 import {
   fetchAlphaVantageNews,
   type AlphaVantageNewsResult,
@@ -319,6 +324,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       "[cron:ingest-news] ingest_runs audit write failed:",
       auditErr,
     );
+  }
+
+  // ---- 6.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
+  //
+  // Runs even on partial ingestion (signals tolerate null inputs via
+  // state:"unknown"). Soft failure — a signals-tail error does NOT
+  // return 500; the main sentiment write already succeeded.
+  try {
+    const supabase = getSupabaseAdminClient();
+    const signalInputs = await loadSignalInputs(supabase, today);
+    const signalComputation = computeSignals(signalInputs);
+    await writeSignalEvents(supabase, today, signalComputation);
+    revalidateTag(CACHE_TAGS.signals, { expire: 0 });
+  } catch (signalsErr) {
+    const msg =
+      signalsErr instanceof Error ? signalsErr.message : String(signalsErr);
+    console.error("[cron:ingest-news] signals tail failed:", msg);
+    errorSummary = errorSummary
+      ? `${errorSummary}; signals_tail: ${msg}`
+      : `signals_tail: ${msg}`;
   }
 
   // ---- Response ----

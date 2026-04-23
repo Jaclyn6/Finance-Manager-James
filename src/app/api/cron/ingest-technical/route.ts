@@ -4,12 +4,17 @@ import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { verifyCronSecret } from "@/lib/auth/cron-secret";
+import {
+  loadSignalInputs,
+  writeSignalEvents,
+} from "@/lib/data/signals";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import {
   fetchAlphaVantageDaily,
   type AlphaVantageDailyBar,
   type AlphaVantageFetchResult,
 } from "@/lib/score-engine/sources/alpha-vantage";
+import { computeSignals } from "@/lib/score-engine/signals";
 import {
   bollingerBands,
   bollingerToScore,
@@ -202,6 +207,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revalidateTag(CACHE_TAGS.prices, { expire: 0 });
   }
 
+  // ---- 4.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
+  //
+  // Runs even if the main ingestion was partial — signals tolerate
+  // null inputs via state:"unknown" per blueprint §4.5 line 299. Soft
+  // failure (plan §0.5 carve-out): do NOT return 500 if signals-tail
+  // fails; the main ingestion already succeeded. Append error-summary
+  // best-effort instead.
+  try {
+    const signalInputs = await loadSignalInputs(supabase, today);
+    const signalComputation = computeSignals(signalInputs);
+    await writeSignalEvents(supabase, today, signalComputation);
+    revalidateTag(CACHE_TAGS.signals, { expire: 0 });
+  } catch (signalsErr) {
+    const msg =
+      signalsErr instanceof Error ? signalsErr.message : String(signalsErr);
+    console.error("[cron ingest-technical] signals tail failed:", msg);
+    errorSummary = errorSummary
+      ? `${errorSummary}; signals_tail: ${msg}`
+      : `signals_tail: ${msg}`;
+  }
+
   // ---- 5. Response ----
   const status: "success" | "partial" | "error" =
     errorSummary && tickersSuccess === 0
@@ -271,7 +297,7 @@ function computeTickerRows(
   );
 
   // ---- MACD(12,26,9) ----
-  // Requires slowPeriod + signalPeriod - 1 = 34 closes to produce a
+  // Requires slowPeriod + signalPeriod - 2 = 33 closes to produce a
   // first non-null MacdResult. Score needs MACD_SCORE_WINDOW (=90) of
   // histogram history for the z-score (capped to last 90 internally);
   // anything less than 2 history points ⇒ null score.

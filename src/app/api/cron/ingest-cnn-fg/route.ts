@@ -5,8 +5,13 @@ import { timingSafeEqual } from "node:crypto";
 import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  loadSignalInputs,
+  writeSignalEvents,
+} from "@/lib/data/signals";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import { writeIngestRun } from "@/lib/data/snapshot";
+import { computeSignals } from "@/lib/score-engine/signals";
 import { fetchCnnFearGreed } from "@/lib/score-engine/sources/cnn-fear-greed";
 import { MODEL_VERSION } from "@/lib/score-engine/weights";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -159,6 +164,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // aggregator. Per migration 0005 comment.
   if (successCount > 0) {
     revalidateTag(CACHE_TAGS.sentiment, { expire: 0 });
+  }
+
+  // ---- 5.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
+  //
+  // CNN F&G is the OR-arm 2 input for EXTREME_FEAR. Even if this cron's
+  // main write failed, run signals with the most recent stored CNN_FG
+  // value (signals tolerate null inputs via state:"unknown"). Soft
+  // failure: signals-tail errors don't flip the response to 500.
+  try {
+    const supabase = getSupabaseAdminClient();
+    const signalInputs = await loadSignalInputs(supabase, today);
+    const signalComputation = computeSignals(signalInputs);
+    await writeSignalEvents(supabase, today, signalComputation);
+    revalidateTag(CACHE_TAGS.signals, { expire: 0 });
+  } catch (signalsErr) {
+    const msg =
+      signalsErr instanceof Error ? signalsErr.message : String(signalsErr);
+    console.error("[cron ingest-cnn-fg] signals tail failed:", msg);
+    errorSummary = errorSummary
+      ? `${errorSummary}; signals_tail: ${msg}`
+      : `signals_tail: ${msg}`;
   }
 
   const status: "success" | "partial" | "error" =

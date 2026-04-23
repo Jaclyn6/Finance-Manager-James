@@ -3,10 +3,18 @@
  *
  * These strings must match EXACTLY between:
  * - readers calling `cacheTag(...)` inside `'use cache'` scopes
- *   (src/lib/data/indicators.ts, src/lib/data/changelog.ts),
- * - the cron route handler calling `revalidateTag(..., { expire: 0 })`
- *   after a successful ingest (src/app/api/cron/ingest-macro/route.ts,
- *   scheduled for blueprint §9 Step 8).
+ *   (src/lib/data/indicators.ts, src/lib/data/changelog.ts,
+ *   src/lib/data/signals.ts),
+ * - the cron route handlers calling `revalidateTag(..., { expire: 0 })`
+ *   after a successful ingest. Writer call sites:
+ *     - src/app/api/cron/ingest-macro/route.ts
+ *     - src/app/api/cron/ingest-technical/route.ts
+ *     - src/app/api/cron/ingest-onchain/route.ts
+ *     - src/app/api/cron/ingest-news/route.ts
+ *     - src/app/api/cron/ingest-cnn-fg/route.ts
+ *     - src/app/api/cron/ingest-prices/route.ts (prices tag ONLY — the
+ *       price_readings table is visualization-only per blueprint §7.4 and
+ *       has no signal input, so ingest-prices never invalidates `signals`).
  *
  * A typo here silently breaks cache invalidation — the cron succeeds,
  * the DB updates, but stale cached snapshots linger until `cacheLife`
@@ -20,6 +28,7 @@
  *   tags.ts  ──┐
  *              ├──> indicators.ts
  *              ├──> changelog.ts
+ *              ├──> signals.ts
  *              └──> snapshot.ts
  */
 export const CACHE_TAGS = {
@@ -88,6 +97,15 @@ export const CACHE_TAGS = {
    * price history is visualization-only, never a score input.
    */
   prices: "prices",
+  /**
+   * All `signal_events` reads (blueprint §4.5 Signal Alignment engine).
+   *
+   * Invalidated by the tail-call block in EVERY cron ingestion endpoint
+   * (ingest-macro, ingest-technical, ingest-onchain, ingest-news,
+   * ingest-cnn-fg). ingest-prices does NOT invalidate this tag because
+   * price_readings is visualization-only (§8.5) and has no signal input.
+   */
+  signals: "signals",
 } as const;
 
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
