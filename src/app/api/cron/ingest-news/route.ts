@@ -35,14 +35,24 @@ import type { Json, TablesInsert } from "@/types/database";
  *      already provisioned at Phase 1, but a Vercel-env regression
  *      should not abort the hourly workflow's sibling steps (onchain +
  *      cnn-fg). Loud-log + return 200.
- *   3. Issue TWO Alpha Vantage NEWS_SENTIMENT calls, each scoping a
- *      subset of the 7 target tickers. AV's NEWS_SENTIMENT has a
- *      ticker-count cap observed around 4-5 (empirical: 7-ticker calls
- *      return items=0). We split 7 tickers into (4, 3):
- *          Call 1: SPY, QQQ, NVDA, AAPL
- *          Call 2: MSFT, GOOGL, AMZN
- *      Sleep 13s between calls for AV's 5/min limit. Budget: 2/25
- *      daily; combined with 19 technical = 21/25, leaving 4 headroom.
+ *   3. Issue ONE Alpha Vantage NEWS_SENTIMENT call per ticker, 5 total.
+ *      AV's `tickers=a,b,c` parameter is an AND filter (articles must
+ *      mention ALL listed tickers) — discovered empirically during the
+ *      first production smoke: `SPY,QQQ,NVDA,AAPL` returned items=0
+ *      because no article covered all four simultaneously. Per-ticker
+ *      calls are the only way to get 50 articles relevant to each
+ *      ticker independently.
+ *
+ *      Ticker scope narrowed to 5 US large-caps (NVDA, AAPL, MSFT,
+ *      GOOGL, AMZN). SPY and QQQ were dropped from news_sentiment —
+ *      they are broad ETFs whose per-stock news sentiment is not
+ *      well-defined, and blueprint §4.1 only requires "US-focused
+ *      news sentiment" without demanding ETF coverage. SPY/QQQ stay
+ *      in the TECHNICAL ticker registry for RSI/MACD (broad market
+ *      trend), just not here.
+ *
+ *      Sleep 13s between calls for AV's 5/min limit. Budget: 5/25
+ *      daily; combined with 19 technical = 24/25, leaving 1 headroom.
  *   4. Merge aggregates from both responses and for each ticker:
  *      compute `newsSentimentToScore((x + 1) * 50)` → write one row to
  *      `news_sentiment` (asset_type='us_equity'). Delete-then-insert
@@ -52,14 +62,11 @@ import type { Json, TablesInsert } from "@/types/database";
  *      landed — the sentiment card on the dashboard depends on both
  *      this cron and the CNN F&G cron.
  *
- * Ticker scope (blueprint §4.1 US-focused sentiment): SPY, QQQ (broad
- * US indices) + NVDA, AAPL, MSFT, GOOGL, AMZN (5 US large-caps). Phase 2
- * keeps news-sentiment US-focused; crypto and KR-equity sentiment are
- * out of scope until a dedicated feed is added. Kept as a const so the
- * ticker set is grep-visible — silent edits would break the snapshot
- * invariant (§2.2 tenet 2). The (4, 3) split is documented below and
- * must not drift silently: AV's per-call ticker cap was discovered
- * empirically and re-grouping without re-probing will break coverage.
+ * Ticker scope (blueprint §4.1 US-focused sentiment): NVDA, AAPL,
+ * MSFT, GOOGL, AMZN — 5 US large-caps. Phase 2 keeps news-sentiment
+ * US-large-cap-focused; ETFs (SPY/QQQ), crypto, and KR equity are
+ * out of scope. Kept as a const so the ticker set is grep-visible —
+ * silent edits would break the snapshot invariant (§2.2 tenet 2).
  *
  * Idempotency (same-day re-run safety):
  *   The `news_sentiment` unique index is a FUNCTIONAL index on
@@ -106,25 +113,18 @@ import type { Json, TablesInsert } from "@/types/database";
  * remove a ticker, bump `TICKER_LIST_VERSION` in weights.ts AND re-probe
  * AV's per-call ticker cap to confirm the grouping still works.
  *
- * Group 1 = 4 tickers, Group 2 = 3 tickers. Discovered empirically:
- * 7-ticker AV NEWS_SENTIMENT calls return items=0 (silent hidden cap),
- * while (4, 3) splits return full coverage.
+ * 5 US large-caps only — ETFs (SPY/QQQ) excluded per route-header
+ * rationale (AV's AND-semantics on `tickers=` means multi-ticker calls
+ * return items=0 for unrelated groupings; broad ETFs rarely share
+ * articles with individual stocks).
  */
-const NEWS_TICKER_GROUP_1: readonly string[] = [
-  "SPY",
-  "QQQ",
+const ALL_NEWS_TICKERS: readonly string[] = [
   "NVDA",
   "AAPL",
-] as const;
-const NEWS_TICKER_GROUP_2: readonly string[] = [
   "MSFT",
   "GOOGL",
   "AMZN",
 ] as const;
-const ALL_NEWS_TICKERS: readonly string[] = [
-  ...NEWS_TICKER_GROUP_1,
-  ...NEWS_TICKER_GROUP_2,
-];
 
 /** `news_sentiment.source_name` label. */
 const AV_NEWS_SOURCE_NAME = "alpha_vantage";
@@ -151,7 +151,9 @@ const RAW_PAYLOAD_SAMPLE_SIZE = 5;
  */
 const SENTIMENT_FALLBACK_SCORE = 50;
 
-export const maxDuration = 60;
+// 5 sequential AV calls × 13s sleep between = ~52s + fetch + writer.
+// Bump to 120s to leave a comfortable safety margin for slow AV responses.
+export const maxDuration = 120;
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const startMs = Date.now();
@@ -217,22 +219,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const supabase = getSupabaseAdminClient();
 
-    // ---- 3. Two AV calls with a 13s pace gap ----
-    const call1 = await fetchAlphaVantageNews(NEWS_TICKER_GROUP_1, {
-      limit: AV_LIMIT,
-    });
-    await sleep(AV_INTER_CALL_SLEEP_MS);
-    const call2 = await fetchAlphaVantageNews(NEWS_TICKER_GROUP_2, {
-      limit: AV_LIMIT,
-    });
+    // ---- 3. One AV call per ticker, sequential with 13s pacing ----
+    //
+    // AV's `tickers=` parameter is AND-semantics — multi-ticker calls
+    // filter to articles mentioning ALL listed tickers, which drops
+    // unrelated groupings to items=0. Per-ticker calls are the only
+    // way to guarantee 50 relevant articles for each target.
+    const perTickerResults = new Map<string, AlphaVantageNewsResult>();
+    for (let i = 0; i < ALL_NEWS_TICKERS.length; i++) {
+      const ticker = ALL_NEWS_TICKERS[i];
+      if (i > 0) {
+        // 13s sleep BEFORE each call except the first — respects AV's
+        // 5/min ceiling (12s minimum; 1s safety margin).
+        await sleep(AV_INTER_CALL_SLEEP_MS);
+      }
+      const result = await fetchAlphaVantageNews([ticker], { limit: AV_LIMIT });
+      perTickerResults.set(ticker, result);
+    }
 
     // ---- 4. Per-ticker write ----
-    //
-    // Every target ticker appears in exactly one call's `aggregates`
-    // map. We iterate the flat list so the write order matches the
-    // canonical ticker list (grep-friendly logs).
     for (const ticker of ALL_NEWS_TICKERS) {
-      const groupResult = NEWS_TICKER_GROUP_1.includes(ticker) ? call1 : call2;
+      const groupResult = perTickerResults.get(ticker);
+      if (!groupResult) continue;
       const aggregate: AlphaVantageTickerAggregate | undefined =
         groupResult.aggregates[ticker];
 
