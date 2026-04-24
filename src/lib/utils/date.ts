@@ -33,6 +33,25 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 export const PROJECT_EPOCH = "2026-01-01";
 
 /**
+ * Rolling history window for the date-picker floor, in days.
+ *
+ * Phase 2 Step 11 (PRD §11.6) bumps this from **30 → 180** so the
+ * history chart on `/asset/[slug]` can show up to six months of
+ * context, matching the technical-signals window (SMA 200, etc.).
+ *
+ * The effective picker floor is `max(PROJECT_EPOCH, today - 180)` —
+ * the hard `PROJECT_EPOCH` guard is retained so pre-epoch dates stay
+ * unreachable regardless of how far this window grows.
+ *
+ * UI-only floor: snapshot data in the 180-day window may be sparse
+ * until a post-cutover backfill completes (blueprint §9 Step 11 line
+ * 701). `sanitizeDateParam` still accepts any in-range date; sparse
+ * days fall through to `NoSnapshotNotice` rather than silently
+ * snapping back to "latest".
+ */
+export const HISTORY_WINDOW_DAYS = 180;
+
+/**
  * Returns today's date in UTC as `YYYY-MM-DD`. All `new Date()`
  * calls in the app go through this helper so UTC vs local-time
  * confusion stays at one audit point. Call site must already be in
@@ -99,6 +118,28 @@ export function computeDateWindow(
     start: formatIsoDate(startDate),
     end: formatIsoDate(endDate),
   };
+}
+
+/**
+ * Effective date-picker floor: `max(PROJECT_EPOCH, today - HISTORY_WINDOW_DAYS)`.
+ *
+ * Phase 2 Step 11: the picker allows scrubbing back up to
+ * `HISTORY_WINDOW_DAYS` (180 today), but never past `PROJECT_EPOCH`
+ * since pre-epoch dates have no data and no meaningful UI state.
+ *
+ * Kept as a pure helper (takes `today` explicitly) so it's safe to
+ * call from Client Components, Server Components, and tests without
+ * hitting the clock.
+ *
+ * @param today — `YYYY-MM-DD` upper bound, usually `todayIsoUtc()`.
+ */
+export function computePickerFloor(today: string): string {
+  if (!isValidIsoDate(today)) return PROJECT_EPOCH;
+  const todayMs = new Date(`${today}T00:00:00Z`).getTime();
+  const rolling = formatIsoDate(
+    new Date(todayMs - HISTORY_WINDOW_DAYS * MS_PER_DAY),
+  );
+  return rolling < PROJECT_EPOCH ? PROJECT_EPOCH : rolling;
 }
 
 /**

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HISTORY_WINDOW_DAYS,
   PROJECT_EPOCH,
   computeDateWindow,
+  computePickerFloor,
   formatIsoDate,
   isValidIsoDate,
   sanitizeDateParam,
@@ -86,6 +88,30 @@ describe("computeDateWindow", () => {
       start: "2026-04-19",
       end: "2026-04-19",
     });
+  });
+});
+
+describe("computePickerFloor", () => {
+  it("uses HISTORY_WINDOW_DAYS (180) when the rolling window is after PROJECT_EPOCH", () => {
+    // 2027-06-30 − 180d = 2027-01-01, well after the 2026-01-01 epoch.
+    expect(computePickerFloor("2027-06-30")).toBe("2027-01-01");
+    // Sanity: constant is 180 and kept in sync with the computation.
+    expect(HISTORY_WINDOW_DAYS).toBe(180);
+  });
+
+  it("clamps to PROJECT_EPOCH when the rolling window reaches back past it", () => {
+    // 2026-04-24 − 180d = 2025-10-26, before 2026-01-01. Must clamp.
+    expect(computePickerFloor("2026-04-24")).toBe(PROJECT_EPOCH);
+  });
+
+  it("returns PROJECT_EPOCH for the epoch itself", () => {
+    // today == epoch ⇒ rolling floor = epoch − 180d, clamp back to epoch.
+    expect(computePickerFloor(PROJECT_EPOCH)).toBe(PROJECT_EPOCH);
+  });
+
+  it("falls back to PROJECT_EPOCH for invalid input", () => {
+    expect(computePickerFloor("not-a-date")).toBe(PROJECT_EPOCH);
+    expect(computePickerFloor("")).toBe(PROJECT_EPOCH);
   });
 });
 

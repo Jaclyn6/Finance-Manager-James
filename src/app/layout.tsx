@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
+import { ServiceWorkerRegistration } from "@/components/shared/service-worker-registration";
 import { ThemeProvider } from "@/components/theme-provider";
 
 /**
@@ -23,6 +24,25 @@ export const metadata: Metadata = {
   title: "Investment Advisor Dashboard",
   description:
     "가족용 투자 어드바이저 대시보드 — 매크로·기술적·온체인 데이터로 비중 확대/유지/축소 판단을 제공합니다.",
+  // PWA (Phase 2 Step 12). Web app manifest + iOS-specific hints. The
+  // manifest lives at `public/manifest.webmanifest`; Next serves it at
+  // `/manifest.webmanifest` without a route handler.
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Investment",
+    // `black-translucent` lets our app content render under the status
+    // bar in a "fullscreen" feel while keeping the clock/battery
+    // readable on light+dark backgrounds.
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: "/icons/192.svg",
+    // TODO(Phase 3): generate 180×180 / 192×192 / 512×512 PNGs from
+    // icons/*.svg — iOS Safari A2HS still prefers PNG for apple-touch-icon;
+    // SVG fallback works on Safari ≥ 14 but is fragile on older iOS.
+    apple: "/icons/192.svg",
+  },
 };
 
 /**
@@ -60,6 +80,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>{children}</ThemeProvider>
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

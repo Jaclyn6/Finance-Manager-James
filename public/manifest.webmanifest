@@ -1,0 +1,17 @@
+{
+  "name": "Investment Advisor Dashboard",
+  "short_name": "Investment",
+  "description": "가족 전용 매크로 + 기술적 + 온체인 합성 점수 대시보드",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#7132f5",
+  "background_color": "#ffffff",
+  "lang": "ko",
+  "icons": [
+    { "src": "/icons/192.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/icons/512.svg", "sizes": "512x512", "type": "image/svg+xml" },
+    { "src": "/icons/maskable-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

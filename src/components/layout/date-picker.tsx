@@ -11,7 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  PROJECT_EPOCH,
+  computePickerFloor,
   sanitizeDateParam,
   todayIsoUtc,
 } from "@/lib/utils/date";
@@ -56,6 +56,7 @@ export function DatePicker() {
   const searchParams = useSearchParams();
 
   const today = todayIsoUtc();
+  const floor = computePickerFloor(today);
   const rawDate = searchParams.get("date") ?? undefined;
   const selected = sanitizeDateParam(rawDate, today);
   // The input's `value` attribute must always be a valid YYYY-MM-DD,
@@ -87,7 +88,7 @@ export function DatePicker() {
       <input
         type="date"
         aria-label="날짜 선택"
-        min={PROJECT_EPOCH}
+        min={floor}
         max={today}
         value={displayDate}
         onChange={(e) => updateDate(e.target.value || null)}
@@ -127,7 +128,7 @@ export function DatePicker() {
                 if (date) updateDate(localDateToIso(date));
               }}
               disabled={{
-                before: isoToLocalDate(PROJECT_EPOCH),
+                before: isoToLocalDate(floor),
                 after: isoToLocalDate(today),
               }}
               autoFocus
