@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
  * run client-side. This wrapper takes a pre-computed shape as its prop
  * so the parent (a Server Component) can await the DB read inside
  * `'use cache'` and this file never imports the admin client. Same
- * pattern as {@link ScoreTrendLine}.
+ * pattern as {@link ScorePriceOverlay}.
  *
  * ─ a11y ─────────────────────────────────────────────────────────────
  * The outer `<div role="img" aria-label="...">` announces the full

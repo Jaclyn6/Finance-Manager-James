@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
 import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { ContributingIndicators } from "@/components/asset/contributing-indicators";
-import { ScoreTrendLine } from "@/components/asset/score-trend-line";
+import { ScorePriceOverlay } from "@/components/asset/score-price-overlay";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
 import {
   getClosestEarlierSnapshotDate,
@@ -13,9 +13,13 @@ import {
   getLatestCompositeSnapshots,
 } from "@/lib/data/indicators";
 import { getCurrentModelCutoverDate } from "@/lib/data/model-version";
+import { getPriceHistoryForTicker } from "@/lib/data/prices";
 import { getLatestSignalEvent } from "@/lib/data/signals";
 import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
-import { ASSET_LABELS } from "@/lib/utils/asset-labels";
+import {
+  ASSET_LABELS,
+  pickRepresentativeTicker,
+} from "@/lib/utils/asset-labels";
 import { slugToAssetType } from "@/lib/utils/asset-slug";
 import { sanitizeDateParam, todayIsoUtc } from "@/lib/utils/date";
 
@@ -59,21 +63,33 @@ export async function AssetContent({
   }
 
   const anchorDate = selectedDate ?? today;
+  const representativeTicker = pickRepresentativeTicker(assetType);
 
-  // Three cached reads in parallel. Each has its own cache key so
-  // same-date reloads are hits on all three. Trend window is keyed
-  // on (assetType, anchorDate, TREND_WINDOW_DAYS). The cutover-date
-  // reader is tagged `modelVersion` with daily cache-life, so it
-  // joins the parallel batch cheaply and lets us pass the date as a
-  // plain string prop to the client Recharts wrapper (which must
-  // not touch Supabase itself — that would ship the admin client to
-  // the browser).
-  const [snapshots, trendSeries, cutoverDate, signalEvent] = await Promise.all([
+  // Five cached reads in parallel. Each has its own cache key so
+  // same-date reloads are hits on all of them. The trend window is
+  // keyed on (assetType, anchorDate, TREND_WINDOW_DAYS); the price
+  // window on (ticker, anchorDate, TREND_WINDOW_DAYS). The
+  // cutover-date reader is tagged `modelVersion` with daily
+  // cache-life. Price reader lives behind the `prices` tag
+  // (blueprint §7.4 visualization-only) and is invalidated by
+  // ingest-prices + ingest-technical.
+  const [
+    snapshots,
+    trendSeries,
+    priceSeries,
+    cutoverDate,
+    signalEvent,
+  ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
       : getCompositeSnapshotsForDate(selectedDate),
     getCompositeSnapshotsForAssetRange(
       assetType,
+      anchorDate,
+      TREND_WINDOW_DAYS,
+    ),
+    getPriceHistoryForTicker(
+      representativeTicker,
       anchorDate,
       TREND_WINDOW_DAYS,
     ),
@@ -155,13 +171,19 @@ export async function AssetContent({
       */}
       <CompositeStateCard snapshot={snapshot} />
 
-      <ScoreTrendLine
-        data={trendSeries.map((s) => ({
+      <ScorePriceOverlay
+        scoreData={trendSeries.map((s) => ({
           snapshot_date: s.snapshot_date,
           score_0_100: s.score_0_100,
         }))}
+        priceData={priceSeries.map((p) => ({
+          price_date: p.price_date,
+          close: p.close,
+        }))}
         rangeDays={TREND_WINDOW_DAYS}
         cutoverDate={cutoverDate}
+        referenceDate={selectedDate}
+        ticker={representativeTicker}
       />
 
       <ContributingIndicators

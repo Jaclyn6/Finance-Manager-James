@@ -73,8 +73,10 @@ import { CACHE_TAGS } from "./tags";
  * policy.
  *
  * The UI surfaces which version produced each displayed row via the
- * `ScoreTrendLine` cutover ReferenceLine (Step 6) and the header
- * `ModelVersionBadge`. Phase 3 backtest replay against a pinned
+ * `ScorePriceOverlay` cutover ReferenceLine (originally introduced on
+ * the Step 6 `ScoreTrendLine`, migrated into `ScorePriceOverlay` at
+ * Phase C Step 10 when the single-axis trend component was retired)
+ * and the header `ModelVersionBadge`. Phase 3 backtest replay against a pinned
  * historical version should add a parallel version-scoped reader
  * (`getCompositeSnapshotsForDateAndVersion`) rather than re-adding
  * the hard filter here.
