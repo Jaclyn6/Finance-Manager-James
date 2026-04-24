@@ -2,96 +2,107 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-23 17:55 UTC (manual `/handoff`, Phase C Steps 1-7 complete + production smoke-tested + Finnhub→AV news swap landed; pre-Step 7.5)
+2026-04-25 (session end; Phase C Steps 7.5–12 all shipped in one continuous session; production deployed + Chrome MCP visual-verified). Pre-Step 13 final feature-unit review.
 
 ## 2. Current Phase / Step
 
-**Phase C Steps 1–7 COMPLETE** per `docs/phase2_architecture_blueprint.md` §9. All 5 cron endpoints deployed to production + smoke-tested end-to-end. Reading tables (`indicator_readings`, `technical_readings`, `onchain_readings`, `news_sentiment`, `price_readings`) all populated with real data from today's ingestion.
+**Phase C Steps 1–12 COMPLETE** per `docs/phase2_architecture_blueprint.md` §9. Production aliased at `https://finance-manager-james.vercel.app` (deployment `dpl_6UR1Jjwr5ej9qa3QSLbpdx2LdFMa`, URL `finance-manager-2sauplute-jaclyn6s-projects.vercel.app`). 452 tests green. tsc clean. Turbopack build green.
 
-**Next: Phase C Step 7.5 — Signal Alignment Engine** (blueprint §9 lines 649–657). Scope: `src/lib/score-engine/signals.ts` (pure functions, stub already exists from Step 1), `src/lib/data/signals.ts` (reader + writer), trailing `signals.compute` call inside every cron ingestion, 18+ unit tests. PK `(snapshot_date, signal_rules_version)` on `signal_events` table (migration 0006 already applied).
+**Next: Phase C Step 13 — Phase 2 deploy + smoke matrix + UI polish + handoff** (blueprint §9 lines 719–727). Scope: run the §10 acceptance matrix end-to-end, fold in residual polish (`size-9→size-11` on theme-toggle / sign-out per handoff-old §7, Phase 1 §5 routing table doc sync, `motion-safe:` on residual shadcn animations), and run CLAUDE.md **Trigger 2** (feature-completion review — 5-agent pass over the FULL Phase 2 diff from `main` divergence, not just the tip commit).
 
 ## 3. Last Commit
 
-`a076d84` — `fix(phase2): ingest-news — per-ticker AV calls (discovered AND-semantics)` on `main`. Origin in sync (no unpushed). Working tree clean (AV probe scratch files deleted just now).
+`224a63c` — `feat(phase2): Step 11 + 12 — 180-day history extension + PWA shell` on `main`. Pushed to origin. Working tree clean.
 
 ## 4. Active Thread
 
-- **Just finished (this session):**
-  - **Steps 1–6 implementation + 5-agent reviews + fixes** (11 commits: 4ea12f8 → 08a21c6). Summary: schema migrations 0005–0010, sentiment engine, on-chain engine, technical engine, composite v2 with 6-category structure (macro/technical/onchain/sentiment/valuation/regional_overlay), MODEL_VERSION v1→v2 cutover UI (dashboard badge + trend-chart ReferenceLine).
-  - **Step 7 (cron v2 + GHA workflows)**: 5 new cron endpoints + 3 GHA workflows + ingest-macro extended to 11 FRED series + PHASE2_FRED_REGIONAL_OVERLAY constant. Commits 3343472 / 5514c2c / 34df3e6.
-  - **Production deployment + secrets setup**: Installed `vercel` CLI check, registered `CRON_SECRET` + `PRODUCTION_URL` + `FINNHUB_API_KEY` as GitHub repo secrets (via `gh secret set`), added `FINNHUB_API_KEY` to Vercel Production env, deployed 4× to prod (commits 3343472 → a076d84).
-  - **Finnhub → Alpha Vantage NEWS_SENTIMENT swap** (two commits: 09842bb + a076d84). Finnhub's `/news-sentiment` is paid-only on the free tier; AV's `NEWS_SENTIMENT` works free AND provides pre-computed sentiment scores. Smoke-test during the initial swap revealed AV's `tickers=` parameter is AND-semantics (not OR as first assumed): `SPY,QQQ,NVDA,AAPL` returns 0 articles because no single article covers all 4 ETFs+megacaps. Refactored to per-ticker calls; dropped SPY/QQQ from the news ticker registry (kept in TECHNICAL for broad-market RSI/MACD). Final production run: 5/5 tickers × 50 articles each, sentiment scores 55-64 range ("Somewhat-Bullish").
-  - **DB hygiene**: cleaned 2026-04-23 v1 residue (5 composite + 5 changelog rows from pre-redeploy old-deployment cron) + SPY/QQQ stale partial rows from initial 2-group news run.
-- **About to start (next session):** Phase C **Step 7.5 — Signal Alignment Engine**. Implement `computeSignals` in `src/lib/score-engine/signals.ts` (stub from Step 1), data reader/writer in `src/lib/data/signals.ts`, wire `signals.compute` tail call into every cron endpoint, add signal-card UI at Step 8.5.
-- **Not blocked** — all environment is provisioned, all production endpoints return meaningful data.
+- **This session shipped 5 numbered steps + 5 commits (71fd1be → 224a63c):**
+  - `71fd1be` Step 7.5 — Signal Alignment Engine (8 evaluators, 54 tests, 5-cron tail wire-up, cache tag, 10 review fixes)
+  - `0f8211c` Step 8 + 8.5 — Contributing Indicators UI v2 (6-category grouping + Recharts stacked bar) + SignalAlignmentCard (6/7-tile, per-asset filtering, Radix tooltips, disclaimer) + 9 review fixes including F1 duplicate-removal (filterSignalsForAsset → engine's signalsForAssetType single source of truth)
+  - `2f4d36d` Step 9 + 10 — `src/lib/data/prices.ts` reader (visualization-only, `server-only`, §7.4 invariant guarded) + `ScorePriceOverlay` Recharts ComposedChart (dual Y-axis score/price, Δ% tooltip, cutover ReferenceLine preserved) + REPRESENTATIVE_TICKER_BY_ASSET (SPY / 005930.KS / BTC / GLD — all in §3.2 registry) + 6 review fixes including F4 deletion of now-dead ScoreTrendLine
+  - `224a63c` Step 11 + 12 — 180d date-picker floor (`HISTORY_WINDOW_DAYS = 180` + `computePickerFloor(today)`) + PWA shell (manifest.webmanifest, sw.js shell cache, 3 SVG icons, ServiceWorkerRegistration Client Component in layout.tsx) + 3 review fixes (F1 SW skips non-OK, F2 SW bypasses RSC/_next/data/?_rsc=, F3 iOS A2HS PNG-todo comment)
+- **Production deployment verified this session (Chrome MCP `mcp__Claude_in_Chrome__*`):**
+  - Local `http://localhost:3000/dashboard` + `/asset/crypto` confirmed SignalAlignmentCard **above** CompositeStateCard (plan §0.5 tenet 4), 7-tile crypto variant, empty-state "대기 구간" (signal_events empty — expected), Step 8 v2 "1/6 카테고리 반영" chip + nested FRED indicator rows, Step 10 overlay with aria-label "점수 38.6~47.0, BTC 최근가 $77.8k, 2026-04-23 모델 v2.0.0 전환".
+  - Production `https://finance-manager-james.vercel.app/dashboard` renders identical UX after deploy. Zero console errors.
+- **Test count**: 452/452 green (+96 from last handoff: 54 signals + 22 UI parsers + 20 mergeByDate/computeDeltaPercent/findReferencePrice).
+- **No blockers**. Step 13 is a polish + acceptance-matrix run.
 
 ## 5. Pending User Decisions
 
-- None. Step 7 verified end-to-end. Step 7.5 starts fresh with pure-math work that mirrors Step 3/4 patterns.
+- None. Step 13 scope is well-defined in blueprint; proceed to acceptance matrix + Trigger 2 review + prod smoke of the cron cadence over the next 7 days.
 
 ## 6. Recent Context (last 5 commits)
 
-- `a076d84` ingest-news per-ticker rewrite — AV AND-semantics discovery forced the 2-group (4,3) split to become 5 single-ticker calls
-- `09842bb` Finnhub→AV NEWS_SENTIMENT swap — added new adapter + parser + 18 tests, route rewritten; Finnhub files intentionally kept as future paid-plan fallback
-- `34df3e6` composite_snapshots reader — secondary sort on `model_version DESC` handles cutover-day v1/v2 tie-break
-- `5514c2c` ingest-prices — dedupe CoinGecko bars by price_date (upstream can return today twice; Postgres 21000 cardinality violation fix)
-- `3343472` Step 7 main — 5 cron endpoints + 3 GHA workflows + FRED expansion + shared `verifyCronSecret` helper
+- `224a63c` Step 11 + 12 — 180-day extension + PWA (manifest, SW, icons). Fix pack: SW skips 4xx/5xx, RSC/_next/data bypass, iOS A2HS TODO.
+- `2f4d36d` Step 9 + 10 — prices reader + ComposedChart overlay. F4 deleted ScoreTrendLine; palette migrated to `--chart-1`/`--chart-2` theme tokens.
+- `0f8211c` Step 8 + 8.5 — 4-category contributing grouping + signal alignment card hero placement. 9 review fixes including dedupe of filterSignalsForAsset, cutover-day badge wired, chart tokens for regional_overlay (`--chart-6` added).
+- `71fd1be` Step 7.5 — Signal Alignment Engine 8 evaluators + 5-cron tail wire-up. 10 review fixes including CryptoAssetType 7-not-8 signals, computed_at refresh, DISPARITY split-per-ticker, file-level null-policy JSDoc rewrite.
+- `ba2b1f2` Handoff snapshot pre-7.5.
 
 ## 7. Open Issues to Watch
 
-### Production data gaps (Phase 2 deferred, not Step 7.5 blockers)
+### Production data gaps (expected bootstrap state)
 
-- **Unofficial API partial failures** (blueprint §3.1 expected risk): `ingest-onchain` today returned 1/4 sources success; `ingest-cnn-fg` returned 500 (CNN Markets Data endpoint refused our User-Agent or shape changed). The `ingest_runs` audit row captures these; UI staleness badge (Step 8) will surface. Reassess at `docs/phase2_architecture_blueprint.md` §3.1 TTLs — 2h stale threshold means onchain data shows amber after 2h-without-success.
-- **`ingest-technical` not yet smoke-tested in production**. Endpoint expects ~247s (19 Alpha Vantage tickers × 13s sleep) and maxDuration=300. GHA workflow `cron-technical.yml` at 22:00 UTC daily will be the first real execution. Verify `technical_readings` populates after first automatic run (UTC tomorrow morning for the user).
-- **ingest-onchain `etfFlowToScore` bootstrap**: needs ≥2 prior days of history to produce a non-null score. Today's run writes the first day; `CoinGlass BTC_ETF_NETFLOW` score will be null until day 2+. Expected; surfaces via `fetch_status='partial'`.
-- **First automatic Vercel cron run**: 2026-04-24 06:00 UTC for `ingest-macro` (Vercel Hobby daily slot, unchanged from Phase 1). Monitor Vercel Dashboard → Cron Jobs for the first auto-trigger + confirm v2 row lands.
+- **`signal_events` table empty** until next cron tail runs post-deploy. Chrome MCP confirmed empty-state "대기 구간" on production dashboard — will flip to N/6 on first successful `/api/cron/ingest-*` run. Tail is wired in 5 endpoints (macro/technical/onchain/news/cnn-fg); expect first signals row by `2026-04-25 22:00 UTC` (GHA cron-technical).
+- **Production `ingest-technical` still awaiting its first GHA automatic run**. Manual dispatch possible via `gh workflow run cron-technical.yml`. Once triggered, verify `technical_readings` populates 19 tickers × 6 indicators and `price_readings` gains AV bars (currently only crypto via CoinGecko, 1095 rows).
+- **Composite v2 only populated for `macro` category** today. `/asset/crypto` shows "1/6 카테고리 반영" — the UI correctly surfaces the transparency. technical/onchain/sentiment categories will come online as `ingest-macro` at 06:00 UTC starts consuming the Step 7 reading tables into `composite_snapshots.contributing_indicators.{technical|onchain|sentiment}` (TODO: wire category-specific score computation into ingest-macro; blueprint §4.2 hook currently only computes macro).
+  - **This is NOT a Step 13 bug — it's the gradual-rollout model per plan §0.2 #9. But it IS Phase 2 scope.** Logging as follow-up before Trigger 2.
+- **ingest-cnn-fg 500s persist**. CNN UA block not resolved. PRD §10.4 `EXTREME_FEAR = VIX ≥ 35 || CNN_FG < 25` — OR degrades gracefully, signal fires on VIX alone. Phase 3 replacement candidate.
+- **ingest-onchain 1/4 success rate** (CoinGlass ETF flow + alternative.me CryptoFG fail intermittently). Bootstrap condition: etfFlow score requires ≥ 2 prior days to produce non-null.
 
-### Tech debt / deferred work
+### UI polish carried to Step 13
 
-- **Finnhub adapter files unused.** `src/lib/score-engine/sources/finnhub.ts`, `finnhub-parse.ts`, `finnhub-parse.test.ts` + `sentiment.ts`'s `finnhubSentimentToScore` still in the codebase. Kept intentionally as a future paid-plan (~$35/mo) fallback. Do not delete unless the user explicitly opts out.
-- **`FINNHUB_API_KEY`** still present in Vercel Production env + `.env.local` + GitHub repo secrets. Unused by current code. Leave in place (future fallback); user can rotate or remove when the paid-plan decision is made.
-- **`ingest-cnn-fg` unreliability.** CNN's dataviz endpoint denies our requests (likely User-Agent filter change). PRD §10.4 `EXTREME_FEAR` signal is `VIX ≥ 35 || CNN_FG < 25` — the OR lets VIX alone fire the signal, so CNN outage degrades gracefully at Step 7.5. Monitor; if CNN stays broken for 7+ days, consider using Alternative.me data or Phase 3 replacement.
-- **Alpha Vantage budget tightness**: 19 technical + 5 news = 24/25 daily free-tier calls. One retry burns the headroom. If AV backfill is needed for historical technical data, user must upgrade to Premium (~$50/mo, 75/day).
-- **Step 6 review R3.4 — `missingCategories` not persisted to DB.** Per-asset `CompositeResultV2.missingCategories` lives only in memory; dashboard can't distinguish "category N/A for asset" from "category currently missing data". Step 8 UI scope.
-- **Step 6 review R1.2 residue**: blueprint §4.2 table kept as-is (separate `regional_overlay` category). If a future blueprint revision wants to fold it back into macro, the weights.ts change is trivial but will need test updates.
-- **`next-themes` hydration mismatch**: unrelated, pre-existing from Phase 1; manifests as a transient console warning. Low priority.
+- `ThemeToggle` + `SignOutButton` `size-9` → `size-11` for 44×44 touch targets on mobile (PRD §6.5 a11y floor).
+- Header "오늘의 투자 환경" desktop vs mobile route-aware text — switches on `/asset/[slug]` on desktop currently; verify mobile.
+- `motion-safe:` prefix on residual shadcn animation utilities (particularly the Sheet slide-in).
+- Phase 1 §5 routing-table docs mention legacy Step 10 behaviors; bring in line with Step 10 v2.
+- PNG icon generation for iOS Safari A2HS reliability (currently SVG; Phase 3 TODO in layout.tsx).
 
-### Workflow gotchas for next session
+### Tech debt / deferred
 
-- **CLAUDE.md Trigger 1 for Step 7.5**: Step 7.5 includes signal-card UI at §8.5 (blueprint Step 8.5 is the actual UI work, but Step 7.5 is pure-math — Trigger 1 visual verification applies at 8.5, not 7.5). For 7.5, the 5-agent review runs post-commit without preview_start.
-- **Step 7.5 tests touch the `signal_events` DB table**. Make sure migration 0006 is still applied (it is — verified in session). Any new signal-input columns would require a new migration.
-- **Ingest endpoints need the trailing `signals.compute` call** at Step 7.5 tail. Current cron endpoints (3343472 + subsequent) do NOT yet call signals.compute — that's the Step 7.5 wire-up per blueprint §9 Step 7.5 scope.
+- **Finnhub adapter files** (`finnhub.ts`, `finnhub-parse.ts`, `finnhub-parse.test.ts`, `finnhubSentimentToScore`) remain in the codebase unused. Keep as future paid-plan (~$35/mo) fallback. `FINNHUB_API_KEY` still provisioned in Vercel prod + `.env.local` + GH repo secrets — unused today.
+- **Alpha Vantage budget tightness**: 24/25 daily free-tier calls (19 technical + 5 news). One retry burns headroom. Backfill requires Premium upgrade (~$50/mo).
+- **Signal rules cutover badge (`isRulesCutoverDay`)**: wired at Step 8.5 F4 fix; fires only when a historical signal_events row's `signal_rules_version` mismatches the engine's current `SIGNAL_RULES_VERSION`. No actual cutover has happened yet (still v1.0.0). Re-verify rendering when v1.1.0+ lands.
+- **`ScoreTrendLine` deleted** at Step 10 F4. Any external doc that still references it should be updated (no callers in-repo; blueprint markdown cross-references still point at the old name — leave alone per CLAUDE.md doc-only scope rule).
+- **`FINNHUB_API_KEY` Vercel env var** still present; safe to leave.
+
+### Workflow gotchas for Step 13
+
+- **CLAUDE.md Trigger 2** — full Phase 2 diff review, NOT just tip commit. Diff span: from last Phase-1 commit through 224a63c. Use `git log --oneline ba2b1f2..224a63c` as the surface.
+- **GHA workflows** — `cron-technical.yml` @ 22:00 UTC + `cron-hourly.yml` @ 0 * * * * UTC. First post-deploy technical run tonight.
+- **Production deploy freshness**: today's deploy URL is `dpl_6UR1Jjwr5ej9qa3QSLbpdx2LdFMa` aliased to `finance-manager-james.vercel.app`. Vercel daily cron for `/api/cron/ingest-macro` @ 06:00 UTC already uses the freshest deploy.
+- **Service worker cache name `finance-shell-v1`** — future SW updates must bump the version OR the old SW will serve stale shell HTML until its `finance-shell-v1` cache is manually purged. Plan to bump to `v2` on the next material layout change.
+- **Session cookies persist across Chrome MCP navigation** — `jw.byun@toss.im` is already authenticated in the current `tabGroupId=690806389`. Future Chrome MCP checks don't need login if the tab is reused.
 
 ## 8. Environment State
 
-- **Stack**: Next.js 16.2.4 (Turbopack, `cacheComponents: true`), React 19.2.4, Tailwind v4, `@supabase/ssr` 0.10.2, TypeScript 5 strict, `next-themes` 0.4, Recharts 3.8.1, Vitest 4.1.4. shadcn: badge/button/calendar/card/input/label/popover/separator/sheet/skeleton/tooltip. react-day-picker 9.14.0. dotenv + tsx devDeps. Node v24.15.0, npm 11.12.1, Vercel CLI 52.0.0.
-- **Test count**: 356/356 green (Phase 1 108 baseline + Step 2 67 parser + Step 3 59 technical + Step 4 41 onchain + Step 5 29 sentiment + Step 6 18 composite-v2 + Step 7 9 ticker-registry + Step 7 18 AV-news-parser + 7 regression/kr-overlay).
-- **Cache model**: Path B (`cacheComponents: true`). Admin client inside `'use cache'` allowed (family-wide). `cookies()/headers()/connection()` banned inside cached scopes.
-- **File renames**: `middleware.ts` → `proxy.ts` (Next 16.2 invariant, unchanged).
-- **`server-only` split**: every `{source}.ts` + `_back-off.ts` + `_redact.ts` carries the guard; every `-parse.ts` does NOT; parsers Node-env safe for scripts.
-- **MCP servers** (project-scope `.mcp.json`): `figma`, `supabase`, `context7`, `alphavantage`. Supabase MCP authenticated this session (org `fqiwclzqwmufqbcankjd`, project `hhohrclmfsvpkigbdpsb`).
-- **`.env.local` keys** (git-ignored, names only): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`, `FINNHUB_API_KEY` (added this session, currently unused by code), `VERCEL_OIDC_TOKEN`.
-- **Vercel**: project `finance-manager`, team `jaclyn6s-projects`, Hobby plan. Production alias `finance-manager-james.vercel.app`. Last deploy URL `finance-manager-eryco9z3f-jaclyn6s-projects.vercel.app` (commit a076d84). Env vars in Production: 7 total incl. `FINNHUB_API_KEY` (added this session). Production cron `0 6 * * *` for `ingest-macro` only (unchanged Phase 1 config).
-- **GitHub repo secrets** (Jaclyn6/Finance-Manager-James): `CRON_SECRET`, `PRODUCTION_URL` (`https://finance-manager-james.vercel.app`), `FINNHUB_API_KEY` — all provisioned this session via `gh secret set`.
-- **Supabase**: `hhohrclmfsvpkigbdpsb` (ap-northeast-2 Seoul, Postgres 17.6.1.104, free plan). Migrations 0001–0010 applied. Auth: signups disabled, 3 family users hand-provisioned (`jw.byun@toss.im` + `edc0422@...` + `odete4@...`). Site URL = `https://finance-manager-james.vercel.app`.
-- **GitHub**: `Jaclyn6/Finance-Manager-James` private. `gh` CLI auth'd as `Jaclyn6`. 3 GHA workflows present (`cron-technical.yml`, `cron-hourly.yml`) — first scheduled run: `cron-hourly` on the next UTC hour, `cron-technical` 22:00 UTC daily.
-- **Data state** (2026-04-23 17:55 UTC snapshot):
-  - `composite_snapshots`: 155 v1 rows (2026-03-21 → 2026-04-22) + 5 v2 rows (2026-04-23, one per asset_type)
-  - `indicator_readings`: 11 FRED series for today (7 Phase 1 + ICSA/WDTGAL signal-only + DTWEXBGS/DEXKOUS regional overlay)
-  - `price_readings`: 1095 crypto rows (BTC/ETH/SOL × 365 days backfilled by CoinGecko)
-  - `onchain_readings`: 5 rows today (1 success + 4 error from Bitbo/CoinGlass/alternative.me)
-  - `news_sentiment`: 5 rows (5 US large-caps, all success, sentiment 55-64 range)
-  - `technical_readings`: 0 rows (endpoint works, not yet triggered in production — awaits 22:00 UTC GHA run)
-  - `signal_events`: 0 rows (Step 7.5 writes the first)
-- **Blueprint versions**: Phase 1 `docs/phase1_architecture_blueprint.md` v2.3. Phase 2 `docs/phase2_architecture_blueprint.md` v1.0. PRD `investment_advisor_dashboard_prd_kr_v3.md` v3.4. Aligned.
-- **Handoff**: manual only (`/handoff`). No hooks.
-- **Code-review workflow**: CLAUDE.md Trigger 1 active. Steps 1–6 all reviewed post-commit + fixes applied. Step 7 not yet 5-agent-reviewed (user opted to skip for speed; production smoke test substituted for runtime correctness).
+- **Stack**: Next.js 16.2.4 (Turbopack, `cacheComponents: true`), React 19.2.4, Tailwind v4, `@supabase/ssr` 0.10.2, TypeScript 5 strict, Recharts 3.x, Vitest 4.1.4. shadcn: badge/button/calendar/card/input/label/popover/separator/sheet/skeleton/tooltip + (deps since Step 8.5: Radix tooltip via `@base-ui/react`). Lucide icons. Node v24.15.0, npm 11.12.1, Vercel CLI 52.0.0.
+- **Tests**: 452/452 green across 30 files (Phase 1 baseline 108 + Phase 2 Steps 2–12 accumulated 344).
+- **Cache model**: Path B. `'use cache'` scopes use admin client; cookies/headers/connection banned. `proxy.ts` unchanged.
+- **`server-only` split**: every `{source}.ts` + `data/{x}.ts` (incl. new `data/prices.ts`) + redact/backoff carry the guard; every `{x}-parse.ts` and every `score-engine/*.ts` pure module do NOT.
+- **MCP servers**: `figma`, `supabase`, `context7`, `alphavantage` in project `.mcp.json`. Claude-in-Chrome connected to the user's Chrome instance — already has an authenticated `jw.byun@toss.im` session cookie in `tabGroupId=690806389`.
+- **`.env.local` keys**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FRED_API_KEY`, `ALPHA_VANTAGE_API_KEY`, `CRON_SECRET`, `FINNHUB_API_KEY`, `VERCEL_OIDC_TOKEN`.
+- **Vercel**: project `finance-manager`, team `jaclyn6s-projects`, Hobby. Production alias `finance-manager-james.vercel.app`. Last deploy `dpl_6UR1Jjwr5ej9qa3QSLbpdx2LdFMa` (commit 224a63c). Daily cron `0 6 * * *` for `ingest-macro`.
+- **GitHub repo secrets** (Jaclyn6/Finance-Manager-James): `CRON_SECRET`, `PRODUCTION_URL`, `FINNHUB_API_KEY`.
+- **Supabase**: `hhohrclmfsvpkigbdpsb` (ap-northeast-2 Seoul, Postgres 17.6.1.104). Migrations 0001–0010.
+- **Data state** (2026-04-25 per inspection):
+  - `composite_snapshots`: 155 v1 (2026-03-21 → 2026-04-22) + 10 v2 (2026-04-23 → 2026-04-24, 5 per day). Only `macro` category populated; technical/onchain/sentiment/valuation/regional_overlay categories are null-placeholders in contributing JSONB.
+  - `indicator_readings`: 11 FRED series daily (7 Phase 1 + ICSA/WDTGAL + DTWEXBGS/DEXKOUS).
+  - `price_readings`: ~1095 crypto rows (BTC/ETH/SOL × 365). AV bars (19 tickers × daily) populate on first `ingest-technical` GHA run.
+  - `onchain_readings`: ~5 rows/day; CoinGlass + alternative.me partial failures.
+  - `news_sentiment`: ~5 rows/day (5 US large-caps via AV `NEWS_SENTIMENT`).
+  - `technical_readings`: **0 rows in production**. Awaits first GHA cron-technical run.
+  - `signal_events`: **0 rows in production**. Awaits first post-deploy `ingest-*` tail.
+- **Blueprint versions**: Phase 2 v1.0 (2026-04-23), PRD v3.4. Aligned.
 
 ## 9. How to Resume
 
-1. Read `docs/phase2_architecture_blueprint.md` §9 Build Sequence, especially **Step 7.5** (lines 649–657) for signals engine scope + acceptance (18+ unit tests, null propagation per §2.2 tenet 1). Cross-reference §4.5 for the 6 signal formulas (EXTREME_FEAR, DISLOCATION, ECONOMY_INTACT, SPREAD_REVERSAL, LIQUIDITY_EASING, MOMENTUM_TURN).
-2. Read `src/lib/score-engine/signals.ts` — Step 1 stub (SignalName enum + ALL_SIGNALS already declared). Read `src/lib/score-engine/technical.ts` + `onchain.ts` for the `is*` boolean exports (`isDislocated`, `isCryptoUndervalued`, `isCapitulation`, `macdBullishCrossWithin`) that signals.ts will call.
-3. **Next concrete action:** Implement `computeSignals(inputs)` in `src/lib/score-engine/signals.ts`. Inputs come from: `indicator_readings` (VIX, ICSA, SAHMCURRENT, BAMLH0A0HYM2, WDTGAL), `onchain_readings` (CNN_FG, MVRV_Z, SOPR), `technical_readings` (SPY MACD, SPY/QQQ disparity). Output shape per `SignalComputation` type already exported. Add pure-math tests first (18+). Then add `src/lib/data/signals.ts` reader (`'use cache'` + `cacheTag('signals')` + `cacheLife('hours')`) + writer (admin client, no cache, UPSERT). Finally add the `signals.compute → revalidateTag('signals', {expire:0})` tail call to each of the 5 cron endpoints. Run the 5-agent CLAUDE.md Trigger 1 review post-commit.
+1. **Step 13 acceptance matrix** (blueprint §10). Walk through every row of §10.1 + §10.2, produce evidence per cell. For each green cell, add a one-line citation (test file + test name, or DB query + output, or deployed-URL + inspection). Build a small `docs/phase2_acceptance_matrix.md` or inline in handoff as §11.
+2. **Manual GHA dispatch** — `gh workflow run cron-technical.yml` to trigger the first production `/api/cron/ingest-technical` run WITHOUT waiting for 22:00 UTC. Verify `technical_readings` populates + `signal_events` gets its first row.
+3. **Composite v2 category wiring** (Phase 2 scope gap surfaced at Step 8): extend `ingest-macro` to compute `technical_category_score`, `onchain_category_score`, `sentiment_category_score` per asset type (aggregate respective reading tables → 0–100) and write them into `composite_snapshots.contributing_indicators.{category}.{score,weight,contribution}`. Then category-level scores render in the UI. This is pre-Step 13 work; without it, the composite under-represents Phase 2 data sources.
+4. **CLAUDE.md Trigger 2** — 5-agent review over `ba2b1f2..224a63c` full diff. Focus on cross-step interactions (cache tag churn, model_version v1↔v2 at read time, §7.4 invariant, §4.5 null policy, §10 a11y).
+5. **UI polish fold-in**: `size-11` touch targets, `motion-safe:`, Phase 1 §5 docs sync, PNG icon generation.
+6. **Optional**: Lighthouse PWA audit on the production URL (blueprint §9 Step 12 acceptance). Real-device A2HS test on iPhone + Android (plan A.2 pattern — not DevTools).
 
 ---
 
