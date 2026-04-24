@@ -36,6 +36,7 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-chart-6: var(--chart-6);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -117,6 +118,7 @@
   --chart-3: #149e61;
   --chart-4: #686b82;
   --chart-5: #9497a9;
+  --chart-6: #c2410c;
 
   /* Base radius = Kraken 12px */
   --radius: 0.75rem;
@@ -173,6 +175,7 @@
   --chart-3: #5cd59e;
   --chart-4: #9497a9;
   --chart-5: #686b82;
+  --chart-6: #fb923c;
 
   --sidebar: #1a1b1f;
   --sidebar-foreground: #f5f5f7;

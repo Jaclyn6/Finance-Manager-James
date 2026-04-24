@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { AssetCard } from "@/components/dashboard/asset-card";
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
 import { RecentChanges } from "@/components/dashboard/recent-changes";
+import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
 import { getChangelogAroundDate } from "@/lib/data/changelog";
 import {
@@ -10,6 +11,8 @@ import {
   getCompositeSnapshotsForDate,
   getLatestCompositeSnapshots,
 } from "@/lib/data/indicators";
+import { getLatestSignalEvent } from "@/lib/data/signals";
+import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
 import { DASHBOARD_ASSET_ORDER } from "@/lib/utils/asset-labels";
 import { sanitizeDateParam, todayIsoUtc } from "@/lib/utils/date";
 import type { Tables } from "@/types/database";
@@ -59,14 +62,19 @@ export async function DashboardContent({
 
   const anchorDate = selectedDate ?? today;
 
-  // Fire snapshot + changelog reads in parallel. The changelog reader
-  // is always called because a 14-day window around any anchor is
-  // cheap and the cache is keyed on (anchorDate, windowDays).
-  const [snapshots, changelog] = await Promise.all([
+  // Fire snapshot + changelog + signal-event reads in parallel. The
+  // changelog reader is always called because a 14-day window around
+  // any anchor is cheap and the cache is keyed on (anchorDate,
+  // windowDays). `getLatestSignalEvent(anchorDate)` returns the most
+  // recent row ≤ anchorDate or `null` when no row has been computed
+  // yet (first day of Phase 2); the SignalAlignmentCard renders its
+  // own empty state in that case, so a null here is non-fatal.
+  const [snapshots, changelog, signalEvent] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
       : getCompositeSnapshotsForDate(selectedDate),
     getChangelogAroundDate(anchorDate, 14),
+    getLatestSignalEvent(selectedDate ?? undefined),
   ]);
 
   // Empty selected-date → offer a quick jump to the closest earlier
@@ -105,6 +113,21 @@ export async function DashboardContent({
 
   return (
     <div className="space-y-6 md:space-y-8">
+      {/*
+        Signal alignment sits ABOVE the composite per plan §0.5 tenet 4:
+        "actionable over aggregate" — users care first about whether the
+        buy conditions are firing, then about the composite score as a
+        quantified summary.
+      */}
+      <SignalAlignmentCard
+        signalEvent={signalEvent}
+        assetType="common"
+        isRulesCutoverDay={
+          signalEvent != null &&
+          signalEvent.signal_rules_version !== SIGNAL_RULES_VERSION
+        }
+      />
+
       <CompositeStateCard snapshot={commonSnapshot} />
 
       <section className="space-y-3 md:space-y-4">

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
+import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { ContributingIndicators } from "@/components/asset/contributing-indicators";
 import { ScoreTrendLine } from "@/components/asset/score-trend-line";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
@@ -12,6 +13,8 @@ import {
   getLatestCompositeSnapshots,
 } from "@/lib/data/indicators";
 import { getCurrentModelCutoverDate } from "@/lib/data/model-version";
+import { getLatestSignalEvent } from "@/lib/data/signals";
+import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { slugToAssetType } from "@/lib/utils/asset-slug";
 import { sanitizeDateParam, todayIsoUtc } from "@/lib/utils/date";
@@ -65,7 +68,7 @@ export async function AssetContent({
   // plain string prop to the client Recharts wrapper (which must
   // not touch Supabase itself — that would ship the admin client to
   // the browser).
-  const [snapshots, trendSeries, cutoverDate] = await Promise.all([
+  const [snapshots, trendSeries, cutoverDate, signalEvent] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
       : getCompositeSnapshotsForDate(selectedDate),
@@ -75,6 +78,10 @@ export async function AssetContent({
       TREND_WINDOW_DAYS,
     ),
     getCurrentModelCutoverDate(),
+    // Signal row scoped to this asset's displayed date (latest or
+    // date-parameterized via ?date=). `null` is the expected empty
+    // state — SignalAlignmentCard renders its own placeholder.
+    getLatestSignalEvent(selectedDate ?? undefined),
   ]);
 
   const snapshot = snapshots.find((s) => s.asset_type === assetType) ?? null;
@@ -124,6 +131,22 @@ export async function AssetContent({
           {TREND_WINDOW_DAYS}일 추이입니다.
         </p>
       </div>
+
+      {/*
+        Signal alignment sits ABOVE the composite per plan §0.5 tenet 4
+        "actionable over aggregate". The card filters to this asset
+        type's applicable signals — 5 for kr_equity (no DISLOCATION), 7
+        for crypto (CRYPTO_UNDERVALUED + CAPITULATION added,
+        MOMENTUM_TURN dropped), 6 for us_equity / global_etf.
+      */}
+      <SignalAlignmentCard
+        signalEvent={signalEvent}
+        assetType={assetType}
+        isRulesCutoverDay={
+          signalEvent != null &&
+          signalEvent.signal_rules_version !== SIGNAL_RULES_VERSION
+        }
+      />
 
       {/*
         Reuse `CompositeStateCard` — the hero surface and data shape
