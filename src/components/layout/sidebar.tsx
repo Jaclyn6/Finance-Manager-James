@@ -59,7 +59,7 @@ export function Sidebar() {
                     <Link
                       href={buildNavHref(item.href, currentDate)}
                       className={cn(
-                        "block rounded-md px-2.5 py-2 text-sm transition-colors",
+                        "block rounded-md px-2.5 py-2 text-sm motion-safe:transition-colors",
                         isActive
                           ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                           : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",

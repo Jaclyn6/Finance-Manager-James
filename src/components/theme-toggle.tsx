@@ -43,7 +43,7 @@ export function ThemeToggle() {
       aria-label={label}
       title={label}
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="size-9"
+      className="size-11"
     >
       {mounted ? (
         isDark ? (

@@ -56,7 +56,7 @@ export function AssetCard({ snapshot, currentDate = null }: AssetCardProps) {
     <Card
       size="sm"
       className={cn(
-        "p-5 md:p-6 transition-colors",
+        "p-5 md:p-6 motion-safe:transition-colors",
         slug &&
           "hover:bg-muted/40 group-focus-visible/asset-link:ring-2 group-focus-visible/asset-link:ring-ring",
       )}

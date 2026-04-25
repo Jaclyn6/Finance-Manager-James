@@ -95,9 +95,9 @@ function HeaderRightSkeleton() {
   return (
     <div className="flex items-center gap-2">
       {/* DatePicker placeholder — rough width for the date button. */}
-      <Skeleton className="h-9 w-28 rounded-md" />
-      <Skeleton className="size-9 rounded-md" />
-      <Skeleton className="h-9 w-56 rounded-md" />
+      <Skeleton className="h-11 w-28 rounded-md" />
+      <Skeleton className="size-11 rounded-md" />
+      <Skeleton className="h-11 w-56 rounded-md" />
     </div>
   );
 }

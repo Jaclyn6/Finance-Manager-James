@@ -95,7 +95,7 @@ export function MobileNav() {
                         href={buildNavHref(item.href, currentDate)}
                         onClick={() => setOpen(false)}
                         className={cn(
-                          "flex min-h-11 items-center rounded-md px-2.5 text-sm transition-colors",
+                          "flex min-h-11 items-center rounded-md px-2.5 text-sm motion-safe:transition-colors",
                           isActive
                             ? "bg-sidebar-accent font-semibold text-sidebar-accent-foreground"
                             : "text-muted-foreground hover:bg-sidebar-accent/40 hover:text-foreground",

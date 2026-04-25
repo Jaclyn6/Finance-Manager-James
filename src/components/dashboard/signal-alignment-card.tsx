@@ -266,7 +266,7 @@ function SignalTile({
           type="button"
           aria-label={ariaLabel}
           className={cn(
-            "flex min-h-11 min-w-11 w-full flex-col items-start justify-between gap-1 rounded-lg border p-3 text-left transition-colors",
+            "flex min-h-11 min-w-11 w-full flex-col items-start justify-between gap-1 rounded-lg border p-3 text-left motion-safe:transition-colors",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             STATE_PALETTE[state],
           )}

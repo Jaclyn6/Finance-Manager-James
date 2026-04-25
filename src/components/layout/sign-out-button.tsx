@@ -58,6 +58,7 @@ export function SignOutButton() {
         variant="ghost"
         onClick={handleSignOut}
         disabled={isSigningOut}
+        className="h-11 min-w-11 px-3"
       >
         {isSigningOut ? "로그아웃 중..." : "로그아웃"}
       </Button>
