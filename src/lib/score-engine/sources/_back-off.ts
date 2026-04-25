@@ -12,7 +12,9 @@ import "server-only";
  * retry storms.
  *
  * Retry policy:
- *   - 429 (rate limit) → retry
+ *   - 429 (rate limit) → retry by default; opt-out via `retryOnRateLimit:false`
+ *     for sources with a hard per-window quota (e.g. BGeometrics 8/hr)
+ *     where in-window retries can never succeed and only burn quota.
  *   - 5xx (server error) → retry
  *   - 4xx other than 429 (client error, invalid request) → no retry
  *   - Network errors / per-attempt timeouts → retried up to `maxRetries`
@@ -47,11 +49,25 @@ export interface BackOffOptions {
   initialDelayMs?: number;
   /** Per-attempt wall-clock timeout in ms. Default 15_000. */
   timeoutMs?: number;
+  /**
+   * Whether to retry on HTTP 429 (rate-limit). Default `true`.
+   *
+   * Set to `false` when the upstream's rate limit is a HARD per-window
+   * quota that won't replenish within back-off seconds — e.g.
+   * BGeometrics' "8 requests per hour per IP" tier. Retrying inside the
+   * window just burns more slots and guarantees the same 429 on the
+   * next attempt; instead, fail fast and let the caller fold the 429
+   * into a `fetch_status: "error"` result so the staleness gate
+   * triggers cleanly. 5xx retries remain on regardless of this flag —
+   * server errors are typically transient and worth retrying.
+   */
+  retryOnRateLimit?: boolean;
 }
 
 const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_INITIAL_DELAY_MS = 500;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_RETRY_ON_RATE_LIMIT = true;
 
 /**
  * Fetch `url` with retry-on-429/5xx back-off. Returns the final
@@ -78,6 +94,8 @@ export async function fetchWithBackOff(
   const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
   const initialDelayMs = options.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const retryOnRateLimit =
+    options.retryOnRateLimit ?? DEFAULT_RETRY_ON_RATE_LIMIT;
 
   let lastResponse: Response | null = null;
   let lastError: unknown = null;
@@ -107,9 +125,11 @@ export async function fetchWithBackOff(
 
       // Retry only on 429 + 5xx. 4xx other than 429 is terminal —
       // retrying a 400/401/403/404 won't change the answer and wastes
-      // the budget.
+      // the budget. Callers facing a HARD per-hour quota (BGeometrics
+      // 8/hr) can opt out of the 429 branch via `retryOnRateLimit:false`
+      // so retries don't drain remaining slots inside the window.
       const shouldRetry =
-        response.status === 429 ||
+        (response.status === 429 && retryOnRateLimit) ||
         (response.status >= 500 && response.status < 600);
 
       if (!shouldRetry) {

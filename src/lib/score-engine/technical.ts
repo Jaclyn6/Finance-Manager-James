@@ -49,6 +49,16 @@ import { clamp, computeZScore, lerp, zScoreTo0100 } from "./normalize";
 /**
  * Simple moving average over the most recent `period` closes.
  * Returns `null` if `closes.length < period`.
+ *
+ * Operational note (2026-04-25): the Phase 2 ingest now fetches
+ * `outputsize=compact` (100 bars) from Alpha Vantage because `full`
+ * went premium-only — see `sources/alpha-vantage.ts`. With 100 bars
+ * `simpleMovingAverage(closes, 200)` returns `null`, which propagates
+ * to MA_200 row `value_raw=null` and Disparity `value_raw=null` /
+ * `score_0_100=null`. Per blueprint §2.2 tenet 1, that null flows
+ * through the composite engine; the row is still written so the
+ * staleness badge can distinguish "computed today, insufficient
+ * history" from "not attempted".
  */
 export function simpleMovingAverage(
   closes: number[],
@@ -452,6 +462,13 @@ export function bollingerToScore(
  * Disparity = `close / ma200 − 1`. Positive = price above the trend;
  * negative = below. Returns `null` if `ma200` is `null` or `0`
  * (division undefined).
+ *
+ * Operational note (2026-04-25): with the AV `compact` fetch (100
+ * bars) MA200 is structurally null — the cron writes Disparity rows
+ * with `value_raw=null` / `score_0_100=null` and the composite engine
+ * null-propagates per blueprint §2.2 tenet 1. The row is still
+ * persisted so the staleness logic stays "we tried today" rather than
+ * "we forgot today".
  */
 export function disparity(
   currentClose: number,

@@ -6,12 +6,19 @@ import { parseBitboResponse } from "./bitbo-parse";
  * Network-free tests for the on-chain MVRV/SOPR parser.
  *
  * Synthetic payloads exercise the pure parser. The live upstream is
- * `https://api.bitcoin-data.com/v1/{mvrv-zscore,sopr}` (verified
- * 2026-04-25). Fixtures below mirror BOTH the new bitcoin-data.com
- * shape — top-level array of `{d, unixTs, mvrvZscore|sopr}` — AND the
- * legacy Bitbo `{data: [{date, value}]}` wrapper, which the parser
- * still accepts as a regression-safety net per the file-header
- * contract in `bitbo-parse.ts`.
+ * `https://api.bitcoin-data.com/v1/{mvrv-zscore,sopr}` (re-verified
+ * 2026-04-25 — page returns the documented JSON shape from local; the
+ * Vercel-side production failure is a hard 8/hr rate-limit surfaced
+ * via HTTP 429 + `{"code":"RATE_LIMIT_HOUR_EXCEEDED"}`, NOT a shape
+ * change. The fetcher in `bitbo.ts` now opts out of 429 retries via
+ * `retryOnRateLimit:false` so the rate-limit hit propagates immediately
+ * as `fetch_status:'error'` instead of draining more slots.)
+ *
+ * Fixtures below mirror BOTH the new bitcoin-data.com shape — top-level
+ * array of `{d, unixTs, mvrvZscore|sopr}` — AND the legacy Bitbo
+ * `{data: [{date, value}]}` wrapper, which the parser still accepts
+ * as a regression-safety net per the file-header contract in
+ * `bitbo-parse.ts`.
  */
 
 describe("parseBitboResponse", () => {

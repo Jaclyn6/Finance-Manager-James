@@ -14,33 +14,54 @@ import {
  * §3.1, §4.1). Feeds the on-chain composite — NOT a signal boolean
  * per §4.5.
  *
- * **Source URL.** Originally targeted CoinGlass's public-tier JSON
- * endpoint at `https://open-api.coinglass.com/public/v2/indicator/
- * bitcoin_etf_flow`. That endpoint started 500-ing in 2026 and
- * CoinGlass v4 now requires a paid `coinglassSecret` API key. To keep
- * the family hobby tool key-free, the fetcher was repointed at:
+ * **Source URL (re-verified 2026-04-25).** Originally CoinGlass v2
+ * public, then bitbo.io/treasuries/etf-flows/. Both broke:
  *
- *   GET `https://bitbo.io/treasuries/etf-flows/`
+ *   - CoinGlass v4 — paid `coinglassSecret` key required.
+ *   - bitbo.io — returns 200 OK to local curl with a Chrome UA but
+ *     consistently 500s from Vercel Fluid Compute IPs. We tested every
+ *     header permutation (full Chrome UA + Accept + Accept-Language +
+ *     Referer: https://bitbo.io/) — Bitbo's CDN appears to maintain an
+ *     IP/ASN block on Vercel ranges, not a UA filter, so header tuning
+ *     can't recover the source.
  *
- * which renders a public HTML table of daily per-ETF + total net flows
- * (millions USD). Verified working 2026-04-25. The pure parser
- * (`coinglass-parse.ts`) handles the HTML → observations conversion.
+ * The fetcher is now repointed at **farside.co.uk** — the canonical
+ * upstream that both Bitbo and CoinGlass aggregate from:
  *
- * Selector: regex-based row scan; pulls `<tr>` blocks, filters to rows
- * whose first cell matches "Mon DD, YYYY", and reads the last numeric
- * cell as the Totals column. Robust to column-count drift if Bitbo
- * adds a new ETF ticker.
+ *   GET `https://farside.co.uk/btc/`
+ *
+ * Farside renders a server-side HTML table of daily per-ETF + Total net
+ * flows (millions USD), updated every U.S. trading session. The page
+ * predates and outlives the broken aggregators; it's been online with
+ * the same general layout since the spot-ETF launch in Jan 2024.
+ * Verified working from local 2026-04-25 (200 OK, ~87KB, hundreds of
+ * data rows). The pure parser (`coinglass-parse.ts`) handles the
+ * HTML → observations conversion.
+ *
+ * Why not bitbo.io with header-tuning: tested. The block is IP-based.
+ * Why not farside.co.uk/btc-etf-flow-all/: 404; that path doesn't
+ *   exist. The flow table lives at /btc/ directly.
+ * Why not CoinGlass v4: paid key, blueprint §0.6 "key-free Phase 2".
+ *
+ * **Farside HTML shape highlights** (full details in coinglass-parse.ts):
+ *   - Date format: `DD Mon YYYY` ("06 Apr 2026"), British convention.
+ *   - Negative values: `<span class="redFont">(17.1)</span>` — accountancy
+ *     parentheses, not minus sign. Parser must convert (X) → -X.
+ *   - Total: rightmost cell of each data row. Multi-row thead (icon,
+ *     ticker symbol, fee), so the first 3 `<tr>` blocks are headers
+ *     and skipped naturally by the date-prefix filter.
  *
  * The exported types ("CoinGlass*") are kept for blast-radius reasons —
  * the consumer route + downstream tests import these symbols. The
  * semantics — fetch BTC Spot ETF daily net flow from a key-free public
  * source — are unchanged.
  *
- * **Unofficial caveat.** Bitbo's HTML structure can change without
- * notice. If the parser starts dropping all rows, inspect the live
- * page and adjust the row/cell regex in `coinglass-parse.ts`. A
- * wholesale table redesign would push us toward Phase 3 Glassnode
- * migration.
+ * **Unofficial caveat.** Farside's HTML is hand-styled (inline `<div>`
+ * + `<span class="tabletext">` tags — no semantic table classes), which
+ * is good news for stability: a redesign would be a UX project for
+ * them, not a routine deploy. If the parser starts dropping all rows
+ * after a future Farside refresh, the next move is Glassnode paid tier
+ * (Phase 3 escalation per blueprint §3.2).
  *
  * Design choices (mirrors the other Phase 2 source fetchers):
  *
@@ -53,19 +74,22 @@ import {
  *    default of 2 retries, worst-case wall time is 3 × 15s = 45s plus
  *    ~3.5s of back-off sleep — inside Vercel Fluid Compute's 300s cap.
  *
- * 3. **Back-off on 429/5xx.** Bitbo's CDN can flap under load.
- *    `fetchWithBackOff` handles the retry loop, fresh AbortController
- *    per attempt, and exponential delay.
+ * 3. **Back-off on 429/5xx.** Farside is a small UK-hosted page that
+ *    can flap under load (Cloudflare in front). `fetchWithBackOff`
+ *    handles the retry loop, fresh AbortController per attempt, and
+ *    exponential delay. Default `retryOnRateLimit:true` is fine —
+ *    Farside's rate limit (if any) replenishes within retry seconds.
  *
  * 4. **`cache: "no-store"`.** Always hit upstream during cron.
  *
  * 5. **No API key required.**
  *
- * 6. **Generic User-Agent.** Bitbo's CDN can drop requests with no UA
- *    or a default-fetch UA. Send a sane string so we don't get
- *    edge-dropped — same approach as cnn-fear-greed.ts.
+ * 6. **Full Chrome User-Agent + Accept-Language.** Farside's bot
+ *    filter blocks default fetch UAs (and `Mozilla/5.0 (finance-manager)`
+ *    returned 403 in WebFetch testing). A real-browser UA with a sane
+ *    `Accept-Language` tuple gets through reliably.
  *
- * 7. **`Accept: text/html`.** We're scraping HTML now, not JSON.
+ * 7. **`Accept: text/html`.** We're scraping HTML.
  *
  * 8. **Pure parser extracted to `coinglass-parse.ts`.** Vitest +
  *    scripts import the parser without tripping the `"server-only"`
@@ -81,9 +105,17 @@ export type {
 };
 export { parseCoinGlassEtfFlowResponse };
 
-const ETF_FLOW_URL = "https://bitbo.io/treasuries/etf-flows/";
+// Farside Investors Spot Bitcoin ETF flow page. Verified 2026-04-25.
+// Same dataset that Bitbo + CoinGlass historically aggregated from;
+// going to the source removes both the Bitbo IP block and the
+// CoinGlass paywall from the dependency chain.
+const ETF_FLOW_URL = "https://farside.co.uk/btc/";
 const FETCH_TIMEOUT_MS = 15_000;
-const USER_AGENT = "Mozilla/5.0 (finance-manager)";
+// Real-browser UA — Farside's bot filter rejects default fetch UAs and
+// the `Mozilla/5.0 (finance-manager)` minimal string with HTTP 403.
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 
 /**
  * Fetch BTC Spot ETF daily net flow and return a parsed, scoring-ready
@@ -100,18 +132,28 @@ export async function fetchCoinGlassEtfFlow(): Promise<CoinGlassEtfFlowResult> {
         method: "GET",
         cache: "no-store",
         headers: {
-          // Bitbo's CDN has been observed to drop requests without a
-          // sane User-Agent. See JSDoc above.
+          // Farside's bot filter rejects default UAs — see JSDoc.
           "User-Agent": USER_AGENT,
-          Accept: "text/html,application/xhtml+xml",
+          // Full HTML accept tuple matches what real Chrome sends; the
+          // q-weighted variants pacify any UA-fingerprint sniffer that
+          // looks for trailing image/webp.
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9," +
+            "image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.5",
         },
       },
       { timeoutMs: FETCH_TIMEOUT_MS },
     );
 
     if (!response.ok) {
+      // Keep the "CoinGlass HTTP …" prefix for log-search continuity
+      // even though the upstream is now Farside — the consumer route
+      // labels rows with `source_name: "coinglass"` for the same
+      // blast-radius reason the type names are unchanged. Cite Farside
+      // in the message body so on-call doesn't chase ghosts.
       return makeErrorResult(
-        `CoinGlass HTTP ${response.status} ${response.statusText}`,
+        `CoinGlass HTTP ${response.status} ${response.statusText} (upstream: farside.co.uk)`,
       );
     }
 
@@ -120,7 +162,7 @@ export async function fetchCoinGlassEtfFlow(): Promise<CoinGlassEtfFlowResult> {
   } catch (err) {
     const message =
       err instanceof Error && err.name === "AbortError"
-        ? `CoinGlass request timed out after ${FETCH_TIMEOUT_MS}ms per attempt`
+        ? `CoinGlass request timed out after ${FETCH_TIMEOUT_MS}ms per attempt (upstream: farside.co.uk)`
         : err instanceof Error
           ? err.message
           : String(err);

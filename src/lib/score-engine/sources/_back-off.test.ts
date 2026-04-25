@@ -118,6 +118,50 @@ describe("fetchWithBackOff", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("does NOT retry on 429 when retryOnRateLimit is false (hard-quota source)", async () => {
+    // BGeometrics-style hard 8/hr quota: a 429 inside the window will
+    // STILL be 429 a few seconds later. Retrying just burns more slots
+    // and guarantees eviction for the rest of the hour. With
+    // `retryOnRateLimit:false` the helper returns the 429 immediately
+    // so the caller can surface fetch_status='error' without draining
+    // the quota.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(makeResponse(429, { code: "RATE_LIMIT_HOUR_EXCEEDED" }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await fetchWithBackOff(
+      "https://example.test/rl",
+      { method: "GET" },
+      { maxRetries: 2, initialDelayMs: 10, retryOnRateLimit: false },
+    );
+
+    expect(result.status).toBe(429);
+    // CRITICAL: exactly ONE call — no retries on 429.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("still retries 5xx when retryOnRateLimit is false", async () => {
+    // The opt-out is 429-specific. 5xx remain transient and retryable.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeResponse(503))
+      .mockResolvedValueOnce(makeResponse(200));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const promise = fetchWithBackOff(
+      "https://example.test/5xx",
+      { method: "GET" },
+      { maxRetries: 2, initialDelayMs: 10, retryOnRateLimit: false },
+    );
+
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await promise;
+
+    expect(result.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("re-throws the final network error after exhausting retries", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
     globalThis.fetch = fetchMock as unknown as typeof fetch;

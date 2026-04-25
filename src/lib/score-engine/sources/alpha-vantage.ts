@@ -55,7 +55,19 @@ export { parseAlphaVantageDailyResponse };
 export interface FetchAlphaVantageDailyOptions {
   /**
    * `"full"` returns 20+ years of history; `"compact"` returns 100
-   * most recent rows. Default `"full"` for the technical-layer window.
+   * most recent rows.
+   *
+   * Default is `"compact"`.
+   *
+   * Verified 2026-04-25: AV moved `outputsize=full` to premium tier;
+   * `compact` (100 daily bars) is what the free `TIME_SERIES_DAILY`
+   * endpoint returns. Calling with `outputsize=full` on the free key
+   * returns an HTTP 200 with `{ "Information": "... premium feature ..." }`
+   * — the parser routes that to `fetch_status: "error"` so the cron's
+   * per-ticker loop logs and continues. With 100 bars, MA(200) is
+   * unavailable — it falls through to null per blueprint §2.2 tenet 1
+   * ("null-propagation"), and Disparity (which divides by MA200) does
+   * the same.
    */
   outputSize?: "full" | "compact";
 }
@@ -79,7 +91,7 @@ export async function fetchAlphaVantageDaily(
     );
   }
 
-  const outputSize = options.outputSize ?? "full";
+  const outputSize = options.outputSize ?? "compact";
 
   const url = new URL(ALPHA_VANTAGE_BASE_URL);
   url.searchParams.set("function", "TIME_SERIES_DAILY");

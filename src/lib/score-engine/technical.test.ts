@@ -460,6 +460,35 @@ describe("disparity", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Alpha Vantage `compact` (100-bar) regression — 2026-04-25
+//
+// AV moved `outputsize=full` behind a paid plan; free TIME_SERIES_DAILY
+// returns 100 bars. Phase 2's MA(200) + Disparity must gracefully null
+// on that input, not throw and not silently produce an MA-of-fewer-bars.
+// ---------------------------------------------------------------------------
+describe("MA(200) + Disparity on a 100-bar AV `compact` window", () => {
+  // 100 strictly-increasing closes — same shape AV sends back to a
+  // free key calling outputsize=compact. Anything stable / monotonic
+  // works; the point is `closes.length === 100 < 200`.
+  const compactCloses = Array.from({ length: 100 }, (_, i) => 100 + i);
+
+  it("MA(200) returns null on a 100-bar input (does NOT silently average fewer bars)", () => {
+    expect(simpleMovingAverage(compactCloses, 200)).toBeNull();
+  });
+
+  it("MA(50) still computes on the same 100-bar input (sanity — only 200 should null)", () => {
+    expect(simpleMovingAverage(compactCloses, 50)).not.toBeNull();
+  });
+
+  it("Disparity is null when MA200 is null (null-propagation per blueprint §2.2 tenet 1)", () => {
+    const latestClose = compactCloses[compactCloses.length - 1];
+    const ma200 = simpleMovingAverage(compactCloses, 200);
+    expect(ma200).toBeNull();
+    expect(disparity(latestClose, ma200)).toBeNull();
+  });
+});
+
 describe("disparityToScore (blueprint §4.3)", () => {
   it("hits the -0.25 boundary exactly at score 85", () => {
     expect(disparityToScore(-0.25)).toBeCloseTo(85, 10);

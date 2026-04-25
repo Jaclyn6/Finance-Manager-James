@@ -15,11 +15,13 @@
  *
  * Alpha Vantage quirks this parser handles:
  *
- * 1. Rate-limit payloads come back as a 200 OK with body like
- *    `{ "Information": "..." }` (new) or `{ "Note": "..." }` (old).
- *    We must detect these and return `fetch_status: "error"` so the
- *    Step 7 cron's per-ticker loop can log + continue with the next
- *    ticker instead of silently inserting an empty bars array.
+ * 1. Rate-limit / premium-tier / advisory payloads come back as a 200
+ *    OK with body like `{ "Information": "..." }` (new — also used for
+ *    "this is a premium feature" gating since 2026-04-25, when AV moved
+ *    `outputsize=full` behind a paid plan) or `{ "Note": "..." }`
+ *    (old). We must detect these and return `fetch_status: "error"` so
+ *    the Step 7 cron's per-ticker loop can log + continue with the
+ *    next ticker instead of silently inserting an empty bars array.
  * 2. Invalid tickers come back as `{ "Error Message": "..." }`.
  * 3. The daily-bars map uses stringly-typed numeric fields with
  *    ordinal prefixes ("1. open", "4. close", etc.). Any one of them
@@ -77,13 +79,25 @@ export function parseAlphaVantageDailyResponse(
 
   const bodyObj = body as Record<string, unknown>;
 
-  // Detect the three Alpha Vantage error/rate-limit payloads. All three
-  // come back as HTTP 200 with the data keys simply absent, so if we
-  // don't special-case them we'd silently return empty bars.
+  // Detect the three Alpha Vantage error/rate-limit/premium-gate
+  // payloads. All three come back as HTTP 200 with the data keys
+  // simply absent, so if we don't special-case them we'd silently
+  // return empty bars.
+  //
+  // The `Information` branch covers BOTH classic 25/day rate-limit
+  // hits AND the 2026-04-25 "premium feature" gate that AV started
+  // returning when a free key calls `outputsize=full` on
+  // `TIME_SERIES_DAILY`. We sniff the message body for "premium" so
+  // the error string makes the failure mode obvious in audit logs and
+  // the dashboard staleness banner.
   if (typeof bodyObj["Information"] === "string") {
+    const info = bodyObj["Information"];
+    const isPremium = /premium/i.test(info);
     return makeErrorResult(
       ticker,
-      `Alpha Vantage rate limit / info: ${bodyObj["Information"]}`,
+      isPremium
+        ? `Alpha Vantage premium-only feature: ${info}`
+        : `Alpha Vantage rate limit / info: ${info}`,
     );
   }
   if (typeof bodyObj["Note"] === "string") {

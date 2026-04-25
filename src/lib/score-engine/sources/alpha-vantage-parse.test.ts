@@ -72,6 +72,23 @@ describe("parseAlphaVantageDailyResponse", () => {
     expect(result.latest).toBeNull();
   });
 
+  it("returns error AND flags 'premium-only' when AV gates outputsize=full behind a paid plan", () => {
+    // Verified 2026-04-25: AV moved `outputsize=full` to a paid plan
+    // and started returning HTTP 200 with `Information: "...premium
+    // feature..."`. The parser must (a) route this to fetch_status
+    // 'error' so the cron's per-ticker loop continues, and (b) make
+    // the failure mode obvious in the audit row's error_summary.
+    const body = {
+      Information:
+        "Thank you for using Alpha Vantage! This is a premium feature; please subscribe to a paid plan.",
+    };
+    const result = parseAlphaVantageDailyResponse("SPY", body);
+    expect(result.fetch_status).toBe("error");
+    expect(result.error).toMatch(/premium-only/i);
+    expect(result.bars).toEqual([]);
+    expect(result.latest).toBeNull();
+  });
+
   it("returns error when body is the legacy rate-limit Note shape", () => {
     const body = { Note: "Thank you for using Alpha Vantage! ..." };
     const result = parseAlphaVantageDailyResponse("SPY", body);

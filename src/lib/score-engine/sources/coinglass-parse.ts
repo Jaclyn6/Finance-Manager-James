@@ -1,31 +1,52 @@
 /**
  * Pure BTC Spot ETF net-flow response parser.
  *
- * **History.** Originally targeted CoinGlass's unofficial public-tier
- * JSON endpoint at `https://open-api.coinglass.com/public/v2/indicator/
- * bitcoin_etf_flow`. That endpoint started returning HTTP 500 in 2026
- * and the v4 API now requires a paid `coinglassSecret` API key (401
- * "API key missing" without one). Free unauth alternatives surveyed:
+ * **History.** Targets have churned three times:
  *
- *  - Farside Investors (`farside.co.uk/btc/`) — Cloudflare-blocked for
- *    bot UAs, hard to use server-side without scraping rotation.
- *  - Bitbo (`https://bitbo.io/treasuries/etf-flows/`) — public HTML
- *    table, server-renderable with a normal UA. Same dataset shape as
- *    Farside (Bitbo aggregates 13 spot ETF tickers).
- *  - SoSoValue / Newhedge — paid API tiers.
+ *   1. CoinGlass v2 JSON (`open-api.coinglass.com/public/v2/...`) — went
+ *      500 in 2026, then v4 paywalled.
+ *   2. Bitbo HTML (`bitbo.io/treasuries/etf-flows/`) — works from local
+ *      curl with a Chrome UA but consistently 500s from Vercel Fluid
+ *      Compute IPs (production smoke 2026-04-25). Header tuning didn't
+ *      recover the source — the block is IP/ASN-based, not UA-based.
+ *   3. **Current — Farside Investors HTML** (`farside.co.uk/btc/`).
+ *      The canonical upstream that the previous two aggregators pulled
+ *      from. Free, key-free, server-side rendered. Verified working
+ *      from local 2026-04-25 with the full Chrome UA + Accept-Language
+ *      tuple set in `coinglass.ts` (a minimal UA gets 403).
  *
- * The fetcher was repointed at Bitbo's HTML page — same domain we
- * scrape elsewhere for treasuries data. Verified working 2026-04-25.
+ * **HTML shape (Farside /btc/).** A single data table with a 3-row
+ * thead (provider icons, ticker symbol row, fee row), then `<tbody>`
+ * with one `<tr>` per trading day:
  *
- * **HTML shape (Bitbo /treasuries/etf-flows/).** A single data table
- * with header row:
+ * ```html
+ * <tr>
+ *   <td><span class="tabletext">06 Apr 2026</span></td>
+ *   <td><div align="right"><span class="tabletext">181.9</span></div></td>
+ *   ... 11 more per-ETF cells ...
+ *   <td><div align="right"><span class="tabletext">471.4</span></div></td>
+ * </tr>
+ * ```
  *
- *   `Date | IBIT | FBTC | GBTC | BTC | BITB | ARKB | HODL | BTCO |
- *    BRRR | EZBC | MSBT | BTCW | DEFI | Totals`
+ * Per-day columns: IBIT, FBTC, BITB, ARKB, BTCO, EZBC, BRRR, HODL,
+ * BTCW, MSBT, GBTC, BTC (mini), Total. Tail-end summary rows (Average,
+ * Minimum, Maximum, Std Dev, Total) follow the same `<tr><td>...</td></tr>`
+ * shape but their first cell is a label like "Average" — the
+ * date-prefix regex filter drops them naturally.
  *
- * Body rows are ETF-flow values in **millions of USD**, with date
- * formatted "Mon DD, YYYY" (e.g. "Apr 23, 2026"). Negative values use
- * a leading `-`. Empty/non-trading days render as `-` and are skipped.
+ * Two key shape differences from the old Bitbo parser:
+ *
+ *   1. **Date format.** Farside uses `DD Mon YYYY` ("06 Apr 2026"),
+ *      British convention — opposite cell order from Bitbo's
+ *      `Mon DD, YYYY`. The parser accepts BOTH so a future re-swap
+ *      to a US-format mirror doesn't require parser surgery.
+ *   2. **Negative values.** Farside uses accountancy parentheses with
+ *      a `<span class="redFont">` highlight: `(17.1)` means -17.1.
+ *      Bitbo used a leading `-`. The numeric parser strips the span
+ *      then converts `(X)` → `-X` before parsing.
+ *
+ * Empty/non-trading days are rendered as `-` and skipped (same as
+ * Bitbo). Values are millions USD.
  *
  * The parser pulls the Date and Totals columns, converts dates to
  * ISO YYYY-MM-DD, and multiplies the millions value by 1_000_000 to
@@ -37,17 +58,18 @@
  * import these symbols. The semantics — fetch BTC Spot ETF daily net
  * flow from a key-free public source — are unchanged.
  *
- * **Unofficial caveat.** Bitbo's HTML structure can change without
- * notice. The parser uses regex-based row scanning to stay robust
- * against trivial markup churn (class renames, attribute additions),
- * but a wholesale table redesign would break it — at which point the
- * right move is Phase 3 Glassnode migration, NOT another HTML scrape
- * patch.
+ * **Unofficial caveat.** Farside is hand-styled HTML (no React/Vue/
+ * Plotly Dash dynamism — pure SSR), which is good for stability but
+ * means a future redesign WILL be a parser-breaking event. Mitigations:
+ * the parser uses tag-stripping regex against `<tr>` blocks (immune to
+ * class renames + attribute additions), and the file-header `coinglass.ts`
+ * lays out the Phase 3 Glassnode escalation path if Farside ever flips
+ * to a SPA / paywall.
  *
  * Why `netFlow` (not `totalFlow`): blueprint §4.1 on-chain category
  * specifies "BTC Spot ETF 순유입" (net inflow) — net of outflows.
- * Bitbo's "Totals" column is already net of inflows and outflows
- * across the 13 tracked ETFs.
+ * Farside's rightmost column is the across-ETF Total, already net of
+ * inflows and outflows across the 12 tracked spot tickers.
  *
  * Signal mapping (§4.5): ETF flow is NOT a boolean signal; it's an
  * on-chain composite input (§4.1). A failed parse therefore returns
@@ -130,19 +152,25 @@ export function parseCoinGlassEtfFlowResponse(
 }
 
 // ---------------------------------------------------------------------------
-// HTML parser (Bitbo treasuries/etf-flows)
+// HTML parser (Farside /btc/ — also still accepts the older Bitbo shape
+// for fixture/regression continuity, since both tables look structurally
+// identical from a regex POV.)
 // ---------------------------------------------------------------------------
 
 /**
- * Parse Bitbo's `/treasuries/etf-flows/` HTML table.
+ * Parse Farside's `/btc/` HTML table (also handles the legacy Bitbo
+ * `/treasuries/etf-flows/` shape transparently — the only structural
+ * deltas between the two are the date format and the negative-number
+ * notation, both handled in `parseTableDate` / `parseSignedDecimal`).
  *
  * Strategy:
  *   1. Locate every `<tr>...</tr>` block.
  *   2. Strip tags from each block's inner content to get cell text.
- *   3. Drop rows whose first cell isn't a "Mon DD, YYYY" date — this
- *      filters header rows + summary rows ("Total", "Average", etc).
- *   4. Anchor on the LAST cell as Totals. Bitbo's table puts Totals
- *      after 13 individual ETF columns. We do NOT walk left for a
+ *   3. Drop rows whose first cell isn't a date — this filters the
+ *      3-row Farside header (icons / ticker / fee) and the tail-end
+ *      summary rows (Average, Minimum, Maximum, Std Dev, Total) without
+ *      special-casing them.
+ *   4. Anchor on the LAST cell as Totals. We do NOT walk left for a
  *      fallback: if the Totals cell is `-` (non-trading day or partial
  *      render), walking left would pick a per-ETF column and produce a
  *      ~10× wrong netFlow. Skip the row instead.
@@ -249,37 +277,86 @@ function extractCells(rowInner: string): string[] {
 }
 
 /**
- * Convert a "Mon DD, YYYY" string to YYYY-MM-DD. Returns null on any
- * non-match — important for filtering out header rows ("Date") and
- * summary rows ("Total", "Average", "Maximum", "Minimum") which all
- * fail this regex naturally.
+ * Convert a date string to YYYY-MM-DD. Returns null on any non-match
+ * — important for filtering out header rows ("Date") and summary rows
+ * ("Total", "Average", "Maximum", "Minimum") which all fail naturally.
+ *
+ * Two formats are accepted:
+ *   - **`DD Mon YYYY`** ("06 Apr 2026") — Farside's British convention.
+ *   - **`Mon DD, YYYY`** ("Apr 23, 2026") — legacy Bitbo / US convention.
+ *
+ * Both formats are tried in order; the first match wins. Month names
+ * may be 3-letter abbreviations or fully spelled out.
  */
 function parseTableDate(raw: string): string | null {
-  // Examples that should match: "Apr 23, 2026", "Apr  23, 2026",
-  //   "April 23, 2026" (some Bitbo months are unabbreviated).
-  const m = /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/.exec(raw.trim());
-  if (!m) return null;
+  const trimmed = raw.trim();
 
-  const monthKey = m[1].slice(0, 3).toLowerCase();
+  // Format A — Farside: "06 Apr 2026".
+  let monthName: string | null = null;
+  let dayStr: string | null = null;
+  let yearStr: string | null = null;
+
+  const farsideMatch = /^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/.exec(trimmed);
+  if (farsideMatch) {
+    dayStr = farsideMatch[1];
+    monthName = farsideMatch[2];
+    yearStr = farsideMatch[3];
+  } else {
+    // Format B — legacy Bitbo / US: "Apr 23, 2026".
+    const usMatch = /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/.exec(trimmed);
+    if (usMatch) {
+      monthName = usMatch[1];
+      dayStr = usMatch[2];
+      yearStr = usMatch[3];
+    }
+  }
+
+  if (!monthName || !dayStr || !yearStr) return null;
+
+  const monthKey = monthName.slice(0, 3).toLowerCase();
   const month = MONTH_INDEX[monthKey];
   if (!month) return null;
 
-  const day = m[2].padStart(2, "0");
-  if (Number(day) < 1 || Number(day) > 31) return null;
+  const day = dayStr.padStart(2, "0");
+  const dayNum = Number(day);
+  if (dayNum < 1 || dayNum > 31) return null;
 
-  const year = m[3];
-  const iso = `${year}-${month}-${day}`;
+  const iso = `${yearStr}-${month}-${day}`;
   return ISO_DATE.test(iso) ? iso : null;
 }
 
 /**
- * Parse "1,234.5" or "-243.3" or "0" into a finite number, or null.
+ * Parse a numeric cell into a finite number, or null.
+ *
+ * Accepts:
+ *   - Plain decimals: `"1234"`, `"167.1"`, `"0"`
+ *   - Comma-thousands: `"1,234.5"`
+ *   - Leading-minus negatives: `"-243.3"` (Bitbo / US convention)
+ *   - **Parenthesized negatives: `"(17.1)"`** (Farside / accountancy convention)
+ *
+ * The parenthesized-negative path is critical: Farside wraps every
+ * negative net-flow in `(X)` plus a `<span class="redFont">` highlight.
+ * Without this branch, every outflow day would be silently dropped as
+ * "malformed" — turning the 90-day z-score into an inflows-only series
+ * that would mis-fire the on-chain composite high.
  */
 function parseSignedDecimal(raw: string): number | null {
-  const stripped = raw.replace(/,/g, "");
+  const trimmed = raw.trim();
+
+  // Detect accountancy parentheses: "(17.1)" → negative.
+  let candidate = trimmed;
+  let negate = false;
+  const parenMatch = /^\((.+)\)$/.exec(candidate);
+  if (parenMatch) {
+    candidate = parenMatch[1].trim();
+    negate = true;
+  }
+
+  const stripped = candidate.replace(/,/g, "");
   if (!/^-?\d+(?:\.\d+)?$/.test(stripped)) return null;
   const n = Number(stripped);
-  return Number.isFinite(n) ? n : null;
+  if (!Number.isFinite(n)) return null;
+  return negate ? -n : n;
 }
 
 // ---------------------------------------------------------------------------

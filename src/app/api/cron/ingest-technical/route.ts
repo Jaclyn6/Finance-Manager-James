@@ -74,6 +74,13 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *     matches the "write NULL rather than skip" rule in the Agent A
  *     spec so the dashboard reader can render a definitive "waiting
  *     on history" state instead of an ambiguous missing row.
+ *   - MA(200) and Disparity (which depends on MA200) are STRUCTURALLY
+ *     null on the free Alpha Vantage tier as of 2026-04-25 — AV moved
+ *     `outputsize=full` behind a paid plan, leaving free callers with
+ *     100-bar `compact` responses that can't form a 200-bar SMA. Both
+ *     rows are written with `fetch_status='partial'` per the rule
+ *     above. Blueprint §2.2 tenet 1 ("null-propagation") makes the
+ *     composite engine tolerate this without crashing.
  *   - Supabase writer throw → captured into ingest_runs.error_summary
  *     best-effort; handler returns 500.
  *
