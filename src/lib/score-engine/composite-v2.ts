@@ -1,3 +1,4 @@
+import { clamp } from "./normalize";
 import type {
   AssetType,
   CategoryContribution,
@@ -143,7 +144,9 @@ export function computeCompositeV2(
   }
 
   return {
-    score0to100: composite,
+    // F-R2.2: defensive clamp against floating-point drift on the
+    // weighted sum (sub-scores are already 0-100 individually).
+    score0to100: clamp(composite, 0, 100),
     contributing,
     missingCategories: missing,
   };

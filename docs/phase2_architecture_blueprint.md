@@ -102,7 +102,7 @@ These strings + versions are the authoritative source — editing them requires 
 
 - `MODEL_VERSION = "v2.0.0"` (was `"v1.0.0"` in Phase 1; see §4, plan §0.2 #9).
 - `SIGNAL_RULES_VERSION = "v1.0.0"` (independent from `MODEL_VERSION` — signal threshold tuning and composite weight tuning are different cadences; see §4, plan C.1 + C.7.5).
-- `TICKER_LIST_VERSION = "v1.0.0-2026-04-23"` (snapshot of the 22-ticker list at this blueprint's authoring date; ticker replacement forces a bump; see §3.2).
+- `TICKER_LIST_VERSION = "v2.0.0-2026-04-25"` (snapshot of the 15-ticker list — 12 AV + 3 CoinGecko — after the 2026-04-25 KR carve-out; ticker replacement forces a bump; see §3.2).
 
 ## 3. Data Sources + Cadences
 
@@ -113,10 +113,10 @@ Every source follows the Phase 1 split convention: `src/lib/score-engine/sources
 | Source | Scope | Auth | Rate limit | Phase 2 TTL (PRD §12.2) | Staleness threshold (tenet 1, plan §0.5) | Files |
 |--------|-------|------|-----------|------------------------|--------------------------------------------|-------|
 | **FRED** (expanded) | 9 series — 7 existing + **`ICSA`** (weekly claims, §10.4 `ECONOMY_INTACT`) + **`WDTGAL`** (daily TGA balance primary, §10.4 `LIQUIDITY_EASING`; `WTREGEN` weekly is documented fallback if `WDTGAL` becomes unavailable) | `FRED_API_KEY` (Phase 1, reused) | ~120/min effectively unlimited for our scale | 24h | 48h | `fred.ts` + `fred-parse.ts` (existing, extended) |
-| **Alpha Vantage** | 19 tickers (§3.2) → `TIME_SERIES_DAILY` daily bars, local RSI/MACD/MA/Bollinger/Disparity | `ALPHA_VANTAGE_API_KEY` (Phase 1 placeholder now active) | **25/day, 5/min (Free)** — the tight constraint | 12–24h | 48h | `alpha-vantage.ts` + `alpha-vantage-parse.ts` (new) |
+| **Alpha Vantage** | 12 tickers (§3.2) → `TIME_SERIES_DAILY` daily bars, local RSI/MACD/MA/Bollinger/Disparity | `ALPHA_VANTAGE_API_KEY` (Phase 1 placeholder now active) | **25/day, 5/min (Free)** — the tight constraint | 12–24h | 48h | `alpha-vantage.ts` + `alpha-vantage-parse.ts` (new) |
 | **CoinGecko** | 3 tickers — `bitcoin`, `ethereum`, `solana` — daily price only (visualization-only per §8.5) | public (no key) | ~30/min, effectively unlimited for 3 tickers/day | 24h | 48h | `coingecko.ts` + `coingecko-parse.ts` (new) |
-| **Bitbo** | MVRV Z-Score, SOPR | unofficial, no key | unofficial; back-off on 429/5xx | 1h | 2h | `bitbo.ts` + `bitbo-parse.ts` (new) |
-| **CoinGlass** | BTC Spot ETF 순유입 | unofficial, no key | unofficial; back-off | 1h | 2h | `coinglass.ts` + `coinglass-parse.ts` (new) |
+| **BGeometrics** (`api.bitcoin-data.com/v1/`) | MVRV Z-Score, SOPR — replaced Bitbo (2026-04-25). 8 requests/hour free quota; `retryOnRateLimit: false` fail-fast policy in `bitbo.ts`. Phase 3 candidate: Glassnode (~$29/mo) for production-grade reliability. | unofficial, no key | 8/hr per IP (429 with `RATE_LIMIT_HOUR_EXCEEDED`); fail-fast | 1h | 2h | `bitbo.ts` + `bitbo-parse.ts` |
+| **Farside** (`farside.co.uk/btc/`) | BTC Spot ETF flows — HTML scrape, parses `Mon DD, YYYY` and `DD Mon YYYY` date formats plus parenthesized accountancy negatives. Migrated 2026-04-25 from CoinGlass v2 (returned 500 from Vercel ASN; v4 paid). | unofficial, no key | unofficial; back-off | 1h | 2h | `coinglass.ts` + `coinglass-parse.ts` |
 | **alternative.me** | Crypto Fear & Greed Index | public (no key) | generous | 1h | 2h | `alternative-me.ts` + `alternative-me-parse.ts` (new) |
 | **CNN Markets Data** | CNN Fear & Greed Index (**stocks**, distinct from alternative.me crypto F&G — PRD §8.4 line 179) | unofficial public JSON | unofficial; back-off | 1h | 2h | `cnn-fear-greed.ts` + `cnn-fear-greed-parse.ts` (new) |
 | **Finnhub** | 뉴스 센티먼트 (보조 지표, PRD §8.4) | `FINNHUB_API_KEY` (new env var) | 60/min (Free) | 1h | 2h | `finnhub.ts` + `finnhub-parse.ts` (new) |
@@ -125,18 +125,11 @@ Every source follows the Phase 1 split convention: `src/lib/score-engine/sources
 
 **`server-only` guard** (Phase 1 invariant preserved): every `{source}.ts` that reads an API key or contacts an upstream service carries `import "server-only"` at the top. `{source}-parse.ts` is guard-free so backfill scripts (`scripts/backfill-*.ts`) can import it under `npx tsx` Node env. Violating this split is an anti-pattern (§12).
 
-### 3.2 Ticker registry (TICKER_LIST_VERSION v1.0.0-2026-04-23)
+### 3.2 Ticker registry (TICKER_LIST_VERSION v2.0.0-2026-04-25)
 
 Frozen at authoring time. Plan §0.2 item 2 resolution. Changing this list requires bumping `TICKER_LIST_VERSION` + a blueprint revision — silent code edits forbidden (see §11 risk row 5, §12 trade-off 5).
 
-**KR equity (7 — Alpha Vantage `.KS` symbols)**
-- `005930.KS` 삼성전자
-- `000660.KS` SK하이닉스
-- `373220.KS` LG에너지솔루션
-- `207940.KS` 삼성바이오로직스
-- `005380.KS` 현대차
-- `069500.KS` KODEX 200 (KOSPI 200 proxy — native index not in AV)
-- `232080.KS` TIGER 코스닥150
+The current registry is **15 tickers (12 AV + 3 CoinGecko)**.
 
 **US equity (7 — Alpha Vantage)**
 - `SPY`, `QQQ` (broad indices; MOMENTUM_TURN signal uses SPY MACD)
@@ -152,7 +145,9 @@ Frozen at authoring time. Plan §0.2 item 2 resolution. Changing this list requi
 **Crypto (3 — CoinGecko IDs)**
 - `bitcoin`, `ethereum`, `solana`
 
-**Alpha Vantage Free-tier budget audit**: 19 AV tickers × 1 `TIME_SERIES_DAILY`/day = 19 calls/day. Headroom = 6 calls/day (manual backfill + transient retries). Safe but tight. Adding any ticker requires either an AV paid upgrade or a move to Twelve Data (800/day free), which is Phase 3. Crypto budget is independent — CoinGecko free tier is effectively unlimited at 3 tickers/day.
+**Alpha Vantage Free-tier budget audit**: 12 AV tickers × 1 `TIME_SERIES_DAILY`/day = 12 calls/day. Combined with the AV NEWS_SENTIMENT layer (5 AV news calls/day, see Step 7) the daily total is 17/25, leaving 8 calls headroom for manual backfill + transient retries. Crypto budget is independent — CoinGecko free tier is effectively unlimited at 3 tickers/day.
+
+**2026-04-25 KR carve-out**: 7 KR `.KS` tickers (`005930.KS` Samsung, `000660.KS` SK Hynix, `373220.KS` LGES, `207940.KS` Samsung Bio, `005380.KS` Hyundai Motor, `069500.KS` KODEX 200, `232080.KS` TIGER KOSDAQ150) were removed from the registry after Alpha Vantage free tier was verified to reject every KOSPI / KOSDAQ symbol format (`.KS`, `.KQ`, `.KOSPI`, `.KRX`, bare 6-digit). KR equity technical category is therefore null at Phase 2 — `aggregateTechnical('kr_equity')` returns null, surfaced in `missingCategories` per §2.2 tenet 1. Phase 3 candidate sources: ECOS (한국은행 OpenAPI) or Yahoo Finance scrape. See `src/app/api/cron/ingest-technical/ticker-registry.ts` header for the full carve-out rationale.
 
 ### 3.3 Cron cadence plan
 
@@ -736,11 +731,11 @@ Map PRD §18 Phase 2 bullets + PRD §16.3 to concrete, verifiable evidence. Exte
 
 | PRD §18 bullet | Proving evidence |
 |----------------|------------------|
-| RSI, MACD, 이동평균선 반영 | Step 3 unit tests green (RSI thresholds, MACD cross, MA). `technical_readings` table populated for 19 AV tickers × 6 indicators daily via Step 7 cron. |
+| RSI, MACD, 이동평균선 반영 | Step 3 unit tests green (RSI thresholds, MACD cross, MA). `technical_readings` table populated for 12 AV tickers × 6 indicators daily via Step 7 cron (post 2026-04-25 KR carve-out). |
 | BTC MVRV / SOPR 반영 | Step 4 unit tests. `onchain_readings` populated hourly via Step 7 `/api/cron/ingest-onchain`. |
 | 뉴스 센티먼트 보조 레이어 | Step 5 module + capped-weight test. `news_sentiment` populated hourly. Sentiment contribution ≤ 10 weight at US equity. |
 | 점수 기여도 시각화 | Step 8 `ContributingIndicators` v2 renders 4-category grouped bars. Real-device render at 375px + 768px + 1280px. |
-| 가격 히스토리 레이어 (§8.5) | Step 9 `price_readings` populated for 22 tickers. Zero import of `@/lib/data/prices` from `src/lib/score-engine/**` (convention / ESLint). |
+| 가격 히스토리 레이어 (§8.5) | Step 9 `price_readings` populated for 15 tickers (12 AV + 3 CoinGecko, post 2026-04-25 KR carve-out). Zero import of `@/lib/data/prices` from `src/lib/score-engine/**` (convention / ESLint). |
 | 히스토리 뷰에 가격 오버레이 (§11.6 Phase 2) | Step 10 `ComposedChart` on `/asset/[slug]`. Hover tooltip shows score + price + Δ. |
 | PWA 대응 (§11.7 이연 항목) | Step 12 Lighthouse PWA ≥ 90. Real iPhone + Android install success. |
 | 매수 타이밍 시그널 엔진 (§10.4) | Steps 7.5 + 8.5. 18+ signal unit tests green. `SignalAlignmentCard` renders above `CompositeStateCard` on dashboard. `signal_events` populated at every cron invocation. |
@@ -749,7 +744,7 @@ Map PRD §18 Phase 2 bullets + PRD §16.3 to concrete, verifiable evidence. Exte
 
 | §16.3 criterion (line) | Proving evidence |
 |-----------------------|------------------|
-| 최소 2개 이상의 기술적 지표(RSI, MACD)가 적용된다 (line 468) | `SELECT DISTINCT indicator_key FROM technical_readings` returns at least `RSI_14`, `MACD_12_26_9`, `MA_50`, `MA_200`, `BB_20_2`, `DISPARITY`. |
+| 최소 2개 이상의 기술적 지표(RSI, MACD)가 적용된다 (line 468) | `SELECT DISTINCT indicator_key FROM technical_readings` returns at least `RSI_14`, `MACD_12_26_9`, `MA_50`, `BB_20_2`, `DISPARITY`. **MA_200 is structurally null at Phase 2** because the free Alpha Vantage `TIME_SERIES_DAILY` `outputsize=compact` returns only 100 daily bars (the previous `outputsize=full` was moved to AV premium 2026-04-25); MA_200 needs 200 bars and falls through to null per §2.2 tenet 1, with Disparity (which divides by MA_200) doing the same. The remaining five indicators populate normally. |
 | BTC에는 최소 1개 이상의 온체인 지표(MVRV 또는 SOPR)가 적용된다 (line 469) | `onchain_readings.asset_type = 'crypto' AND indicator_key IN ('MVRV_Z', 'SOPR')` returns daily rows. BTC composite under `MODEL_VERSION=v2.0.0` shows non-zero on-chain sub-score contribution. |
 | 나머지 Phase 2 기준은 본 블루프린트 §10에서 정의 (line 470) | This mapping table. |
 
@@ -765,9 +760,9 @@ Map PRD §18 Phase 2 bullets + PRD §16.3 to concrete, verifiable evidence. Exte
 
 | Risk | Severity | Mitigation | Owner |
 |------|----------|------------|-------|
-| Alpha Vantage 25/day rate limit (PRD §17, plan §0.2 #2) | High | Batch `TIME_SERIES_DAILY` to 19 calls/day with 15s sleeps (5/min). Compute RSI/MACD/MA/Bollinger/Disparity locally. 6-call headroom for manual backfill. Upgrade to Twelve Data (800/day free) triggers Phase 3 re-plan. | Dev |
-| Bitbo unofficial API — silent schema change or outage | High | `{source}-parse.ts` split rejects off-schema payloads (Phase 1 `parseFredResponse` pattern). Per-category staleness badge (§3.1, tenet 1). 7-day 0-success hard-fail banner. | Dev + monitor |
-| CoinGlass unofficial API | Same as Bitbo | Same mitigation. | Same |
+| Alpha Vantage 25/day rate limit (PRD §17, plan §0.2 #2) | High | Batch `TIME_SERIES_DAILY` to 12 calls/day with 15s sleeps (5/min). Combined with 5 AV NEWS_SENTIMENT calls = 17/25 daily, 8 calls headroom for manual backfill. Compute RSI/MACD/MA/Bollinger/Disparity locally. Upgrade to Twelve Data (800/day free) triggers Phase 3 re-plan. | Dev |
+| BGeometrics 8/hr free quota (MVRV_Z, SOPR) | High | `retryOnRateLimit: false` in `bitbo.ts` so a single 429 doesn't burn remaining quota. 429 propagates to `fetch_status: 'error'` with tagged audit message; UI staleness gate handles the gap (§3.1, tenet 1). Phase 3 migration to Glassnode (~$29/mo) for production-grade reliability. | Dev + monitor |
+| Farside HTML-scrape BTC ETF flow — silent layout change | High | `coinglass-parse.ts` split rejects off-schema payloads. Tolerant date parser supports both `Mon DD, YYYY` (legacy CoinGlass shape) and `DD Mon YYYY` (Farside shape) plus parenthesized accountancy negatives. Per-category staleness badge + 7-day 0-success hard-fail banner. | Dev + monitor |
 | alternative.me | Generally stable | Staleness badge sufficient. | — |
 | CNN Markets Data JSON | Highest uncertainty (no contract at all) | Staleness badge + fallback: if CNN F&G input missing, `EXTREME_FEAR` signal evaluated on VIX alone — **not** silently `false` (tenet 1, §4.5 null handling). | Dev |
 | GitHub Actions 5-min cron precision drift (plan §0.2 #8) | Medium | 2× TTL staleness policy absorbs a missed hourly run. Hard-fail banner only at 7 consecutive days. | Ops |
@@ -779,6 +774,7 @@ Map PRD §18 Phase 2 bullets + PRD §16.3 to concrete, verifiable evidence. Exte
 | `SIGNAL_RULES_VERSION` missed on an insert (breaks historical replay) | High | `signal_events` PK is `(snapshot_date, signal_rules_version)` — NOT NULL enforced at DB level, insert fails fast rather than silently defaulting. | Dev |
 | Price history reader imported into score-engine (§7.4 violation) | High | `no-restricted-imports` ESLint rule + code review checklist. Snapshot immutability also enforces: composite doesn't even know prices exist. | Dev |
 | Service Worker caching an old shell past a deploy | Medium | SW version bump on every deploy (`CACHE_VERSION` constant in `sw.js`). Activation deletes old caches. | Dev |
+| Phase 3 ECOS API for KR equity (currently null at Phase 2) | Medium | KR equity technical category is null at Phase 2 because Alpha Vantage free tier rejects every KOSPI/KOSDAQ symbol format (see §3.2 carve-out). `aggregateTechnical('kr_equity')` returns null, surfaced in `missingCategories` per §2.2 tenet 1. Phase 3 candidate: ECOS (한국은행 OpenAPI) or Yahoo Finance scrape. | Dev |
 
 ## 12. Trade-offs
 

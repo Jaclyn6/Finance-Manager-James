@@ -15,6 +15,7 @@ import {
   cryptoFearGreedToScore,
   etfFlowToScore,
   ETF_FLOW_SCORE_WINDOW,
+  mergeEtfFlowHistory,
   mvrvZScoreToScore,
   soprToScore,
 } from "@/lib/score-engine/onchain";
@@ -186,20 +187,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     //       under load). We hydrate the 90-day window from DB so the
     //       z-score stays comparable across runs even if upstream
     //       truncates.
-    // We combine both: take history = DB rows (older) + upstream
-    // observations before today (newer). etfFlowToScore slices to the
-    // last 90 regardless, so a bit of duplication at the seam is
-    // harmless.
+    // F-R2.1 (Trigger 2 review, 2026-04-25): the previous concat
+    // `[...historyFromDb, ...historyFromUpstream]` shape duplicated
+    // every overlapping date — `historyFromDb` covers
+    // `[today-90, latestDate-1]` and `historyFromUpstream` covers all
+    // upstream rows strictly before `latestDate`, so any day present
+    // in both was double-counted in the z-score mean/stddev. Replaced
+    // with a per-date Map: DB rows seed first, upstream observations
+    // overlay (upstream wins on tie since it's closer to source-of-
+    // truth). Iteration order is chronological so the z-score sees a
+    // consistently ordered series.
     if (etfFlow.fetch_status === "success" && etfFlow.latest) {
       const currentNetFlow = etfFlow.latest.netFlow;
       const latestDate = etfFlow.latest.date;
-      const historyFromUpstream = etfFlow.observations
-        .filter((o) => o.date < latestDate)
-        .map((o) => o.netFlow);
 
-      // Query DB for prior rows within the 90d window. Admin client
-      // bypasses RLS; cache tags don't apply to writer paths.
-      let historyFromDb: number[] = [];
+      // Build the {date, netFlow} list from prior DB rows. Admin
+      // client bypasses RLS; cache tags don't apply to writer paths.
+      // The merge + dedup happens in `mergeEtfFlowHistory` below.
+      const dbRows: { date: string; netFlow: number }[] = [];
       try {
         const cutoff = new Date(today);
         cutoff.setUTCDate(cutoff.getUTCDate() - ETF_FLOW_SCORE_WINDOW);
@@ -222,21 +227,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             priorErr.message,
           );
         } else if (priorRows) {
-          historyFromDb = priorRows
-            .map((r) => r.value_raw)
-            .filter(
-              (v): v is number =>
-                typeof v === "number" && Number.isFinite(v),
-            );
+          for (const r of priorRows) {
+            if (typeof r.value_raw === "number" && Number.isFinite(r.value_raw)) {
+              dbRows.push({ date: r.observed_at, netFlow: r.value_raw });
+            }
+          }
         }
       } catch (err) {
         console.error("[cron] ETF-flow history lookup threw:", err);
       }
 
-      const mergedHistory: number[] = [
-        ...historyFromDb,
-        ...historyFromUpstream,
-      ];
+      const mergedHistory = mergeEtfFlowHistory(
+        dbRows,
+        etfFlow.observations,
+        latestDate,
+      );
 
       const score = etfFlowToScore(currentNetFlow, mergedHistory);
 

@@ -1,4 +1,11 @@
 /**
+ * INACTIVE 2026-04-24 — `ingest-news` was rewired to Alpha Vantage
+ * NEWS_SENTIMENT because Finnhub `/news-sentiment` is paid-only. This
+ * parser is retained for a future paid-Finnhub upgrade. No active
+ * import path; do not delete without `grep -r fetchFinnhubSentiment`.
+ * (F-R3.4 Trigger 2 review banner.)
+ */
+/**
  * Pure Finnhub news-sentiment response parser.
  *
  * Split out of `finnhub.ts` so that:

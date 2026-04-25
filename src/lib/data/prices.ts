@@ -44,7 +44,8 @@ import { CACHE_TAGS } from "./tags";
  *
  * Each reader declares `cacheTag(CACHE_TAGS.prices)` + `cacheLife`.
  * Both cron endpoints that write this table — `ingest-prices` (crypto)
- * and `ingest-technical` (19 AV tickers, shared fetch) — call
+ * and `ingest-technical` (12 AV tickers, shared fetch — KR carve-out
+ * 2026-04-25 reduced 19 → 12; see ticker-registry.ts header) — call
  * `revalidateTag('prices', { expire: 0 })` on success, so stale cached
  * rows evict as soon as fresh bars land.
  */

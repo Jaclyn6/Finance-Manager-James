@@ -38,11 +38,13 @@ import { redactSecretsFromErrorMessage } from "./_redact";
  *    leak to browser bundles.
  *
  * Rate-limit note for the cron implementer (Step 7): the free tier's
- * 5-req/minute ceiling means 22 tickers takes ≥5 minutes if serialized.
- * The cron should either (a) sleep 13s between requests, or (b) accept
- * that the run takes ~5min and schedule accordingly. On 429 or any of
- * the three rate-limit payloads detected by the parser, back off for
- * the remainder of the minute.
+ * 5-req/minute ceiling means 12 tickers takes ~2.6 minutes if
+ * serialized (13s sleep + ~2s fetch each). KR carve-out 2026-04-25
+ * dropped the registry from 22 → 15 (12 AV + 3 CoinGecko); see
+ * `ticker-registry.ts` header. The cron sleeps 13s between AV requests
+ * and the run finishes well inside the 300s function ceiling. On 429
+ * or any of the three rate-limit payloads detected by the parser, back
+ * off for the remainder of the minute.
  */
 
 export type {

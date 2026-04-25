@@ -21,12 +21,13 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *
  * Scope split with `/api/cron/ingest-technical`:
  *
- *   - `ingest-technical` fetches the 19 Alpha Vantage tickers ONCE
- *     and writes to BOTH `technical_readings` (indicator rows) and
- *     `price_readings` (latest daily bar). This saves re-fetching
- *     the same 19 symbols here and stays inside the Alpha Vantage
- *     free-tier 25/day ceiling. AV fetch is shared; AV writes to
- *     price_readings are the technical cron's responsibility.
+ *   - `ingest-technical` fetches the 12 Alpha Vantage tickers ONCE
+ *     (KR carve-out 2026-04-25 reduced 19 → 12; see ticker-registry.ts
+ *     header) and writes to BOTH `technical_readings` (indicator rows)
+ *     and `price_readings` (latest daily bar). Daily AV budget after
+ *     the carve-out: 12 AV technical + 5 AV news = 17/25 daily, 8 calls
+ *     headroom. AV fetch is shared; AV writes to price_readings are
+ *     the technical cron's responsibility.
  *
  *   - This route handles only the 3 CoinGecko crypto IDs
  *     (`bitcoin`, `ethereum`, `solana` per blueprint §3.2) — the

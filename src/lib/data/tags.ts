@@ -77,8 +77,9 @@ export const CACHE_TAGS = {
    * All `technical_readings` reads (blueprint §7.2 Phase 2 tag).
    *
    * Invalidated by `/api/cron/ingest-technical` after it writes the
-   * 19-ticker × 6-indicator batch (RSI_14, MACD_12_26_9, MA_50,
-   * MA_200, BB_20_2, DISPARITY). Every future reader under
+   * 12-ticker × 6-indicator batch (RSI_14, MACD_12_26_9, MA_50,
+   * MA_200, BB_20_2, DISPARITY) — KR carve-out 2026-04-25 reduced
+   * 19 → 12; see ticker-registry.ts header. Every future reader under
    * `src/lib/data/technical.ts` (Step 8 UI) MUST declare this tag
    * inside its `'use cache'` scope.
    */
@@ -87,8 +88,9 @@ export const CACHE_TAGS = {
    * All `price_readings` reads (blueprint §7.2).
    *
    * Invalidated by BOTH cron endpoints that write bars:
-   * `ingest-technical` (19 AV tickers — shared fetch with the
-   * technical pipeline writes to both tables) and `ingest-prices`
+   * `ingest-technical` (12 AV tickers — shared fetch with the
+   * technical pipeline writes to both tables; KR carve-out 2026-04-25
+   * reduced 19 → 12, see ticker-registry.ts header) and `ingest-prices`
    * (3 CoinGecko crypto ids). Readers live under
    * `src/lib/data/prices.ts` (Step 10 price-overlay chart).
    *

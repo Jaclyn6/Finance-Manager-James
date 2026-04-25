@@ -444,8 +444,12 @@ function coerceFinite(raw: unknown): number | null {
     return Number.isFinite(raw) ? raw : null;
   }
   if (typeof raw === "string") {
-    if (raw.length === 0) return null;
-    const n = Number(raw);
+    // F-R2.3: trim before length check so whitespace-only payloads
+    // (e.g. " ", "\n") fall to null rather than coercing via Number("")
+    // = 0 with the leading whitespace stripped.
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return null;
+    const n = Number(trimmed);
     return Number.isFinite(n) ? n : null;
   }
   return null;

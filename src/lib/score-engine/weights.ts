@@ -46,16 +46,24 @@ export const MODEL_VERSION = "v2.0.0";
 export const SIGNAL_RULES_VERSION = "v1.0.0";
 
 /**
- * Snapshot marker for the 22-ticker registry that Phase 2 scoring
- * depends on (blueprint §2.3, §3.2).
+ * Snapshot marker for the 15-ticker registry (12 Alpha Vantage + 3
+ * CoinGecko) that Phase 2 scoring depends on (blueprint §2.3, §3.2).
  *
  * Bumping this version requires a blueprint revision — silent edits
  * to the ticker list are forbidden (blueprint §11 risk row 5, §12
- * trade-off 5). The date suffix is the blueprint's authoring date
- * (2026-04-23) so a grep of the string finds the exact frozen-at
- * moment without a git-blame dance.
+ * trade-off 5). The date suffix is the cutover date so a grep of the
+ * string finds the exact frozen-at moment without a git-blame dance.
+ *
+ * v2.0.0-2026-04-25 cutover (commit `d536141`): the 7 KR `.KS` tickers
+ * were removed after Alpha Vantage free tier was verified to reject
+ * every KOSPI / KOSDAQ symbol format. Pre-cutover registry had 22
+ * tickers (19 AV + 3 CoinGecko); the post-cutover registry has 15
+ * (12 AV + 3 CoinGecko). KR equity technical category is null at
+ * Phase 2; Phase 3 candidate is ECOS (한국은행 OpenAPI) or Yahoo
+ * Finance — see `src/app/api/cron/ingest-technical/ticker-registry.ts`
+ * header.
  */
-export const TICKER_LIST_VERSION = "v1.0.0-2026-04-23";
+export const TICKER_LIST_VERSION = "v2.0.0-2026-04-25";
 
 /**
  * Phase 1 macro-only indicator set. All seven FRED series from

@@ -15,13 +15,20 @@
  * workbox.
  */
 
-const CACHE_NAME = "finance-shell-v1";
+// F-R5.12: PNG icons added for iOS A2HS reliability (iOS Safari does
+// not honour SVG manifest icons consistently). CACHE_NAME bumped to
+// `v2` so existing installs evict the stale precache that lacks the
+// PNG entries on next activation.
+const CACHE_NAME = "finance-shell-v2";
 const SHELL_ASSETS = [
   "/",
   "/dashboard",
   "/manifest.webmanifest",
   "/icons/192.svg",
   "/icons/512.svg",
+  "/icons/192.png",
+  "/icons/512.png",
+  "/icons/maskable-512.png",
 ];
 
 self.addEventListener("install", (event) => {

@@ -269,3 +269,55 @@ export function etfFlowToScore(
   return zScoreTo0100(z, true);
 }
 
+// ---------------------------------------------------------------------------
+// ETF Flow history merge (DB rows + upstream observations, dedup)
+// ---------------------------------------------------------------------------
+
+/**
+ * F-R2.1 (Trigger 2 review, 2026-04-25): merge prior `onchain_readings`
+ * rows with upstream Farside / CoinGlass observations into one
+ * deduplicated, chronologically ordered net-flow history for
+ * {@link etfFlowToScore}.
+ *
+ * Why this exists as a pure helper: the previous in-route concat
+ * `[...historyFromDb, ...historyFromUpstream]` shape duplicated every
+ * overlapping date — DB covers `[today-90, latestDate-1]` and upstream
+ * covers all observations strictly before `latestDate`, so any day
+ * present in both was double-counted in the z-score mean/stddev.
+ * Extracting the merge into a tested helper makes the dedup invariant
+ * inspectable from `onchain.test.ts` without spinning up a Supabase
+ * mock for the whole route.
+ *
+ * Tie-break: upstream wins on date collision — closer to the canonical
+ * source than a stored DB row from a prior partial run.
+ *
+ * @param dbRows   Prior `onchain_readings` rows for `BTC_ETF_NETFLOW`,
+ *                 each `{ date, netFlow }`. Date strings in
+ *                 `YYYY-MM-DD`. Order does not matter.
+ * @param upstream Upstream observations for the same indicator. Order
+ *                 does not matter.
+ * @param latestDate Inclusive upper bound — observations on or after
+ *                   this date are excluded (today's value is the
+ *                   `currentNetFlow` argument to `etfFlowToScore`, not
+ *                   part of its history).
+ * @returns Deduplicated chronological net-flow values, oldest-first.
+ */
+export function mergeEtfFlowHistory(
+  dbRows: ReadonlyArray<{ date: string; netFlow: number }>,
+  upstream: ReadonlyArray<{ date: string; netFlow: number }>,
+  latestDate: string,
+): number[] {
+  const byDate = new Map<string, number>();
+  for (const r of dbRows) {
+    if (r.date < latestDate && Number.isFinite(r.netFlow)) {
+      byDate.set(r.date, r.netFlow);
+    }
+  }
+  for (const obs of upstream) {
+    if (obs.date < latestDate && Number.isFinite(obs.netFlow)) {
+      byDate.set(obs.date, obs.netFlow);
+    }
+  }
+  const sortedDates = [...byDate.keys()].sort();
+  return sortedDates.map((d) => byDate.get(d) as number);
+}

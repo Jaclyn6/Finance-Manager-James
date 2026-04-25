@@ -6,6 +6,7 @@ import {
   etfFlowToScore,
   isCapitulation,
   isCryptoUndervalued,
+  mergeEtfFlowHistory,
   mvrvZScoreToScore,
   soprToScore,
 } from "./onchain";
@@ -277,4 +278,68 @@ describe("etfFlowToScore", () => {
       expect(etfFlowToScore(200, history)).toBe(50);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// mergeEtfFlowHistory — F-R2.1 Trigger 2 review regression test
+// ---------------------------------------------------------------------------
+
+describe("mergeEtfFlowHistory (F-R2.1 dedup regression)", () => {
+  it("dedupes overlapping dates between DB rows and upstream observations (upstream wins)", () => {
+    // Pre-fix shape: [...db, ...upstream] would yield 6 entries with
+    // 2024-01-02 and 2024-01-03 each appearing twice. Mean/stddev
+    // would be biased by the duplicates.
+    const dbRows = [
+      { date: "2024-01-01", netFlow: 100 },
+      { date: "2024-01-02", netFlow: 200 },
+      { date: "2024-01-03", netFlow: 300 },
+    ];
+    const upstream = [
+      // Same dates as DB — upstream is closer to canonical, so its
+      // values should win. 2024-01-02 db=200 → upstream=250.
+      { date: "2024-01-02", netFlow: 250 },
+      { date: "2024-01-03", netFlow: 350 },
+      { date: "2024-01-04", netFlow: 400 },
+    ];
+    const merged = mergeEtfFlowHistory(dbRows, upstream, "2024-01-05");
+    // Distinct dates only: 4 unique days. No duplicates.
+    expect(merged).toHaveLength(4);
+    // Chronological, upstream-wins on collisions.
+    expect(merged).toEqual([100, 250, 350, 400]);
+  });
+
+  it("excludes observations on or after latestDate from both sources", () => {
+    const dbRows = [
+      { date: "2024-01-01", netFlow: 100 },
+      { date: "2024-01-02", netFlow: 200 },
+      // This row would never be queried in production (the DB lookup
+      // applies `.lt("observed_at", latestDate)`) but the helper must
+      // still defend against the same date appearing through the
+      // upstream path or a misfit caller.
+      { date: "2024-01-05", netFlow: 999 },
+    ];
+    const upstream = [
+      { date: "2024-01-03", netFlow: 300 },
+      // latestDate itself is excluded — that value is the
+      // `currentNetFlow` argument to `etfFlowToScore`, not history.
+      { date: "2024-01-05", netFlow: 500 },
+      // Future dates also excluded as a defensive guard.
+      { date: "2024-01-06", netFlow: 600 },
+    ];
+    const merged = mergeEtfFlowHistory(dbRows, upstream, "2024-01-05");
+    expect(merged).toEqual([100, 200, 300]);
+  });
+
+  it("skips non-finite values from either source without throwing", () => {
+    const dbRows = [
+      { date: "2024-01-01", netFlow: 100 },
+      { date: "2024-01-02", netFlow: Number.NaN },
+    ];
+    const upstream = [
+      { date: "2024-01-03", netFlow: 300 },
+      { date: "2024-01-04", netFlow: Number.POSITIVE_INFINITY },
+    ];
+    const merged = mergeEtfFlowHistory(dbRows, upstream, "2024-01-10");
+    expect(merged).toEqual([100, 300]);
+  });
 });
