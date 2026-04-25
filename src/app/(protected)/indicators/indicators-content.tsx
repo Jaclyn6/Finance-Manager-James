@@ -35,6 +35,7 @@ import {
 export function IndicatorsContent() {
   return (
     <div className="space-y-10">
+      <ScoreReadingGuide />
       {INDICATOR_CATEGORY_ORDER.map((category) => {
         const entries = INDICATORS_BY_CATEGORY[category];
         if (entries.length === 0) return null;
@@ -113,6 +114,25 @@ function IndicatorEntryCard({ entry }: { entry: IndicatorGlossaryEntry }) {
             />
           </div>
 
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-md border border-brand/30 bg-brand-subtle/40 p-3 text-sm">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-dark">
+                🧭 점수 방향
+              </p>
+              <p className="leading-relaxed text-foreground/90">
+                {entry.scoreDirectionKo}
+              </p>
+            </div>
+            <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                🧮 점수 계산
+              </p>
+              <p className="leading-relaxed text-foreground/90">
+                {entry.scoringMethodKo}
+              </p>
+            </div>
+          </div>
+
           <div className="rounded-md border border-border/60 bg-muted/40 p-3 text-sm">
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               🔍 일반적 임계값
@@ -134,6 +154,67 @@ function IndicatorEntryCard({ entry }: { entry: IndicatorGlossaryEntry }) {
           ) : null}
         </CardContent>
     </article>
+  );
+}
+
+/**
+ * Top-of-page primer that explains the 0-100 score axis BEFORE the
+ * per-indicator articles. Sits above every category section so a
+ * first-time visitor learns the mental model once instead of having
+ * to infer it from the bullish/bearish blocks.
+ *
+ * Visually distinguished via a brand-tinted card chrome (matches the
+ * `brand-subtle` token used elsewhere for product-tone callouts) but
+ * deliberately NOT loud — the page's primary content is the indicator
+ * articles, the guide is scaffolding.
+ */
+function ScoreReadingGuide() {
+  return (
+    <section
+      aria-labelledby="score-reading-guide-heading"
+      className="rounded-xl border border-brand/30 bg-brand-subtle/30 p-4 md:p-6"
+    >
+      <h2
+        id="score-reading-guide-heading"
+        className="font-heading text-base font-semibold tracking-tight md:text-lg"
+      >
+        🧭 점수 읽는 법
+      </h2>
+      <p className="mt-3 text-sm leading-relaxed text-foreground/90">
+        모든 지표 점수는 <strong className="font-semibold">0~100 사이</strong>로
+        표시됩니다.
+      </p>
+      <ul className="mt-2 space-y-1 text-sm leading-relaxed text-foreground/90">
+        <li>
+          <span className="inline-block w-10 font-mono tabular-nums text-rose-700 dark:text-rose-300">
+            0
+          </span>
+          위험 회피 권장 (현금·안전자산 비중 ↑)
+        </li>
+        <li>
+          <span className="inline-block w-10 font-mono tabular-nums text-muted-foreground">
+            50
+          </span>
+          중립
+        </li>
+        <li>
+          <span className="inline-block w-10 font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+            100
+          </span>
+          위험자산 매수 적기 (주식·암호화폐 비중 ↑)
+        </li>
+      </ul>
+      <p className="mt-3 text-sm leading-relaxed text-foreground/90">
+        점수는 지난 5년 동안의 흐름과 비교해 지금 값이 어디쯤인지를 0~100으로
+        환산한 결과입니다.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-foreground/90">
+        일부 지표는 <strong className="font-semibold">거꾸로 봅니다</strong> —
+        값이 낮을수록 점수가 높아지는 식이죠. 예를 들어 VIX(공포 지수)는
+        높을수록, 기준금리는 낮을수록 점수가 높아집니다. 각 지표 카드의 &ldquo;🧭
+        점수 방향&rdquo; 항목을 보면 어느 쪽인지 바로 알 수 있습니다.
+      </p>
+    </section>
   );
 }
 

@@ -11,6 +11,7 @@ import {
   getCompositeSnapshotsForAssetRange,
   getCompositeSnapshotsForDate,
   getLatestCompositeSnapshots,
+  getLatestIndicatorReadings,
 } from "@/lib/data/indicators";
 import { getCurrentModelCutoverDate } from "@/lib/data/model-version";
 import { getPriceHistoryForTicker } from "@/lib/data/prices";
@@ -79,6 +80,7 @@ export async function AssetContent({
     priceSeries,
     cutoverDate,
     signalEvent,
+    latestRawValues,
   ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
@@ -98,6 +100,15 @@ export async function AssetContent({
     // date-parameterized via ?date=). `null` is the expected empty
     // state — SignalAlignmentCard renders its own placeholder.
     getLatestSignalEvent(selectedDate ?? undefined),
+    // Latest raw values (`value_raw`) per indicator key, joined into
+    // ContributingIndicators rows so beginners can see "VIX raw 19.30"
+    // alongside the engine's score. Returns `{}` on outage — the row
+    // gracefully drops the "지금" cell. NOT date-parameterized:
+    // beginners reading a historical snapshot still want the latest
+    // raw values (the score is what's keyed to the date; the raw
+    // value is informational context). Phase C scoring-transparency
+    // §5 Option B (no schema change to contributing_indicators JSONB).
+    getLatestIndicatorReadings(),
   ]);
 
   const snapshot = snapshots.find((s) => s.asset_type === assetType) ?? null;
@@ -188,6 +199,7 @@ export async function AssetContent({
 
       <ContributingIndicators
         contributing={snapshot.contributing_indicators}
+        latestRawValues={latestRawValues}
       />
     </div>
   );

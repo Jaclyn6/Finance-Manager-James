@@ -264,6 +264,104 @@ export async function getCompositeSnapshotsForAssetRange(
 }
 
 /**
+ * Latest raw value (`value_raw`) for every indicator key the UI knows
+ * about, sourced across the three reading tables that feed the
+ * composite engine + the signal engine:
+ *
+ *   - `indicator_readings`  → all FRED-sourced rows (macro composite +
+ *                             signal-only inputs ICSA / WDTGAL +
+ *                             regional overlay DTWEXBGS / DEXKOUS).
+ *                             We DO NOT scope to a specific asset_type
+ *                             here — these macro series are family-wide
+ *                             facts, not per-asset, so the asset_type
+ *                             column is informational.
+ *   - `onchain_readings`    → MVRV_Z, SOPR, BTC_ETF_NETFLOW, CRYPTO_FG,
+ *                             CNN_FG. CNN_FG is stored here for table-
+ *                             location convenience even though it feeds
+ *                             the sentiment category (per migration 0005
+ *                             comment + tags.ts CACHE_TAGS.onchain note).
+ *
+ * `technical_readings` is intentionally NOT included — those rows are
+ * keyed by `(ticker, indicator_key)` and the dashboard's
+ * ContributingIndicators row lookup keys on indicator KEY only (e.g.
+ * "RSI_14"), not on a per-ticker breakdown. Surfacing the per-ticker
+ * raw values here would require a richer key shape than the current
+ * `Map<string, number | null>` consumer can hold; the per-ticker drill-
+ * down is a Phase 3 candidate. Technical / per-ticker rows fall through
+ * the formatter's null-graceful path and render as "점수 only" rows
+ * without a raw value column — see `contributing-indicators.tsx`.
+ *
+ * Cache cadence: `cacheLife('days')` matches the daily ingest cadence
+ * for the upstream tables. The `prices` tag is NOT used here (price
+ * history is visualization-only per blueprint §7.4); we tag against
+ * `macroSnapshot` + `onchain` because every cron path that writes raw
+ * values into these tables already invalidates one of those tags via
+ * the cron tail-call block (blueprint §5 routing table).
+ *
+ * Returns a plain `Record<string, number | null>` keyed by
+ * `indicator_key`. Missing keys mean either no row exists or the
+ * latest row is in a non-success fetch_status — both render as "—" in
+ * the UI's `formatRawValue` helper.
+ */
+export async function getLatestIndicatorReadings(): Promise<
+  Record<string, number | null>
+> {
+  "use cache";
+  cacheTag(CACHE_TAGS.macroSnapshot);
+  cacheTag(CACHE_TAGS.onchain);
+  cacheLife("days");
+
+  const supabase = getSupabaseAdminClient();
+
+  // Two independent queries in parallel. Each pulls a bounded recent
+  // window then collapses to "latest per indicator_key" in JS — same
+  // pattern as `loadSignalInputs`. The window size is chosen to absorb
+  // up to ~2 weeks of weekend/holiday gaps for the slowest-frequency
+  // FRED series (CPIAUCSL is monthly with revisions; we still want the
+  // most recent observed_at row to land here on the first hit).
+  const FRED_RECENT_LIMIT = 250; // 11 keys × ~22 rows headroom
+  const ONCHAIN_RECENT_LIMIT = 100; // 5 keys × ~20 rows headroom
+  const [fredResult, onchainResult] = await Promise.all([
+    supabase
+      .from("indicator_readings")
+      .select("indicator_key, observed_at, value_raw, fetch_status")
+      .order("observed_at", { ascending: false })
+      .limit(FRED_RECENT_LIMIT),
+    supabase
+      .from("onchain_readings")
+      .select("indicator_key, observed_at, value_raw, fetch_status")
+      .order("observed_at", { ascending: false })
+      .limit(ONCHAIN_RECENT_LIMIT),
+  ]);
+
+  if (fredResult.error) {
+    throw new Error(
+      `getLatestIndicatorReadings indicator_readings query failed: ${fredResult.error.message} (${fredResult.error.code ?? "no code"})`,
+    );
+  }
+  if (onchainResult.error) {
+    throw new Error(
+      `getLatestIndicatorReadings onchain_readings query failed: ${onchainResult.error.message} (${onchainResult.error.code ?? "no code"})`,
+    );
+  }
+
+  const out: Record<string, number | null> = {};
+  // First-occurrence-wins per indicator_key — both sources arrive
+  // newest-first thanks to the ORDER BY, so the first hit IS the latest.
+  for (const row of fredResult.data ?? []) {
+    if (row.fetch_status !== "success") continue;
+    if (out[row.indicator_key] !== undefined) continue;
+    out[row.indicator_key] = row.value_raw;
+  }
+  for (const row of onchainResult.data ?? []) {
+    if (row.fetch_status !== "success") continue;
+    if (out[row.indicator_key] !== undefined) continue;
+    out[row.indicator_key] = row.value_raw;
+  }
+  return out;
+}
+
+/**
  * Returns the most recent `snapshot_date` strictly before `date`,
  * across any asset_type. Used by the no-snapshot empty state to offer
  * a "jump to 2026-04-18" link when the user picks a day without data.

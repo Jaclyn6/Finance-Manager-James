@@ -11,7 +11,10 @@ import {
   CATEGORY_DISPLAY_ORDER,
   CATEGORY_LABELS_KO,
 } from "@/lib/utils/category-labels";
-import { INDICATOR_GLOSSARY } from "@/lib/utils/indicator-glossary";
+import {
+  formatRawValue,
+  INDICATOR_GLOSSARY,
+} from "@/lib/utils/indicator-glossary";
 import type { Json, Tables } from "@/types/database";
 
 /**
@@ -60,6 +63,26 @@ import type { Json, Tables } from "@/types/database";
 
 export interface ContributingIndicatorsProps {
   contributing: Json;
+  /**
+   * Latest raw values for indicator keys present in the glossary
+   * (FRED + on-chain). Optional — when omitted, rows render with the
+   * historical "score / weight / contribution" trio only. When present,
+   * rows whose `key` exists both in the glossary AND in this map
+   * additionally show the raw value with a unit hint between the
+   * label and the score block.
+   *
+   * Sourced from `getLatestIndicatorReadings()` and joined per the
+   * Phase C scoring-transparency plan §5 Option B (no schema change to
+   * `composite_snapshots.contributing_indicators` — read from the
+   * separate reading tables in the page's data layer instead).
+   *
+   * Per-ticker technical_readings rows are intentionally NOT included
+   * (their JSONB key is the ticker symbol, not the indicator key — see
+   * `getLatestIndicatorReadings`'s header), so technical drill-down
+   * rows render without a raw column. That matches the spec's "If a
+   * key has no entry in INDICATOR_GLOSSARY, show only the score" rule.
+   */
+  latestRawValues?: Record<string, number | null>;
 }
 
 /**
@@ -99,6 +122,7 @@ interface IndicatorRow {
 
 export function ContributingIndicators({
   contributing,
+  latestRawValues,
 }: ContributingIndicatorsProps) {
   const { mode, categories } = parseContributing(contributing);
 
@@ -161,7 +185,11 @@ export function ContributingIndicators({
 
         <ul className="space-y-4">
           {categories.map((cat) => (
-            <CategorySection key={cat.category} row={cat} />
+            <CategorySection
+              key={cat.category}
+              row={cat}
+              latestRawValues={latestRawValues}
+            />
           ))}
         </ul>
       </CardContent>
@@ -169,7 +197,13 @@ export function ContributingIndicators({
   );
 }
 
-function CategorySection({ row }: { row: CategoryRow }) {
+function CategorySection({
+  row,
+  latestRawValues,
+}: {
+  row: CategoryRow;
+  latestRawValues?: Record<string, number | null>;
+}) {
   return (
     <li className="space-y-2 rounded-lg border border-border/60 p-3 last:mb-0">
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -203,7 +237,11 @@ function CategorySection({ row }: { row: CategoryRow }) {
       {row.indicators.length > 0 ? (
         <ul className="space-y-2 pt-2">
           {row.indicators.map((ind) => (
-            <IndicatorRowView key={ind.key} indicator={ind} />
+            <IndicatorRowView
+              key={ind.key}
+              indicator={ind}
+              latestRawValues={latestRawValues}
+            />
           ))}
         </ul>
       ) : null}
@@ -211,7 +249,13 @@ function CategorySection({ row }: { row: CategoryRow }) {
   );
 }
 
-function IndicatorRowView({ indicator }: { indicator: IndicatorRow }) {
+function IndicatorRowView({
+  indicator,
+  latestRawValues,
+}: {
+  indicator: IndicatorRow;
+  latestRawValues?: Record<string, number | null>;
+}) {
   const config = INDICATOR_CONFIG[indicator.key];
   const label = config?.descriptionKo ?? indicator.key;
   // Glossary lookup is keyed by the same canonical id (FEDFUNDS, RSI_14,
@@ -219,13 +263,30 @@ function IndicatorRowView({ indicator }: { indicator: IndicatorRow }) {
   // FRED series added before the glossary entry lands) we silently skip
   // the ⓘ trigger — graceful degradation, no broken trigger button.
   const glossaryEntry = INDICATOR_GLOSSARY[indicator.key];
+  // Raw value lookup: only show a raw value column when the indicator
+  // has a glossary entry (we need `unitKo` to render the suffix) AND
+  // the page-level reader returned a value for the key. Per-ticker
+  // technical rows fall through both checks → score-only row.
+  const rawValue =
+    glossaryEntry && latestRawValues
+      ? latestRawValues[indicator.key]
+      : undefined;
+  const showRawValue =
+    glossaryEntry !== undefined &&
+    rawValue !== undefined &&
+    rawValue !== null &&
+    Number.isFinite(rawValue);
+
   return (
     <li className="grid gap-2 border-b border-border/40 pb-2 last:border-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-start md:gap-6">
       <div className="space-y-1">
         <div className="flex items-center gap-1">
           <p className="text-sm font-medium text-foreground">{label}</p>
           {glossaryEntry ? (
-            <IndicatorInfoPopover entry={glossaryEntry} />
+            <IndicatorInfoPopover
+              entry={glossaryEntry}
+              valueRaw={rawValue ?? null}
+            />
           ) : null}
         </div>
         {config ? (
@@ -248,6 +309,14 @@ function IndicatorRowView({ indicator }: { indicator: IndicatorRow }) {
         )}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums md:justify-end md:text-right">
+        {showRawValue && glossaryEntry ? (
+          <Metric
+            label="지금"
+            value={`${formatRawValue(rawValue)}${
+              glossaryEntry.unitKo ? ` ${glossaryEntry.unitKo}` : ""
+            }`}
+          />
+        ) : null}
         <Metric label="점수" value={formatNumber(indicator.score)} />
         <Metric label="가중치" value={formatPercent(indicator.weight)} />
         <Metric

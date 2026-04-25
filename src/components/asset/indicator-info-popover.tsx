@@ -10,7 +10,10 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { IndicatorGlossaryEntry } from "@/lib/utils/indicator-glossary";
+import {
+  formatRawValue,
+  type IndicatorGlossaryEntry,
+} from "@/lib/utils/indicator-glossary";
 
 /**
  * Inline ⓘ popover trigger for an indicator row in
@@ -41,8 +44,16 @@ import type { IndicatorGlossaryEntry } from "@/lib/utils/indicator-glossary";
  */
 export function IndicatorInfoPopover({
   entry,
+  valueRaw,
 }: {
   entry: IndicatorGlossaryEntry;
+  /**
+   * Latest raw value for this indicator (from `indicator_readings` /
+   * `onchain_readings`). Optional — when present we render a "지금: X
+   * (보통 Y~Z)" line above the summary so readers see the unscored
+   * source value next to the score they're investigating.
+   */
+  valueRaw?: number | null;
 }) {
   const titleId = `indicator-info-title-${entry.key}`;
 
@@ -51,6 +62,7 @@ export function IndicatorInfoPopover({
   // on a 288px (`w-72`) popover at base text size. Full text lives on
   // /indicators#${key}.
   const summary = buildSummary(entry);
+  const rawLine = buildRawValueLine(entry, valueRaw);
 
   return (
     <Popover>
@@ -71,6 +83,11 @@ export function IndicatorInfoPopover({
         <PopoverTitle id={titleId} className="text-sm font-semibold">
           {entry.labelKo}
         </PopoverTitle>
+        {rawLine ? (
+          <p className="text-xs font-medium tabular-nums text-foreground/90">
+            {rawLine}
+          </p>
+        ) : null}
         <p className="text-xs leading-relaxed text-muted-foreground">
           {summary}
         </p>
@@ -83,6 +100,66 @@ export function IndicatorInfoPopover({
       </PopoverContent>
     </Popover>
   );
+}
+
+/**
+ * Build the "지금: 19.30 (보통 15~25)" line shown above the summary
+ * when the caller passes a raw value.
+ *
+ * The "보통 X~Y" portion is a best-effort extract from
+ * `typicalRangeKo`. The rangeKo strings follow ad-hoc shapes
+ * ("정상 구간은 +0.5%p ~ +2.5%p", "장기 평균은 18-20", "확장 국면 평균은
+ * 20-25만 건", etc) so a regex aimed at the common patterns is
+ * brittle by definition. The fallback path renders just "지금: X" —
+ * better to drop the parenthetical than fabricate a wrong range.
+ */
+function buildRawValueLine(
+  entry: IndicatorGlossaryEntry,
+  valueRaw: number | null | undefined,
+): string | null {
+  if (valueRaw === null || valueRaw === undefined) return null;
+  if (typeof valueRaw !== "number" || !Number.isFinite(valueRaw)) return null;
+  const formatted = formatRawValue(valueRaw);
+  const unit = entry.unitKo ? ` ${entry.unitKo}` : "";
+  const range = extractTypicalRangeShort(entry.typicalRangeKo);
+  if (range) {
+    return `지금: ${formatted}${unit} (보통 ${range})`;
+  }
+  return `지금: ${formatted}${unit}`;
+}
+
+/**
+ * Extract a "X~Y" or "X-Y" snippet from a `typicalRangeKo` string for
+ * inline display. Returns `null` when no clean range can be lifted —
+ * caller falls back to omitting the parenthetical.
+ *
+ * Match priority (first hit wins, scanning left-to-right in the
+ * sentence):
+ *   1. "정상 구간은 X~Y" / "정상 구간은 X-Y"
+ *   2. "장기 평균은 X-Y" / "X~Y"
+ *   3. "확장 국면 평균은 X-Y만 건" — keep the '만 건' suffix attached
+ *   4. Final fallback: ANY first "<number>(unit?) ~ <number>(unit?)"
+ *      occurrence
+ *
+ * Returns the matched substring AS-WRITTEN (preserving units like
+ * "%p", "원", "만 건") so the final popover line reads naturally.
+ */
+function extractTypicalRangeShort(typicalRangeKo: string): string | null {
+  // Strip leading "정상 구간은 " / "장기 평균은 " / "확장 국면 평균은 " prefixes
+  // so we focus on the range portion itself.
+  const text = typicalRangeKo.replace(/^[^,]*?(은|는|이며,)\s*/, "");
+  // Match the FIRST range pattern. Allow signed numbers with optional
+  // decimals + an optional unit suffix on each side. The unit suffix is
+  // any non-whitespace, non-separator chars (e.g. "%p", "원", "만").
+  const rangeMatch = text.match(
+    /([+\-]?\d[\d,]*\.?\d*)\s*([%pP원만건a-zA-Z]*)\s*[~\-–]\s*([+\-]?\d[\d,]*\.?\d*)\s*([%pP원만건a-zA-Z]*)/,
+  );
+  if (!rangeMatch) return null;
+  const [, lo, loUnit, hi, hiUnit] = rangeMatch;
+  // If the units differ, prefer the high-side unit (most common
+  // pattern: "1,200-1,350원" → low has none, high has "원").
+  const unit = hiUnit || loUnit || "";
+  return `${lo}~${hi}${unit ? unit : ""}`;
 }
 
 function buildSummary(entry: IndicatorGlossaryEntry): string {
