@@ -87,8 +87,20 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *   - No `export const dynamic = "force-dynamic"` (Route Handlers under
  *     `cacheComponents: true` are already dynamic by default).
  *
- * Endpoint: `GET /api/cron/ingest-technical`
- * Scheduled: `0 22 * * *` UTC via `.github/workflows/cron-technical.yml`.
+ * Endpoint: `GET /api/cron/ingest-technical?batch=1|2`
+ * Scheduled:
+ *   - batch 1: `0 22 * * *`  UTC via `.github/workflows/cron-technical.yml`
+ *   - batch 2: `30 22 * * *` UTC via `.github/workflows/cron-technical-batch2.yml`
+ *
+ * C2 batch-split rationale (2026-04-25): the pre-split run hit
+ * ~285-310s on bad days, right against the Vercel Hobby 300s ceiling
+ * (GHA run 24920958904 failed with HTTP 500 at 4m18s after writing
+ * only 3/19 tickers). Splitting the 19-ticker registry into 10+9 puts
+ * each per-batch run at ~130-150s, well under the ceiling. The two
+ * GHA workflows fire 30 minutes apart so they never overlap.
+ *
+ * `?batch=` defaults to `1` for back-compat with any manual `curl` and
+ * with the previous workflow's URL during the migration window.
  */
 export const maxDuration = 300;
 
@@ -100,6 +112,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!authResult.ok) {
     return NextResponse.json({ error: authResult.reason }, { status: 401 });
   }
+
+  // ---- 1.5. Batch selection ----
+  // Splits TICKER_REGISTRY (19) into 10 (batch 1, indices 0-9) + 9
+  // (batch 2, indices 10-18). Anything other than the literal "2"
+  // resolves to batch 1 — including a missing/empty/malformed param,
+  // which keeps a manual `curl /api/cron/ingest-technical` (no query
+  // string) working as it did pre-C2.
+  const batchParam = request.nextUrl.searchParams.get("batch");
+  const batchIndex: 1 | 2 = batchParam === "2" ? 2 : 1;
+  const BATCH_SIZE = Math.ceil(TICKER_REGISTRY.length / 2); // 10 for 19 tickers
+  const tickersForBatch: readonly TickerRegistryEntry[] =
+    batchIndex === 1
+      ? TICKER_REGISTRY.slice(0, BATCH_SIZE)
+      : TICKER_REGISTRY.slice(BATCH_SIZE);
 
   const today = new Date().toISOString().slice(0, 10);
   const supabase = getSupabaseAdminClient();
@@ -113,8 +139,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const perTickerErrors: string[] = [];
 
   try {
-    for (let i = 0; i < TICKER_REGISTRY.length; i++) {
-      const entry = TICKER_REGISTRY[i];
+    for (let i = 0; i < tickersForBatch.length; i++) {
+      const entry = tickersForBatch[i];
       tickersAttempted++;
 
       // ----- 2a. Fetch -----
@@ -140,7 +166,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         technicalRowsWritten += errorRows.length;
 
         // Sleep before next ticker unless we're on the last one.
-        if (i < TICKER_REGISTRY.length - 1) {
+        if (i < tickersForBatch.length - 1) {
           await sleep(ALPHA_VANTAGE_SLEEP_MS);
         }
         continue;
@@ -166,7 +192,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       tickersSuccess++;
 
       // ----- 2f. Sleep for AV 5/min compliance (skip after last) -----
-      if (i < TICKER_REGISTRY.length - 1) {
+      if (i < tickersForBatch.length - 1) {
         await sleep(ALPHA_VANTAGE_SLEEP_MS);
       }
     }
@@ -241,6 +267,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       status,
+      batch: batchIndex,
       snapshot_date: today,
       model_version: MODEL_VERSION,
       tickers_attempted: tickersAttempted,

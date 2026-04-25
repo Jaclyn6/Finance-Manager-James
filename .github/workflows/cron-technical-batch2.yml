@@ -1,0 +1,64 @@
+# Phase 2 Step 7 — Daily Technical cron (BATCH 2).
+#
+# Triggers the Vercel-hosted `/api/cron/ingest-technical?batch=2`
+# endpoint, which fetches Alpha Vantage daily bars for the LAST 9 of
+# 19 tickers (blueprint §3.2; see C2 split in
+# `ingest-technical/ticker-registry.ts`) and writes to BOTH
+# `technical_readings` and `price_readings`.
+#
+# C2 batch-split rationale (2026-04-25): the pre-split single-shot run
+# (19 tickers × 13s sleep + fetch latency ≈ 285-310s) was hitting the
+# Vercel Hobby 300s `maxDuration` ceiling. GHA run 24920958904 failed
+# with HTTP 500 at 4m18s after writing only 3/19 tickers. Splitting
+# into 10 + 9 puts each batch at ~130-150s and lifts the rate-limit
+# pressure too — batch 1 fires at 22:00 UTC, batch 2 at 22:30 UTC, so
+# Alpha Vantage's 5-req/min window has fully reset between them.
+#
+# Prices (CoinGecko, 3 IDs) is NOT triggered here — it runs in batch 1
+# only. Batch 2 is technical-only.
+#
+# Schedule: `30 22 * * *` UTC = 30 minutes after batch 1.
+#
+# Secrets required on the GitHub repo (Settings → Secrets → Actions):
+#   - CRON_SECRET:    same value as the Vercel env var. Synced manually
+#                     (plan §0.2 #8 — no OIDC federation at Phase 2).
+#   - PRODUCTION_URL: base URL of the Vercel production deployment.
+#                     Same value as cron-technical.yml — these are
+#                     repo-level secrets shared across workflows.
+#
+# curl flags rationale: see `cron-technical.yml` header. Identical.
+
+name: Technical Cron (batch 2)
+
+on:
+  schedule:
+    # 22:30 UTC = 07:30 KST next day, 30 minutes after batch 1.
+    - cron: "30 22 * * *"
+  # Manual-dispatch for parity with batch 1 (Step 7 acceptance).
+  workflow_dispatch:
+
+# Separate concurrency group from batch 1 so the two batches don't
+# cancel each other — they're meant to run sequentially 30 minutes
+# apart, not as alternatives.
+concurrency:
+  group: cron-technical-batch2
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    # Route's own maxDuration is 300s; add headroom for curl connect.
+    # No CoinGecko leg in batch 2.
+    timeout-minutes: 10
+    steps:
+      # `env:` block (vs inline `${{ secrets.XXX }}`) — same lesson as
+      # cron-hourly.yml: keeps secret masking deterministic across
+      # runners and keeps the curl line readable.
+      - name: Trigger /api/cron/ingest-technical?batch=2
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sSf \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-technical?batch=2"

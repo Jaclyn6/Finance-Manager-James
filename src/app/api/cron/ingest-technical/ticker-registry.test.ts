@@ -74,6 +74,56 @@ describe("TICKER_REGISTRY", () => {
     const totalSleepMs = TICKER_REGISTRY.length * ALPHA_VANTAGE_SLEEP_MS;
     expect(totalSleepMs).toBeLessThan(300_000);
   });
+
+  // ------------------------------------------------------------------
+  // C2 batch-split (2026-04-25) — the route handler walks half the
+  // registry per `?batch=1|2` invocation. These tests pin the split
+  // so a future ticker-registry edit (e.g. growing to 21 tickers) is
+  // forced to consciously rebalance the batches rather than silently
+  // tipping batch 1 back over the 300s ceiling.
+  // ------------------------------------------------------------------
+  describe("C2 batch-split (?batch=1|2)", () => {
+    const BATCH_SIZE = Math.ceil(TICKER_REGISTRY.length / 2);
+    const batch1 = TICKER_REGISTRY.slice(0, BATCH_SIZE);
+    const batch2 = TICKER_REGISTRY.slice(BATCH_SIZE);
+
+    it("batch 1 has 10 tickers (ceil(19/2))", () => {
+      expect(batch1).toHaveLength(10);
+    });
+
+    it("batch 2 has 9 tickers (remainder)", () => {
+      expect(batch2).toHaveLength(9);
+    });
+
+    it("batch 1 ∪ batch 2 == full registry, no overlap", () => {
+      expect([...batch1, ...batch2]).toEqual([...TICKER_REGISTRY]);
+      const overlap = batch1.filter((b1) =>
+        batch2.some((b2) => b2.ticker === b1.ticker),
+      );
+      expect(overlap).toEqual([]);
+    });
+
+    it("batch 1 includes SPY + QQQ (broad-index aggregator dependency)", () => {
+      // signals.ts MOMENTUM_TURN and category-aggregators.ts both
+      // reference SPY and QQQ. Putting them in batch 1 means they
+      // survive a batch-2 outage — the load-bearing tickers ingest
+      // first and never depend on the second cron firing.
+      const tickers = batch1.map((entry) => entry.ticker);
+      expect(tickers).toContain("SPY");
+      expect(tickers).toContain("QQQ");
+    });
+
+    it("each batch's runtime budget fits under 300s", () => {
+      // Per batch: (n - 1) sleeps × 13s + n fetches × ~2s + overhead.
+      // We bound the dominant term (sleeps) and require it well under
+      // 300s. Real fetch latency is 1-3s/ticker so 50s headroom is
+      // ample.
+      const batch1Ms = (batch1.length - 1) * ALPHA_VANTAGE_SLEEP_MS;
+      const batch2Ms = (batch2.length - 1) * ALPHA_VANTAGE_SLEEP_MS;
+      expect(batch1Ms).toBeLessThan(250_000); // 9 × 13_000 = 117_000
+      expect(batch2Ms).toBeLessThan(250_000); // 8 × 13_000 = 104_000
+    });
+  });
 });
 
 describe("INDICATOR_KEYS", () => {
