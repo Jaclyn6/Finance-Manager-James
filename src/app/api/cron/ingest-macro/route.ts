@@ -18,6 +18,17 @@ import {
   writeScoreChangelog,
 } from "@/lib/data/snapshot";
 import { CACHE_TAGS } from "@/lib/data/tags";
+import {
+  aggregateOnchain,
+  aggregateRegionalOverlay,
+  aggregateSentiment,
+  aggregateTechnical,
+  aggregateValuation,
+  type NewsSentimentRowSlice,
+  type OnchainRowSlice,
+  type RegionalOverlayEntry,
+  type TechnicalRowSlice,
+} from "@/lib/score-engine/category-aggregators";
 import { computeComposite } from "@/lib/score-engine/composite";
 import { computeCompositeV2 } from "@/lib/score-engine/composite-v2";
 import { fetchFredSeries } from "@/lib/score-engine/indicators/fred";
@@ -303,26 +314,124 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       overlayScores.push({ key, score, weight: config.weight });
     }
 
-    // Weighted average across present series. If both series failed,
-    // regional_overlay stays null and computeCompositeV2 will add it
-    // to missingCategories (loud degradation, blueprint §4.5 tenet 1).
-    // If one succeeded, the single score becomes the category score
-    // (renormalizing 0.5 → 1.0). This mirrors computeCompositeV2's
-    // own null-propagation policy one layer down.
-    const overlayWeightSum = overlayScores.reduce(
-      (acc, s) => acc + s.weight,
-      0,
-    );
-    const krRegionalOverlayScore: number | null =
-      overlayWeightSum > 0
-        ? overlayScores.reduce(
-            (acc, s) => acc + (s.score * s.weight) / overlayWeightSum,
-            0,
-          )
-        : null;
+    // Per-series scores above are passed to `aggregateRegionalOverlay`
+    // below (inside the per-asset-type loop at §5) as
+    // {@link RegionalOverlayEntry}[] — the aggregator handles the
+    // weighted-mean-with-null-renormalization story. A previous version
+    // of this file did the weighted average inline here and fed a
+    // single `krRegionalOverlayScore` number to computeCompositeV2;
+    // delegating to the aggregator keeps the per-series breakdown
+    // available for the JSONB drill-down at §5's contributingForDb step.
 
     // ---- 4. Write readings (single round-trip, upsert on dedup idx) ----
     await writeIndicatorReadings(readings);
+
+    // ---- 4.5. Read Phase 2 category inputs for composite-v2 ----
+    //
+    // The per-asset-type loop below calls `computeCompositeV2` which
+    // needs FOUR category scores on top of `macro`: technical, onchain,
+    // sentiment, valuation. Each source is stored in its own Step 7
+    // reading table; we read them ONCE here and hand the resulting
+    // per-asset aggregates to the loop. Reading inside the loop would
+    // issue the same query 5× per run (once per asset_type).
+    //
+    // All four reads are latest-per-key / newest-first over a bounded
+    // window (≤ today). Silent-success-loud-failure (plan §0.5 tenet
+    // 1): a query failure here DOES NOT abort the cron — we log the
+    // error, mark the category's inputs as empty, and the aggregator
+    // returns null → loud "missing" chip in the UI. The macro-only v1-
+    // equivalent path still produces a composite.
+    //
+    // The per-asset-type loop at §5 instantiates its own admin client
+    // for the prior-snapshot lookup. We instantiate a separate one here
+    // deliberately — the §5 client is created INSIDE the `successCount
+    // > 0` branch and is scoped to the changelog lookup; doing the
+    // category reads before that branch keeps the read ordering
+    // identical to the writes (reading AFTER the indicator writes land
+    // means today's FRED rows could be picked up by future regional-
+    // overlay reads, but not by this run's).
+    const supabaseForCategoryReads = getSupabaseAdminClient();
+
+    let technicalRows: TechnicalRowSlice[] = [];
+    try {
+      const { data, error } = await supabaseForCategoryReads
+        .from("technical_readings")
+        .select("ticker, asset_type, indicator_key, score_0_100, fetch_status")
+        .lte("observed_at", today)
+        .eq("model_version", MODEL_VERSION)
+        .order("observed_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      technicalRows = (data ?? []) as TechnicalRowSlice[];
+    } catch (techErr) {
+      console.error(
+        "[cron ingest-macro] technical_readings category read failed:",
+        techErr instanceof Error ? techErr.message : String(techErr),
+      );
+    }
+
+    let onchainRows: OnchainRowSlice[] = [];
+    try {
+      const { data, error } = await supabaseForCategoryReads
+        .from("onchain_readings")
+        .select("indicator_key, score_0_100, fetch_status")
+        .lte("observed_at", today)
+        .eq("model_version", MODEL_VERSION)
+        .order("observed_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      onchainRows = (data ?? []) as OnchainRowSlice[];
+    } catch (onchainErr) {
+      console.error(
+        "[cron ingest-macro] onchain_readings category read failed:",
+        onchainErr instanceof Error
+          ? onchainErr.message
+          : String(onchainErr),
+      );
+    }
+
+    let newsRows: NewsSentimentRowSlice[] = [];
+    try {
+      const { data, error } = await supabaseForCategoryReads
+        .from("news_sentiment")
+        .select("ticker, asset_type, score_0_100, fetch_status")
+        .lte("observed_at", today)
+        .eq("model_version", MODEL_VERSION)
+        .order("observed_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      newsRows = (data ?? []) as NewsSentimentRowSlice[];
+    } catch (newsErr) {
+      console.error(
+        "[cron ingest-macro] news_sentiment category read failed:",
+        newsErr instanceof Error ? newsErr.message : String(newsErr),
+      );
+    }
+
+    // CNN_FG + CRYPTO_FG are stored in `onchain_readings` for storage
+    // convenience but feed the sentiment category per blueprint §4.1.
+    // Extract their latest scored values from the rows we already read.
+    const latestOnchainScore = (key: string): number | null => {
+      for (const row of onchainRows) {
+        if (row.indicator_key !== key) continue;
+        if (row.fetch_status !== "success") continue;
+        if (row.score_0_100 === null || !Number.isFinite(row.score_0_100)) {
+          continue;
+        }
+        return row.score_0_100;
+      }
+      return null;
+    };
+    const cnnFgScore = latestOnchainScore("CNN_FG");
+    const cryptoFgScore = latestOnchainScore("CRYPTO_FG");
+
+    // Regional overlay packaging — the §3.5b computation already
+    // produced per-series 0-100 scores and their within-category
+    // weights. Re-package them for the aggregator so the call site at
+    // the per-asset loop stays symmetric with the other aggregators.
+    const regionalOverlayEntries: RegionalOverlayEntry[] = overlayScores.map(
+      (s) => ({ key: s.key, score: s.score, weight: s.weight }),
+    );
 
     // ---- 5. Composite + changelog per asset_type ----
     // Skip composite writes entirely if zero indicators succeeded --
@@ -345,53 +454,70 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         // series moved the score.
         const macroComposite = computeComposite(scoredIndicators, assetType);
 
-        // Wrap the macro-only result in the v2 composite.
+        // Aggregate each Phase 2 category from its reading-table slice
+        // (blueprint §4.2). Each aggregator returns a `{score,
+        // indicators}` shape — score feeds computeCompositeV2, the
+        // indicator submap feeds the JSONB drill-down below.
         //
-        // - `technical` / `onchain` / `sentiment` / `regional_overlay`
-        //   are null at Step 6 — they come online via Steps 7-8 (the
-        //   technical / on-chain / sentiment cron endpoints). Null-
-        //   propagation + renormalization in computeCompositeV2 means
-        //   the v2 composite equals the macro score exactly while
-        //   those four are missing, then gradually shifts toward the
-        //   §4.2 blend as each source lands.
+        // Null-propagation discipline (blueprint §2.2 tenet 1 + §4.5
+        // tenet 1): aggregators return `null` score when the underlying
+        // ingestion hasn't landed yet OR when the category isn't
+        // applicable to this asset type. `computeCompositeV2`
+        // discriminates the two cases via its own not-applicable guard
+        // (categories absent from `CATEGORY_WEIGHTS[assetType]` are
+        // silently skipped; null-for-applicable lands in
+        // `missingCategories` so the UI chip can show the gap).
         //
-        // - `valuation` is pinned to neutral 50 for asset types that
-        //   carry a valuation weight (us_equity, global_etf, common).
-        //   Phase 3 replaces the pin with a real Shiller-P/E-class
-        //   module (blueprint §4.4 trade-off 7). Pinning (rather than
-        //   null) prevents the valuation weight from being silently
-        //   removed via renormalization; keeping it in the weighted
-        //   sum at a neutral score preserves the blueprint §4.1
-        //   capped-sentiment invariant (sentiment can drag the
-        //   composite by at most its prescribed 10 pts, not 20).
-        const pinValuation =
-          assetType === "us_equity" ||
-          assetType === "global_etf" ||
-          assetType === "common";
-        // `regional_overlay` only applies to kr_equity (blueprint §4.2
-        // — other asset types have no weight for it, so passing non-
-        // null here would be silently ignored by computeCompositeV2's
-        // not-applicable guard). For kr_equity, pass the averaged
-        // DTWEXBGS+DEXKOUS score computed at §3.5b; a null there
-        // lands in `missingCategories` and triggers the amber chip.
+        // `valuation` is the only synthetic pin — Phase 2 has no real
+        // valuation module, so us_equity / global_etf / common get a
+        // neutral 50 stand-in. Pinning (vs null) preserves the 10-pt
+        // weight slot; null would be silently renormalized away,
+        // letting sentiment drag the composite by 20 pts instead of
+        // the prescribed 10 (blueprint §4.1 capped-sentiment
+        // invariant). Phase 3 replaces with a Shiller-P/E-class module.
+        const technicalAgg = aggregateTechnical(assetType, technicalRows);
+        const onchainAgg = aggregateOnchain(assetType, onchainRows);
+        const sentimentAgg = aggregateSentiment(assetType, {
+          newsRows,
+          cnnFgScore,
+          cryptoFgScore,
+        });
+        const valuationAgg = aggregateValuation(assetType);
+        const regionalOverlayAgg = aggregateRegionalOverlay(
+          assetType,
+          regionalOverlayEntries,
+        );
+
         const compositeV2 = computeCompositeV2(
           {
             macro: macroComposite.score0to100,
-            technical: null,
-            onchain: null,
-            sentiment: null,
-            valuation: pinValuation ? 50 : null,
-            regional_overlay:
-              assetType === "kr_equity" ? krRegionalOverlayScore : null,
+            technical: technicalAgg.score,
+            onchain: onchainAgg.score,
+            sentiment: sentimentAgg.score,
+            valuation: valuationAgg.score,
+            regional_overlay: regionalOverlayAgg.score,
           },
           assetType,
         );
 
-        // Nest the Phase 1 indicator-level breakdown under macro so
-        // the JSONB preserves drill-down. Shape per blueprint §4.4:
-        //   { macro: { score, weight, contribution, indicators: {...} } }
-        // v1.0.0 rows in the same column are FLAT; model_version
-        // discriminates — UI reader (Agent B + Step 8) branches on it.
+        // Nest indicator-level breakdowns under each category so the
+        // JSONB preserves drill-down. Shape per blueprint §4.4:
+        //   {
+        //     macro:      { score, weight, contribution, indicators: { FEDFUNDS: {...} } },
+        //     technical:  { score, weight, contribution, indicators: { SPY: {...} } },
+        //     onchain:    { score, weight, contribution, indicators: { MVRV_Z: {...} } },
+        //     sentiment:  { score, weight, contribution, indicators: { NVDA: {...}, CNN_FG: {...} } },
+        //     valuation:  { score, weight, contribution },  // no indicators
+        //     regional_overlay: { score, weight, contribution, indicators: { DTWEXBGS: {...} } },
+        //   }
+        //
+        // Only categories present in `compositeV2.contributing` get a
+        // nested indicators submap — a null-score category is already
+        // absent from `contributing` (computeCompositeV2 omits it), so
+        // the nested assignment below is a no-op for those. v1.0.0 rows
+        // in the same column are FLAT; model_version discriminates —
+        // UI reader (Step 8 ContributingIndicators parser) branches on
+        // which-shape-is-present rather than on the version string.
         const contributingForDb: Partial<
           Record<CategoryName, CategoryContribution>
         > = { ...compositeV2.contributing };
@@ -401,6 +527,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             indicators: macroComposite.contributing,
           };
         }
+        if (
+          contributingForDb.technical &&
+          Object.keys(technicalAgg.indicators).length > 0
+        ) {
+          contributingForDb.technical = {
+            ...contributingForDb.technical,
+            indicators: technicalAgg.indicators,
+          };
+        }
+        if (
+          contributingForDb.onchain &&
+          Object.keys(onchainAgg.indicators).length > 0
+        ) {
+          contributingForDb.onchain = {
+            ...contributingForDb.onchain,
+            indicators: onchainAgg.indicators,
+          };
+        }
+        if (
+          contributingForDb.sentiment &&
+          Object.keys(sentimentAgg.indicators).length > 0
+        ) {
+          contributingForDb.sentiment = {
+            ...contributingForDb.sentiment,
+            indicators: sentimentAgg.indicators,
+          };
+        }
+        if (
+          contributingForDb.regional_overlay &&
+          Object.keys(regionalOverlayAgg.indicators).length > 0
+        ) {
+          contributingForDb.regional_overlay = {
+            ...contributingForDb.regional_overlay,
+            indicators: regionalOverlayAgg.indicators,
+          };
+        }
+        // Valuation has no indicators submap at Phase 2 (pinned synthetic).
 
         const band = scoreToBand(compositeV2.score0to100);
 
