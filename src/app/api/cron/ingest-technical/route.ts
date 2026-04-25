@@ -46,7 +46,7 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *
  * Pipeline (blueprint §3 + §9 Step 7):
  *   1. Authenticate `Authorization: Bearer ${CRON_SECRET}`
- *   2. For each of the 19 AV tickers (from {@link TICKER_REGISTRY}):
+ *   2. For each of the 12 AV tickers (from {@link TICKER_REGISTRY}):
  *      a. Fetch daily bars from Alpha Vantage TIME_SERIES_DAILY.
  *      b. Derive closes[] in chronological ascending order.
  *      c. Compute RSI(14), MACD(12,26,9), MA(50), MA(200),
@@ -56,7 +56,7 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *      e. Upsert the most recent bar into `price_readings` — shared
  *         fetch, two writes (blueprint §3.3 + §7.4 comment: price
  *         history is visualization-only, but we piggyback on the
- *         AV fetch to avoid burning a second ~19-call quota).
+ *         AV fetch to avoid burning a second ~12-call quota).
  *      f. sleep(13_000ms) — Alpha Vantage free tier is 5/min.
  *   3. Write `ingest_runs` audit row (always, even on partial failure).
  *   4. `revalidateTag(CACHE_TAGS.technical, { expire: 0 })` and
@@ -86,7 +86,7 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *
  * Runtime notes:
  *   - `maxDuration = 300` matches Vercel Fluid Compute's default cap.
- *     19 × 13s ≈ 247s of pure sleeps, plus fetch latency.
+ *     12 × 13s ≈ 156s of pure sleeps, plus fetch latency (~180s total).
  *   - `import "server-only"` guards ALPHA_VANTAGE_API_KEY /
  *     SUPABASE_SERVICE_ROLE_KEY / CRON_SECRET from client bundles.
  *   - No `cookies()` / `headers()` / `connection()` calls —
@@ -94,20 +94,16 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *   - No `export const dynamic = "force-dynamic"` (Route Handlers under
  *     `cacheComponents: true` are already dynamic by default).
  *
- * Endpoint: `GET /api/cron/ingest-technical?batch=1|2`
- * Scheduled:
- *   - batch 1: `0 22 * * *`  UTC via `.github/workflows/cron-technical.yml`
- *   - batch 2: `30 22 * * *` UTC via `.github/workflows/cron-technical-batch2.yml`
+ * Endpoint: `GET /api/cron/ingest-technical`
+ * Scheduled: `0 22 * * *` UTC via `.github/workflows/cron-technical.yml`
  *
- * C2 batch-split rationale (2026-04-25): the pre-split run hit
- * ~285-310s on bad days, right against the Vercel Hobby 300s ceiling
- * (GHA run 24920958904 failed with HTTP 500 at 4m18s after writing
- * only 3/19 tickers). Splitting the 19-ticker registry into 10+9 puts
- * each per-batch run at ~130-150s, well under the ceiling. The two
- * GHA workflows fire 30 minutes apart so they never overlap.
- *
- * `?batch=` defaults to `1` for back-compat with any manual `curl` and
- * with the previous workflow's URL during the migration window.
+ * Single-batch design (2026-04-25): an earlier C2 split partitioned
+ * the registry into `?batch=1|2` halves to dodge the Vercel Hobby
+ * 300s `maxDuration` ceiling when the registry held 19 tickers. After
+ * the KR carve-out (see ticker-registry.ts header) the registry is 12
+ * tickers — 11 × 13s sleeps + fetches ≈ 180s total — so the split is
+ * unnecessary and the route reverts to a single sequential walk over
+ * the full {@link TICKER_REGISTRY}.
  */
 export const maxDuration = 300;
 
@@ -119,20 +115,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!authResult.ok) {
     return NextResponse.json({ error: authResult.reason }, { status: 401 });
   }
-
-  // ---- 1.5. Batch selection ----
-  // Splits TICKER_REGISTRY (19) into 10 (batch 1, indices 0-9) + 9
-  // (batch 2, indices 10-18). Anything other than the literal "2"
-  // resolves to batch 1 — including a missing/empty/malformed param,
-  // which keeps a manual `curl /api/cron/ingest-technical` (no query
-  // string) working as it did pre-C2.
-  const batchParam = request.nextUrl.searchParams.get("batch");
-  const batchIndex: 1 | 2 = batchParam === "2" ? 2 : 1;
-  const BATCH_SIZE = Math.ceil(TICKER_REGISTRY.length / 2); // 10 for 19 tickers
-  const tickersForBatch: readonly TickerRegistryEntry[] =
-    batchIndex === 1
-      ? TICKER_REGISTRY.slice(0, BATCH_SIZE)
-      : TICKER_REGISTRY.slice(BATCH_SIZE);
 
   const today = new Date().toISOString().slice(0, 10);
   const supabase = getSupabaseAdminClient();
@@ -146,8 +128,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const perTickerErrors: string[] = [];
 
   try {
-    for (let i = 0; i < tickersForBatch.length; i++) {
-      const entry = tickersForBatch[i];
+    for (let i = 0; i < TICKER_REGISTRY.length; i++) {
+      const entry = TICKER_REGISTRY[i];
       tickersAttempted++;
 
       // ----- 2a. Fetch -----
@@ -157,7 +139,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       } catch (err) {
         // fetchAlphaVantageDaily only throws when ALPHA_VANTAGE_API_KEY
         // is missing — a config error, not a per-ticker failure. Stop
-        // the loop rather than burn 19 × 13s of useless sleeps.
+        // the loop rather than burn 12 × 13s of useless sleeps.
         throw err;
       }
 
@@ -173,7 +155,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         technicalRowsWritten += errorRows.length;
 
         // Sleep before next ticker unless we're on the last one.
-        if (i < tickersForBatch.length - 1) {
+        if (i < TICKER_REGISTRY.length - 1) {
           await sleep(ALPHA_VANTAGE_SLEEP_MS);
         }
         continue;
@@ -199,7 +181,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       tickersSuccess++;
 
       // ----- 2f. Sleep for AV 5/min compliance (skip after last) -----
-      if (i < tickersForBatch.length - 1) {
+      if (i < TICKER_REGISTRY.length - 1) {
         await sleep(ALPHA_VANTAGE_SLEEP_MS);
       }
     }
@@ -274,7 +256,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       status,
-      batch: batchIndex,
       snapshot_date: today,
       model_version: MODEL_VERSION,
       tickers_attempted: tickersAttempted,

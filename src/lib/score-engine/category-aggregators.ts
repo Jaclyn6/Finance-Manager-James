@@ -204,11 +204,15 @@ function isCategoryApplicable(
  *   cross-sectional read.
  *
  * kr_equity:
- *   005930.KS (Samsung) as the representative. The registry also carries
- *   000660.KS (SK Hynix), 373220.KS (LGES), etc. — we fall back to
- *   "mean across all kr_equity tickers" when none of the preferred
- *   tickers produced a usable per-ticker score, which keeps the category
- *   live during Samsung-specific data outages.
+ *   005930.KS (Samsung) is listed as the historical representative for
+ *   API symmetry, but the Phase 2 ticker registry no longer contains
+ *   ANY .KS symbols (KR carve-out 2026-04-25 — Alpha Vantage free tier
+ *   doesn't serve KOSPI in any format; see
+ *   `ingest-technical/ticker-registry.ts` header). With no kr_equity
+ *   rows ever landing, {@link aggregateTechnical}('kr_equity', rows)
+ *   returns null at Phase 2 — `computeCompositeV2` surfaces this in
+ *   `missingCategories` per blueprint §2.2 tenet 1. Phase 3 plan: add
+ *   ECOS / Yahoo Finance ingestion to repopulate this entry.
  *
  * common:
  *   Weight-mirror of us_equity per blueprint §4.2 line 239; uses the
@@ -294,6 +298,15 @@ function perTickerTechnicalScores(
  *    crypto at Phase 2 — registry doesn't cover BTC/ETH for
  *    technical, so null propagates to the composite as "missing").
  *  - No usable per-ticker score could be computed.
+ *
+ * kr_equity at Phase 2: returns null. The Phase 2 ticker registry
+ * carries no .KS symbols (KR carve-out 2026-04-25 — Alpha Vantage
+ * free tier doesn't serve KOSPI in any format; see
+ * `ingest-technical/ticker-registry.ts` for the Phase 3 ECOS / Yahoo
+ * plan). With no kr_equity rows in the input, both the preferred-set
+ * filter and the asset_type fallback hit zero, so the function
+ * returns `{score: null, indicators: {}}` and the composite engine
+ * surfaces it in `missingCategories`.
  */
 export function aggregateTechnical(
   assetType: AssetType,

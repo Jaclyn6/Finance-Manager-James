@@ -1,5 +1,5 @@
 /**
- * Frozen Phase 2 ticker registry — the 19 Alpha Vantage symbols whose
+ * Frozen Phase 2 ticker registry — the 12 Alpha Vantage symbols whose
  * daily bars feed both the `technical_readings` pipeline (RSI / MACD /
  * MA50 / MA200 / Bollinger / Disparity per blueprint §4.3) and the
  * `price_readings` visualization table (§7.4 visualization-only
@@ -19,7 +19,6 @@
  * Asset-type mapping rules (aligned with the `asset_type_enum` in
  * migration 0001):
  *
- *   `.KS` suffix                            → 'kr_equity'
  *   SPY / QQQ / NVDA / AAPL / MSFT / GOOGL /
  *     AMZN                                  → 'us_equity'
  *   EWJ / MCHI / INDA / GLD / TLT           → 'global_etf'
@@ -28,6 +27,35 @@
  * they come from CoinGecko and live in the `ingest-prices` route's
  * own small constant, since only price-readings (not technical) are
  * computed for crypto at Phase 2.
+ *
+ * KR equity carve-out (2026-04-25):
+ * --------------------------------
+ * The previous version of this registry carried 7 `.KS` tickers
+ * (005930.KS Samsung, 000660.KS SK Hynix, 373220.KS LGES,
+ * 207940.KS Samsung Bio, 005380.KS Hyundai Motor, 069500.KS KODEX 200,
+ * 232080.KS TIGER KOSDAQ150). Direct testing against Alpha Vantage's
+ * `TIME_SERIES_DAILY` confirmed that the free tier does NOT serve
+ * KOSPI / KOSDAQ symbols in ANY format — `.KS`, `.KQ`, `.KOSPI`,
+ * `.KRX`, and the bare 6-digit code all return `Invalid API call`.
+ * The only KR-related symbol AV serves is the London-listed Samsung
+ * ADR `SMSN.LON`, which doesn't represent the local KOSPI tape and
+ * isn't useful for the regional-overlay aggregator.
+ *
+ * Consequence: the `kr_equity` technical category has no AV-sourced
+ * inputs at Phase 2. {@link aggregateTechnical} for `kr_equity`
+ * therefore returns `null`, which `computeCompositeV2` surfaces in
+ * `missingCategories` as a transparent gap (blueprint §2.2 tenet 1
+ * "null-propagation, never neutral default"). The `regional_overlay`
+ * category (DTWEXBGS + DEXKOUS via FRED) and `sentiment` (CNN_FG)
+ * still contribute, so the kr_equity composite remains computable —
+ * just on a smaller weight base than the blueprint's nominal 25-pt
+ * technical slot.
+ *
+ * Phase 3 plan: integrate ECOS (한국은행 OpenAPI) or Yahoo Finance
+ * for KOSPI/KOSDAQ daily bars. Either source serves KR equities
+ * natively without the AV free-tier limitation, restoring the
+ * `kr_equity` technical category to full weight. Tracked under
+ * blueprint §11 risk row 8.
  */
 
 import type { Database } from "@/types/database";
@@ -42,43 +70,32 @@ export interface TickerRegistryEntry {
 }
 
 /**
- * The 19 Phase 2 Alpha Vantage tickers, frozen per blueprint §3.2.
+ * The 12 Phase 2 Alpha Vantage tickers, frozen per blueprint §3.2
+ * (KR carve-out 2026-04-25 — see file-header note).
  *
- * Order is intentional: SPY + QQQ lead the list because the C2
- * batch-split (`?batch=1|2`) takes the first 10 in batch 1. SPY/QQQ
- * feed the MOMENTUM_TURN signal in `signals.ts` and the broad-index
- * aggregator in `category-aggregators.ts`, so if batch 2 ever fails we
- * still have the most-load-bearing tickers ingested.
- *
- * After SPY/QQQ the order is (US large-caps → KR equities/ETFs →
- * region ETFs → macro-hedge ETFs). Indices 0-9 form batch 1 (SPY, QQQ,
- * NVDA, AAPL, MSFT, GOOGL, AMZN, three KR), indices 10-18 form batch 2
- * (remaining four KR + three region ETFs + two macro-hedge ETFs).
+ * Order is intentional: SPY + QQQ lead the list because they are the
+ * most load-bearing tickers in the downstream graph (signals.ts
+ * MOMENTUM_TURN, category-aggregators.ts broad-index aggregator). If a
+ * mid-loop AV outage curtails the run, the load-bearing tickers have
+ * already landed.
  *
  * The cron walks this list sequentially with a 13-second sleep between
  * calls to respect Alpha Vantage's 5 req/min free-tier ceiling (see
- * `alpha-vantage.ts` design note 1). A change to the order doesn't
- * affect correctness — but does affect which batch a ticker lands in,
- * which matters for the failure-mode reasoning above.
+ * `alpha-vantage.ts` design note 1). 12 tickers × ~13s sleep + ~2s
+ * fetch latency ≈ 180s, comfortably inside the Vercel Hobby 300s
+ * `maxDuration` ceiling — so the registry runs as a single batch
+ * (no `?batch=1|2` split needed post-KR removal).
  */
 export const TICKER_REGISTRY: readonly TickerRegistryEntry[] = [
-  // ----- Batch 1 (indices 0-9) — load-bearing tickers first -----
-  // SPY + QQQ lead so they survive a batch-2 outage (see header note).
+  // ----- SPY + QQQ lead — broad-index aggregator dependency -----
   { ticker: "SPY", asset_type: "us_equity" },
   { ticker: "QQQ", asset_type: "us_equity" },
+  // ----- 5 US large-caps -----
   { ticker: "NVDA", asset_type: "us_equity" },
   { ticker: "AAPL", asset_type: "us_equity" },
   { ticker: "MSFT", asset_type: "us_equity" },
   { ticker: "GOOGL", asset_type: "us_equity" },
   { ticker: "AMZN", asset_type: "us_equity" },
-  { ticker: "005930.KS", asset_type: "kr_equity" }, // 삼성전자
-  { ticker: "000660.KS", asset_type: "kr_equity" }, // SK하이닉스
-  { ticker: "373220.KS", asset_type: "kr_equity" }, // LG에너지솔루션
-  // ----- Batch 2 (indices 10-18) -----
-  { ticker: "207940.KS", asset_type: "kr_equity" }, // 삼성바이오로직스
-  { ticker: "005380.KS", asset_type: "kr_equity" }, // 현대차
-  { ticker: "069500.KS", asset_type: "kr_equity" }, // KODEX 200
-  { ticker: "232080.KS", asset_type: "kr_equity" }, // TIGER 코스닥150
   // ----- 3 regional / country ETFs -----
   { ticker: "EWJ", asset_type: "global_etf" }, // Japan
   { ticker: "MCHI", asset_type: "global_etf" }, // China
@@ -115,12 +132,9 @@ export type TechnicalIndicatorKey =
  * 13s to leave a 1s safety margin for upstream jitter (alpha-vantage.ts
  * design note 1).
  *
- * Total wall-clock budget per batch (post-C2 split):
- *   Batch 1 (10 tickers): 9 sleeps × 13s + 10 fetches ≈ 130-150s.
- *   Batch 2 (9 tickers):  8 sleeps × 13s + 9 fetches  ≈ 115-135s.
- * Both comfortably inside the Vercel Hobby 300s `maxDuration` ceiling
- * — the pre-split single-shot run was hitting ~285-310s on bad days
- * (GHA run 24920958904 timed out at 4m18s).
+ * Total wall-clock budget for the single batch:
+ *   12 tickers: 11 sleeps × 13s + 12 fetches ≈ 160-180s.
+ * Comfortably inside the Vercel Hobby 300s `maxDuration` ceiling.
  *
  * Exported so the ticker-registry test can assert the multiplied total
  * stays inside the route's `maxDuration` budget.

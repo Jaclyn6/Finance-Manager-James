@@ -21,9 +21,11 @@ import {
  */
 
 describe("TICKER_REGISTRY", () => {
-  it("contains exactly 19 Alpha Vantage tickers (blueprint §3.2)", () => {
-    // 7 KR + 7 US + 3 region ETF + 2 macro-hedge ETF = 19.
-    expect(TICKER_REGISTRY).toHaveLength(19);
+  it("contains exactly 12 Alpha Vantage tickers (blueprint §3.2)", () => {
+    // 7 US large-caps/ETFs + 3 region ETF + 2 macro-hedge ETF = 12.
+    // KR equities removed 2026-04-25: AV free tier doesn't serve KOSPI;
+    // see ticker-registry.ts header for Phase 3 ECOS / Yahoo plan.
+    expect(TICKER_REGISTRY).toHaveLength(12);
   });
 
   it("has unique ticker strings (no accidental duplicates)", () => {
@@ -32,11 +34,15 @@ describe("TICKER_REGISTRY", () => {
     expect(unique.size).toBe(tickers.length);
   });
 
-  it("maps KR equities (.KS suffix) to kr_equity", () => {
-    const krEntries = TICKER_REGISTRY.filter((e) => e.ticker.endsWith(".KS"));
-    expect(krEntries).toHaveLength(7);
-    for (const entry of krEntries) {
-      expect(entry.asset_type).toBe("kr_equity");
+  it("contains no .KS / .KQ tickers (KR equities removed at Phase 2)", () => {
+    // KR carve-out 2026-04-25 — see ticker-registry.ts file header.
+    // AV free tier returns `Invalid API call` for every KR symbol
+    // format. This guard prevents an accidental re-add that would
+    // burn the daily AV budget on errors.
+    for (const entry of TICKER_REGISTRY) {
+      expect(entry.ticker.endsWith(".KS")).toBe(false);
+      expect(entry.ticker.endsWith(".KQ")).toBe(false);
+      expect(entry.asset_type).not.toBe("kr_equity");
     }
   });
 
@@ -68,61 +74,19 @@ describe("TICKER_REGISTRY", () => {
     }
   });
 
-  it("fits under the Vercel Fluid Compute 300s ceiling at 13s spacing", () => {
-    // Asserts the total serial walk duration + overhead budget.
-    // 19 × 13_000 = 247_000ms + ~30s headroom for fetch latency.
-    const totalSleepMs = TICKER_REGISTRY.length * ALPHA_VANTAGE_SLEEP_MS;
-    expect(totalSleepMs).toBeLessThan(300_000);
+  it("places SPY + QQQ at indices 0-1 (broad-index aggregator + load-bearing-first)", () => {
+    // signals.ts MOMENTUM_TURN and category-aggregators.ts both
+    // reference SPY and QQQ. Putting them first means a mid-loop AV
+    // outage doesn't block the most load-bearing tickers from landing.
+    expect(TICKER_REGISTRY[0]?.ticker).toBe("SPY");
+    expect(TICKER_REGISTRY[1]?.ticker).toBe("QQQ");
   });
 
-  // ------------------------------------------------------------------
-  // C2 batch-split (2026-04-25) — the route handler walks half the
-  // registry per `?batch=1|2` invocation. These tests pin the split
-  // so a future ticker-registry edit (e.g. growing to 21 tickers) is
-  // forced to consciously rebalance the batches rather than silently
-  // tipping batch 1 back over the 300s ceiling.
-  // ------------------------------------------------------------------
-  describe("C2 batch-split (?batch=1|2)", () => {
-    const BATCH_SIZE = Math.ceil(TICKER_REGISTRY.length / 2);
-    const batch1 = TICKER_REGISTRY.slice(0, BATCH_SIZE);
-    const batch2 = TICKER_REGISTRY.slice(BATCH_SIZE);
-
-    it("batch 1 has 10 tickers (ceil(19/2))", () => {
-      expect(batch1).toHaveLength(10);
-    });
-
-    it("batch 2 has 9 tickers (remainder)", () => {
-      expect(batch2).toHaveLength(9);
-    });
-
-    it("batch 1 ∪ batch 2 == full registry, no overlap", () => {
-      expect([...batch1, ...batch2]).toEqual([...TICKER_REGISTRY]);
-      const overlap = batch1.filter((b1) =>
-        batch2.some((b2) => b2.ticker === b1.ticker),
-      );
-      expect(overlap).toEqual([]);
-    });
-
-    it("batch 1 includes SPY + QQQ (broad-index aggregator dependency)", () => {
-      // signals.ts MOMENTUM_TURN and category-aggregators.ts both
-      // reference SPY and QQQ. Putting them in batch 1 means they
-      // survive a batch-2 outage — the load-bearing tickers ingest
-      // first and never depend on the second cron firing.
-      const tickers = batch1.map((entry) => entry.ticker);
-      expect(tickers).toContain("SPY");
-      expect(tickers).toContain("QQQ");
-    });
-
-    it("each batch's runtime budget fits under 300s", () => {
-      // Per batch: (n - 1) sleeps × 13s + n fetches × ~2s + overhead.
-      // We bound the dominant term (sleeps) and require it well under
-      // 300s. Real fetch latency is 1-3s/ticker so 50s headroom is
-      // ample.
-      const batch1Ms = (batch1.length - 1) * ALPHA_VANTAGE_SLEEP_MS;
-      const batch2Ms = (batch2.length - 1) * ALPHA_VANTAGE_SLEEP_MS;
-      expect(batch1Ms).toBeLessThan(250_000); // 9 × 13_000 = 117_000
-      expect(batch2Ms).toBeLessThan(250_000); // 8 × 13_000 = 104_000
-    });
+  it("fits under the Vercel Fluid Compute 300s ceiling at 13s spacing", () => {
+    // Asserts the total serial walk duration fits the route's budget.
+    // 12 × 13_000 = 156_000ms + headroom for fetch latency.
+    const totalSleepMs = TICKER_REGISTRY.length * ALPHA_VANTAGE_SLEEP_MS;
+    expect(totalSleepMs).toBeLessThan(300_000);
   });
 });
 
