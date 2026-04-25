@@ -1,5 +1,7 @@
 # 투자 어드바이저 대시보드 PRD v3
 
+> **v3.5 개정 (2026-04-26)** — Phase 2 구현 완료 후 PRD ↔ 코드 정합성 점검. 두 가지 큰 변경: (1) 데이터 소스 마이그레이션 — Bitbo 비공식 엔드포인트 404로 BGeometrics(bitcoin-data.com) 대체, CoinGlass v4 유료화로 Farside Investors 대체, Alpha Vantage `outputsize=full` 유료 전환으로 `compact` 100바 기반으로 운영(MA_200·Disparity 영구 null) — §7.1 / §8.2 / §8.3 / §12.1 / §17 반영. (2) 시그널 엔진 실제 출하분 — 6→8 시그널(crypto-extra `CRYPTO_UNDERVALUED` + `CAPITULATION` 추가), 자산군별 매핑(us_equity 6 / crypto 7 / kr_equity 5 / global_etf 5) — §10.4 반영. 기타: §8.2 기술적 지표는 AV API가 아니라 OHLC 기반 로컬 계산임을 명시, §11.2/§11.6 히스토리 범위는 Phase 2 90일 / Phase 3 180일로 정정, §11.7 + §18 PWA Phase 2 출하 완료 표기, §12.2 Next.js 16 `cacheLife` named preset 구조 반영. Phase 2 구현 코드와 일치시키는 정합화 개정이며 제품 철학·범위·로드맵 변경 없음.
+>
 > **v3.4 개정 (2026-04-23)** — 자산제곱 유튜브 영상(https://youtu.be/TJ3uAYxPY5k) "4가지 전략"의 매수 타이밍 프레임워크 분석 반영. 핵심 철학 편입: "연속 점수 요약이 아닌 독립 매수 시그널의 동시 발화 여부로 행동 근거 제공". §8.1에 `ICSA`(주간 신규 실업수당, 30만 건 임계) + TGA 잔고(재무부 현금 계정, 유동성 방향) 2개 FRED 시리즈 추가, §8.2에 "이격도(Disparity)" 기술적 파생 지표 추가, §8.4에 CNN Fear & Greed Index(주식 전용) 명시(§8.3 alternative.me 크립토 F&G와 별개 소스), §10.4 "시그널 얼라인먼트 레이어" 신설(6개 독립 boolean 시그널 + alignment_count 기반 UI), §18 Phase 2에 "매수 타이밍 시그널 엔진" bullet 추가. Phase 1 v2.3 구현과 호환(기존 7 FRED 매크로 스코어 영향 없음 — Phase 2에서만 활성).
 >
 > **v3.3 개정 (2026-04-23)** — §18 "개발 단계"를 canonical 로드맵으로 확정. §16.1 MVP 수용 기준에서 "최소 2개 이상의 기술적 지표(RSI, MACD)" 와 "BTC 온체인 지표(MVRV/SOPR)" 두 항목을 §16.3 (신설) Phase 2 수용 기준으로 이관. 기존 v3.2까지 §16.1과 §18 간에 있던 RSI/MACD/MVRV 배치 상충을 §18 기준으로 일원화. Phase 1 블루프린트 v2.3 구현(공통 매크로 코어 7개만 반영)과 일치. 자세한 변경 지점은 §16.1, §16.3(신설).
@@ -99,7 +101,7 @@ v2 PRD의 기본 철학은 유지하되, 아래 항목을 명시적으로 보강
 - 기술적 모멘텀/과매도 모델
 - 암호화폐 온체인 모델
 
-이 세 모델은 자산군별로 다른 가중치로 합성된다. Alpha Vantage는 RSI, MACD 등 50개 이상의 기술적 지표를 API로 제공하며, Bitbo는 MVRV Z-Score와 SOPR 등 BTC 온체인 지표를 제공한다.[web:152][web:154][web:161]
+이 세 모델은 자산군별로 다른 가중치로 합성된다. Alpha Vantage는 일봉 OHLC(`TIME_SERIES_DAILY`)를 제공하며, RSI/MACD/MA/볼린저밴드/이격도는 본 시스템이 OHLC를 받아 **로컬에서 직접 계산**한다 (AV의 사전 계산 지표 API는 사용하지 않음).[web:152][web:154] BTC 온체인 지표(MVRV Z-Score, SOPR)는 BGeometrics(bitcoin-data.com)의 무료 공개 API로 제공한다 — 기존 Bitbo 비공식 엔드포인트가 2026년 404 처리되어 대체됨.[web:161]
 
 ### 7.2 지표 정규화 원칙
 서로 다른 단위를 갖는 지표를 합산하려면 표준화가 필요하다. 기본 방식은 Z-Score 또는 percentile 정규화를 사용한다.
@@ -141,31 +143,34 @@ Composite\ Score = \sum_{i=1}^{n}(W_i \times S_i)
 | 10년물 금리 | 할인율 및 장기금리 환경 | FRED `DGS10` |
 | 장단기 스프레드 | 침체 선행 해석 | FRED `T10Y2Y`[web:13] |
 | VIX | 공포/패닉 레벨 | FRED `VIXCLS` 또는 시장 데이터 |
-| DXY | 달러 긴축 환경 | 시장 데이터 |
+| DXY (KR equity 전용) | 달러 긴축 환경 — 공통 macro composite 입력에서는 **제외**되며, KR equity의 `regional_overlay` 카테고리 입력으로만 사용 | FRED `DTWEXBGS` (Broad Dollar Index) |
 | 하이일드 스프레드 | 신용 스트레스 | FRED `BAMLH0A0HYM2`[web:16] |
 | 실업률 / Sahm Rule | 경기 둔화 탐지 | FRED `SAHMCURRENT`[web:129] |
 | 주간 신규 실업수당 청구 | 침체 선행 시그널 (§10.4 `ECONOMY_INTACT` 입력, 임계값 30만 건) | FRED `ICSA` |
-| TGA 잔고 | 재무부 현금 계정 → 시중 유동성 방향 (§10.4 `LIQUIDITY_EASING` 입력) | FRED `WTREGEN` (주간) 또는 `WDTGAL` (일간) |
+| TGA 잔고 | 재무부 현금 계정 → 시중 유동성 방향 (§10.4 `LIQUIDITY_EASING` 입력) | FRED `WDTGAL` (일간, 기본) 또는 `WTREGEN` (주간, fallback — WDTGAL 중단 시 활성화) |
 
 ### 8.2 기술적 분석 레이어
-Alpha Vantage는 RSI, MACD, 이동평균, 볼린저밴드 등 사전 계산된 기술적 지표를 제공하므로, MVP 이후 직접 연산보다 외부 계산값을 사용하는 옵션을 지원할 수 있다.[web:152][web:154]
+Alpha Vantage `TIME_SERIES_DAILY`에서 일봉 OHLC를 받아 **로컬에서 직접** RSI·MACD·MA·볼린저밴드·이격도를 계산한다. AV의 전용 지표 API(`/RSI`, `/MACD`, `/BBANDS` 등)는 사용하지 않는다 (Free Tier 호출량 절약 + 산식 투명성 확보 목적).[web:152][web:154]
 
 | 지표 | 기본 해석 | 주요 소스 |
 |---|---|---|
-| RSI(14) | 과매도/과매수 | Alpha Vantage[web:155] |
-| MACD | 추세 전환 | Alpha Vantage[web:152] |
-| 50/200MA | 중기/장기 추세 | Alpha Vantage 또는 직접 계산 |
-| 볼린저밴드 | 변동성 기반 이탈 | Alpha Vantage |
-| 이격도 (Disparity) | 가격 / 200일 이동평균 − 1. §10.4 `DISLOCATION` 시그널 입력. 임계값 −25% | Alpha Vantage OHLC + 로컬 계산 |
+| RSI(14) | 과매도/과매수 | Alpha Vantage OHLC + 로컬 계산[web:155] |
+| MACD | 추세 전환 | Alpha Vantage OHLC + 로컬 계산[web:152] |
+| MA(50) | 중기 추세 | Alpha Vantage OHLC + 로컬 계산 |
+| MA(200) ※ | 장기 추세 | **현재 영구 null** — Alpha Vantage가 `outputsize=full`을 유료로 전환(2026-04-25)하면서 무료 티어는 `compact` 100바만 반환. 200바 SMA 계산 불가. Phase 3에서 AV Premium 또는 대체 소스(Twelve Data 등)로 복구 예정. |
+| 볼린저밴드 | 변동성 기반 이탈 | Alpha Vantage OHLC + 로컬 계산 |
+| 이격도 (Disparity) ※ | 가격 / 200일 이동평균 − 1. §10.4 `DISLOCATION` 시그널 입력. 임계값 −25%. **MA(200) 의존성으로 현재 영구 null** (위와 동일 사유). | Alpha Vantage OHLC + 로컬 계산 |
+
+> ※ `outputsize=compact` 제약 하에서도 RSI(14)·MACD(12,26,9)·MA(50)·BB(20,2)는 워밍업 후 정상 산출된다. MA(200)·Disparity만 영구 null이며 `fetch_status='partial'`로 기록된다.
 
 ### 8.3 암호화폐 온체인 레이어
-Bitbo는 MVRV Z-Score, SOPR, Realized Price 등 다양한 BTC 온체인 지표를 제공한다.[web:158][web:161] 이 레이어는 BTC/ETH와 같은 암호화폐 자산군에만 적용한다.
+BGeometrics(bitcoin-data.com)는 MVRV Z-Score·SOPR 등 BTC 온체인 지표를 무료 공개 API로 제공한다 — 기존 Bitbo 비공식 엔드포인트가 2026년 404 처리되어 대체됨.[web:158][web:161] 이 레이어는 BTC/ETH와 같은 암호화폐 자산군에만 적용한다. 현재 구현은 MVRV Z-Score와 SOPR 두 지표만 수집하며, Realized Price 등 추가 지표는 수집하지 않는다.
 
 | 지표 | 의미 | 주요 소스 |
 |---|---|---|
-| MVRV Z-Score | 저평가/고평가 사이클 | Bitbo[web:161] |
-| SOPR | 이익 실현/손절 매도 상태 | Bitbo[web:158] |
-| ETF 순유입 | 기관 수급 강도 | CoinGlass[web:42] |
+| MVRV Z-Score | 저평가/고평가 사이클 | BGeometrics (bitcoin-data.com — Bitbo 대체)[web:161] |
+| SOPR | 이익 실현/손절 매도 상태 | BGeometrics (bitcoin-data.com — Bitbo 대체)[web:158] |
+| ETF 순유입 | 기관 수급 강도 | Farside Investors (farside.co.uk/btc/ — CoinGlass v4 유료화 후 대체) |
 | Crypto Fear & Greed | 시장 심리 | alternative.me[web:22] |
 
 ### 8.4 뉴스/심리 레이어
@@ -237,6 +242,8 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 - 환율/지역 오버레이: 20
 - 심리: 10
 
+환율/지역 오버레이 카테고리는 FRED `DTWEXBGS` (Broad Dollar Index, 50%) + `DEXKOUS` (USD/KRW, 50%) 두 시리즈의 평균으로 산출된다. 코드에서 카테고리 키는 `regional_overlay`. 한국은행 ECOS API는 인증·스키마 학습 비용 대비 효용이 낮다고 판단해 미채택(Phase 3 재검토). 현재 KR equity의 6개 카테고리 중 `technical` / `valuation`은 영구 null — Alpha Vantage 무료 티어가 KR `.KS` 티커를 지원하지 않아 ticker registry에서 제거됨. Phase 3에서 ECOS API 또는 Yahoo Finance 스크래핑으로 복구 검토.
+
 이 가중치는 초기값이며, 백테스트 후 재조정 가능해야 한다.
 
 ### 10.4 시그널 얼라인먼트 레이어 (Phase 2+ 도입)
@@ -245,27 +252,35 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 
 **철학**: "지금 점수 몇 점인가"(상태 요약)와 "지금 몇 개 매수 시그널이 동시에 켜졌는가"(행동 근거)는 서로 다른 질문이다. 특히 초보 사용자(§5 페르소나 중 여자친구·어머니)에게 "점수 47점"은 해석이 필요하지만 "4/6 시그널 동시 발화"는 즉각 이해 가능하다.
 
-**Phase 2 기준 6개 시그널**:
+**Phase 2 기준 8개 시그널** (base 6 + crypto-extra 2):
 
 | 시그널 | 조건 | 입력 지표 |
 |---|---|---|
 | `EXTREME_FEAR` | VIX ≥ 35 **또는** CNN F&G < 25 | §8.1 VIXCLS + §8.4 CNN F&G |
-| `DISLOCATION` | SPY 또는 QQQ의 200일 이동평균 대비 이격도 ≤ −25% | §8.2 이격도 |
+| `DISLOCATION` | SPY 또는 QQQ의 200일 이동평균 대비 이격도 ≤ −25% | §8.2 이격도 (현재 MA_200 영구 null로 입력 부재 — Phase 3 복구 예정) |
 | `ECONOMY_INTACT` | `ICSA` < 300K **그리고** SAHM < 0.5 | §8.1 ICSA + SAHMCURRENT |
 | `SPREAD_REVERSAL` | `BAMLH0A0HYM2` ≥ 4에서 지난 7일 하향 반전 | §8.1 BAMLH0A0HYM2 |
 | `LIQUIDITY_EASING` | TGA 잔고의 20일 이동평균 대비 감소 | §8.1 TGA |
-| `MOMENTUM_TURN` | SPY MACD bullish cross 최근 N일 내 (N은 블루프린트 확정) | §8.2 MACD |
+| `MOMENTUM_TURN` | SPY MACD bullish cross 최근 7일 내 | §8.2 MACD (현재 compact 100바 한도로 윈도우 부족 시 unknown — Phase 3 복구 예정) |
+| `CRYPTO_UNDERVALUED` (crypto-extra) | MVRV Z-Score ≤ 0 | §8.3 MVRV_Z |
+| `CAPITULATION` (crypto-extra) | SOPR < 1 | §8.3 SOPR |
 
-**출력**: `signal_events` 테이블 — `(snapshot_date, active_signals jsonb, alignment_count int, signal_rules_version text)`. composite_snapshots와 별도 버전 관리 (`SIGNAL_RULES_VERSION`이 `MODEL_VERSION`과 독립적으로 bump됨 — 시그널 임계값 튜닝과 composite 가중치 변경은 결이 다른 조정).
+**출력**: `signal_events` 테이블 — `(snapshot_date, active_signals jsonb, alignment_count int, signal_rules_version text, per_signal_detail jsonb)`. composite_snapshots와 별도 버전 관리 (`SIGNAL_RULES_VERSION`이 `MODEL_VERSION`과 독립적으로 bump됨 — 시그널 임계값 튜닝과 composite 가중치 변경은 결이 다른 조정).
 
 **UI 반영**:
-- 대시보드 상단 카드: "현재 N/6 매수 시그널 활성" — composite 밴드보다 크게 배치 (Phase 2 UX 가장 중요한 의사결정 원칙).
+- 대시보드 상단 카드: "현재 N/M 매수 시그널 활성" — composite 밴드보다 크게 배치 (Phase 2 UX 가장 중요한 의사결정 원칙). 분모 M은 자산군별 적용 가능 시그널 수 (us_equity 6, crypto 7, kr_equity 5, global_etf 5).
 - `alignment_count ≥ 3`: 노란 배지 "과거 평균 매수 타이밍 조건 충족"
 - `alignment_count ≥ 5`: 초록 배지 "역사적 최적 매수 구간"
 - `alignment_count ≤ 1`: 회색 배지 "대기 구간" (과도한 긴장 유발 회피)
+- 임계값(≥3 / ≥5 / ≤1)은 us_equity 6-시그널 기준으로 설계됨. 자산군별 분모(crypto 7, kr_equity/global_etf 5)에서도 동일 절대값 임계값을 적용한다. 비율 기반 임계값으로 전환할지 여부는 Phase 3 검토.
+- 시그널 타일은 (1) 배경 색조, (2) 아이콘(체크/마이너스/물음표), (3) 상태 텍스트 칩(`조건 충족` / `조건 미충족` / `데이터 부족`)으로 색상 외 2가지 이상의 단서로 상태를 전달 (WCAG 1.4.1 non-color-alone). 각 타일에는 한 줄 설명과 라이브 "지금: ..." 입력값 요약이 함께 표시된다.
 - PRD §13.2 자문 금지 준수: 카드 하단에 "실제 자산 배분은 본인 판단입니다. 모델은 과거 평균 패턴 기반 확률적 판단 도구입니다" 상시 표기.
 
-**자산군별 시그널 매핑**: `/asset/[slug]`에서는 해당 자산에 관련된 시그널만 노출 (US equity = 6개 모두, BTC/ETH = MVRV/SOPR 기반 추가 시그널 고려, KR equity = DISLOCATION 제외하고 4개 — Phase 2 블루프린트에서 확정).
+**자산군별 시그널 매핑** (`/asset/[slug]`에서는 해당 자산에 관련된 시그널만 노출):
+- **US equity / common**: BASE 6개 모두.
+- **BTC/ETH (crypto)**: BASE 5개 (MOMENTUM_TURN 제외, SPY MACD는 크립토에 의미 없음) + crypto-extra `CRYPTO_UNDERVALUED` + `CAPITULATION` = **총 7개**. Phase 3에서 BTC-MACD 변형으로 MOMENTUM_TURN 대체 검토.
+- **KR equity**: BASE 5개 (DISLOCATION 제외, SPY/QQQ 이격도는 KR equity에 미적용; 대신 §10.3 regional_overlay 사용).
+- **Global ETF**: BASE 5개 (MOMENTUM_TURN 제외, SPY MACD는 글로벌 분산 ETF에 이중 카운트 위험).
 
 ## 11. 기능 요구사항
 
@@ -280,7 +295,7 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 - 공통 매크로 코어 점수
 - 기술적/온체인/심리 오버레이 점수
 - 기여도 분해 차트
-- 최근 30/90/180일 점수 추이
+- 최근 90일 점수 추이 (30/180일 범위 전환 토글은 Phase 3 예정)
 - 설명 카드 및 데이터 소스 링크
 
 ### 11.3 변화 로그
@@ -305,7 +320,7 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 제품 목표 §4.1의 "과거 시점 상태·추천 재확인" 요구를 실현하는 크로스 페이지 기능이다. 대시보드·자산군 상세·변화 로그 모두 **선택된 날짜** 기준으로 동작한다.
 
 - **날짜 선택 UI**: 헤더 또는 전역 위치에 날짜 피커. 기본값은 오늘. 선택 시 URL 쿼리 파라미터(`?date=YYYY-MM-DD`)에 반영돼 공유·북마크 가능.
-- **범위**: Phase 1은 최소 최근 30일, Phase 2 이후 180일 이상 범위 보장.
+- **범위**: Phase 1은 최소 최근 30일, Phase 2 기준 90일 (`TREND_WINDOW_DAYS = 90` 고정). 180일 이상 확장은 Phase 3 예정 (§18).
 - **데이터 없음 처리**: 해당 날짜에 스냅샷이 없으면 "수집된 데이터가 없습니다" + 가장 가까운 이전 수집일 바로가기 제안. 점수를 자의적으로 추정하지 않는다.
 - **산식 버전 표시**: 각 히스토리 스냅샷에는 그 시점의 `model_version`이 같이 표시되어, 같은 값이어도 "이건 v1 산식이 판단한 것"이라는 맥락이 보이게 한다.
 - **Phase 1 (현재 범위)**: 점수·밴드·기여 지표의 "그때 상태"만 조회. 가격 비교는 없음.
@@ -331,8 +346,8 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 - **커스텀 제스처** — 좌우 스와이프 탭 이동, pull-to-refresh, long-press 등 직접 구현하는 제스처. 추가 라이브러리·버그 디버깅 공수 대비 학습 비용이 있어 Phase 1에서 제외.
 - **Haptics (진동 피드백)** — iOS Safari에서 웹 haptics API가 제한되어 크로스-플랫폼 일관성이 떨어진다.
 
-**Phase 2 이후 이연 (§18):**
-- **PWA (Progressive Web App)** — 홈 화면 설치 아이콘, manifest, service worker 기반 셸 캐싱. Phase 1 모바일 기본 품질이 안정된 뒤 "앱 같은 체험"을 덧붙이는 순서로 간다.
+**Phase 2 출하 완료 (§18):**
+- **PWA (Progressive Web App)** — `public/manifest.webmanifest` + `public/sw.js`(service worker 기반 셸 캐싱) + `src/components/shared/service-worker-registration.tsx` 모두 ship됨. 홈 화면 설치 아이콘 동작 확인. **Lighthouse PWA ≥ 90 점수 검증 및 실기기 A2HS(Add to Home Screen) 테스트는 Phase 2 운영 단계에서 진행 중** — `docs/phase2_acceptance_matrix.md` row 13 참조.
 
 ## 12. 데이터 파이프라인 요구사항
 
@@ -341,17 +356,18 @@ Bitbo 기준 SOPR는 사용된 코인이 이익 상태인지 손실 상태인지
 |---|---|---|
 | 1 | 공식 공공 데이터 | FRED, OECD, BLS, ISM 공식 발표[web:12][web:30][web:37] |
 | 2 | 준공식 시장 데이터 | Alpha Vantage, Finnhub[web:152][web:166] |
-| 3 | 온체인 특화 API | Bitbo, CoinGlass[web:161][web:42] |
+| 3 | 온체인 특화 API | BGeometrics (bitcoin-data.com), Farside Investors (farside.co.uk/btc/) — 기존 Bitbo · CoinGlass는 2026년 유료화/엔드포인트 변경으로 대체됨[web:161][web:42] |
 | 4 | 비공식 웹/스크래핑 | CNN Fear & Greed, 일부 valuation 데이터[web:31] |
 
 ### 12.2 캐싱 전략
-일간·주간 지표 위주 서비스이므로 실시간 계산보다 캐싱이 우선이다.
-- 매크로 지표: 24시간 재검증
-- 기술적 지표: 12~24시간 재계산
-- 온체인 지표: 1시간 재계산
-- 뉴스 센티먼트: 1시간 또는 수동 축약
+일간·주간 지표 위주 서비스이므로 실시간 계산보다 캐싱이 우선이다. Next.js 16 `cacheLife` named preset + `revalidateTag` 이중 구조로 운영한다.
 
-Vercel은 ISR과 시간 기반 재검증을 지원하며, App Router에서는 `revalidate` 설정으로 ISR을 적용할 수 있다.[web:167][web:168][web:169]
+- **매크로 / 기술적 / 가격 / 합성 스냅샷 readers**: `cacheLife('days')` (stale ≈ 1d, revalidate ≈ 1d, expire ≈ 1w) + cron 후 `revalidateTag(..., { expire: 0 })`로 즉시 무효화. 따라서 effective TTL은 cron cadence(daily 22:00 UTC)에 의해 결정됨.
+- **온체인 / 시그널 readers**: `cacheLife('hours')` (stale ≈ 1h) + cron 후 즉시 tag 무효화 (cron-hourly 매시 정각).
+- **뉴스 센티먼트**: `cacheLife('hours')` + cron-hourly 무효화.
+- **히스토리 스냅샷(과거 날짜)**: `cacheLife('weeks')` — 과거 시점 데이터는 변경되지 않으므로 길게 캐싱.
+
+Vercel은 ISR과 시간 기반 재검증을 지원하며, App Router에서는 `'use cache'` + `cacheTag` + `cacheLife` 디렉티브 모델을 사용한다.[web:167][web:168][web:169]
 
 ### 12.3 저장 스키마 메타필드
 - `indicator_key`
@@ -467,16 +483,20 @@ Next.js Middleware로 로그인 세션 없는 접근을 `/login`으로 리디렉
 ### 16.3 Phase 2 수용 기준
 - 최소 2개 이상의 기술적 지표(RSI, MACD)가 적용된다.[web:152][web:155]
 - BTC에는 최소 1개 이상의 온체인 지표(MVRV 또는 SOPR)가 적용된다.[web:158][web:161]
-- 나머지 Phase 2 수용 기준(이동평균선, 뉴스 센티먼트 보조 레이어, 점수 기여도 시각화, 가격 오버레이, 180일 이상 히스토리 범위, PWA)은 §18 Phase 2 bullet 각각에 대응하며 구체 기준은 `docs/phase2_architecture_blueprint.md` §10에서 정의한다.
+- 나머지 Phase 2 수용 기준(이동평균선, 뉴스 센티먼트 보조 레이어, 점수 기여도 시각화, 가격 오버레이, PWA)은 §18 Phase 2 bullet 각각에 대응하며 구체 기준은 `docs/phase2_architecture_blueprint.md` §10에서 정의한다.
+- **180일 이상 히스토리 범위는 Phase 3로 이연** (현재 90일 구현, §11.6 참조). Phase 2에서는 90일 추이를 acceptance 기준으로 본다.
 
 ## 17. 리스크와 대응
 
 | 리스크 | 설명 | 대응 |
 |---|---|---|
-| Alpha Vantage 호출 제한 | Free Tier는 25/day, 5/min 수준으로 제한적[web:154][web:156] | 배치 호출, 캐시, 직접 계산 fallback |
+| Alpha Vantage 호출 제한 | Free Tier는 25/day, 5/min 수준으로 제한적[web:154][web:156] | 배치 호출, 캐시, 로컬 계산(직접 OHLC→지표). Phase 2 단일 배치 ≈ 12 ticker × 1 call × 일 1회로 한도 내 운영 중. |
+| Alpha Vantage `outputsize` 제한 (현실화 2026-04-25) | `outputsize=full`이 유료 전환되어 Free Tier는 `compact` 100바만 반환. MA(200) · Disparity가 영구 null이며 `DISLOCATION` 시그널 입력 부재. | compact 100바 내 지표(RSI_14, MACD_12_26_9, MA_50, BB_20_2)만 운용. MA(200) · Disparity는 Phase 3에서 AV Premium($50/mo) 또는 Twelve Data(800/d free) / Yahoo Finance / Polygon으로 대체 검토. |
+| BGeometrics 의존성 (Bitbo 대체, 현실화) | bitcoin-data.com 무료 API — **8 req/hr** 쿼터(429 시 fail-fast). Bitbo 비공식 엔드포인트가 2026년 404 처리되어 대체했으나, 비공식 안정성 계약 없음. | 429 발생 시 `ingest-onchain`이 MVRV_Z/SOPR을 null로 기록(`fetch_status='error'`)하고 대시보드는 staleness 배지 표시. Phase 3 fallback은 Glassnode($29/mo) 유료 티어 검토. |
+| Farside ETF flow 의존성 (CoinGlass 대체, 현실화) | CoinGlass v4가 유료 키 필수로 전환되고 Bitbo CDN이 Vercel IP를 차단함. farside.co.uk 정적 HTML 스크래핑으로 대체. | 정식 contract 없는 비공식 소스. 파싱 실패 시 ETF flow 입력 null 처리. |
 | Finnhub 센티먼트 범위 제한 | 일부 센티먼트 엔드포인트는 북미 기업 중심[web:160] | 보조 지표로만 사용 |
-| Bitbo 의존성 | 특정 온체인 API 공급자 의존 | optional provider 설계, 대체 공급자 검토 |
-| 비공식 API 장애 | CNN F&G 등 스크래핑 리스크[web:31] | optional provider + 상태 배지 |
+| 비공식 API 장애 | CNN F&G 등 스크래핑 리스크[web:31] | optional provider + 상태 배지. CNN F&G는 부분 파싱 오류 발생 중(history 일부 row malformed, 현재값은 살아남음); `EXTREME_FEAR`는 VIX 단독 fallback 구현. |
+| KR equity 티커 미지원 (현실화) | Alpha Vantage 무료 티어가 KR `.KS` / `.KQ` / 무접미사 모두 거부. | KR `.KS` 7개 티커를 ticker registry에서 제거. KR equity의 `technical` / `valuation` 카테고리는 영구 null이며 Phase 3에서 ECOS API 또는 Yahoo Finance scrape로 복구 검토. |
 | Windows MCP 불안정 | `/c` 처리 버그 및 연결 문제[web:173][web:176] | 설정 파일 직접 관리, 버전 고정 |
 | 사용자 과잉신뢰 | 점수를 절대 신호로 오해 가능 | 설명형 UX, 면책 문구, 근거 병기 |
 
@@ -497,8 +517,8 @@ Next.js Middleware로 로그인 세션 없는 접근을 `/login`으로 리디렉
 - 점수 기여도 시각화
 - **가격 히스토리 레이어 도입 (§8.5)** — 자산군별 대표 티커만 일봉 수집, 리스트는 본 단계 착수 시 확정
 - **히스토리 뷰에 가격 오버레이 추가 (§11.6 Phase 2 범위)** — 점수 라인 + 대표 티커 가격 라인 동시 표시
-- **PWA 대응 (§11.7 이연 항목)** — web app manifest, service worker 기반 셸 캐싱, 홈 화면 설치 아이콘. Phase 1 반응형 기본 품질이 안정된 뒤 "앱 같은 체험" 층을 덧붙인다.
-- **매수 타이밍 시그널 엔진 (§10.4)** — composite score와 병렬로 6개 독립 boolean 시그널(`EXTREME_FEAR` / `DISLOCATION` / `ECONOMY_INTACT` / `SPREAD_REVERSAL` / `LIQUIDITY_EASING` / `MOMENTUM_TURN`) 계산. 대시보드 상단에 "N/6 시그널 활성" 얼라인먼트 카드 노출. 신규 데이터: FRED `ICSA` + `WTREGEN`/`WDTGAL`, CNN F&G (주식), 기술적 파생 지표 "이격도".
+- **PWA 대응 (§11.7)** — manifest + service worker 셸 캐싱 구현 완료. Lighthouse PWA ≥ 90 감사 및 실기기 A2HS 테스트는 Phase 2 운영 단계 진행 중.
+- **매수 타이밍 시그널 엔진 (§10.4)** — composite score와 병렬로 8개 독립 boolean 시그널(base 6: `EXTREME_FEAR` / `DISLOCATION` / `ECONOMY_INTACT` / `SPREAD_REVERSAL` / `LIQUIDITY_EASING` / `MOMENTUM_TURN` + crypto-extra 2: `CRYPTO_UNDERVALUED` / `CAPITULATION`) 계산. 대시보드/자산/changelog 상단에 "N/M 시그널 활성" 얼라인먼트 카드 노출(M은 자산군별 적용 시그널 수). 신규 데이터: FRED `ICSA` + `WDTGAL`(daily, 주력) / `WTREGEN`(weekly, fallback), CNN F&G (주식 — 부분 파싱 오류 시 VIX 단독 fallback), 기술적 파생 지표 "이격도"(현재 MA_200 영구 null로 입력 부재 — Phase 3 복구 예정).
 
 ### Phase 3 — Regime & Portfolio + 백테스트
 - 레짐 분류 엔진
