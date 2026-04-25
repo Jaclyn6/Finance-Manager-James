@@ -2,123 +2,66 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-26 (Phase 2 functionally complete + beginner-friendly indicator glossary shipped). Steps 1–13 + composite category wiring + source recoveries + Trigger 2 review + acceptance matrix + glossary all in `main`. Production smoke green; 4/6 categories rendering on us_equity / global_etf / common, 3/6 on crypto, 2/6 on kr_equity (Phase 3 ECOS). 23-indicator Korean glossary live at `/indicators` with per-row popovers.
+2026-04-26 (Phase 2 사용자 친화 layer 완성 — 23-지표 글로서리 + 점수 투명성 (raw value + 방향 + 계산 방식) 모두 production 배포·시각 검증 완료)
 
 ## 2. Current Phase / Step
 
-**Phase 2 IMPLEMENTATION COMPLETE.** All 13 blueprint Steps shipped. CLAUDE.md Trigger 2 final review applied. `docs/phase2_acceptance_matrix.md` records 16 criteria: 9 MET (56%) / 7 PARTIAL (44%) / 0 DEFERRED. PARTIAL items are upstream-data-dependent (cron freshness budget, source quotas) or scoped Phase 3 (KR equity AV-blocked, Glassnode upgrade for MVRV/SOPR resilience).
-
-**Next**: Phase 2 → 7-day production reliability watch + manual Lighthouse PWA audit + iPhone/Android A2HS test. Then Phase 3 planning kickoff.
+**Phase 2 IMPLEMENTATION COMPLETE.** Blueprint §9 Build Sequence Steps 1–13 + composite v2 category wiring + source recoveries + Trigger 2 review + acceptance matrix + 23-indicator beginner glossary + scoring transparency layer 모두 `main`에 shipped. 다음 단계는 implementation이 아니라 **운영 단계**: 7-day reliability watch + Lighthouse PWA audit + Phase 3 planning.
 
 ## 3. Last Commit
 
-`b5c3c83` — `feat(phase2): beginner-friendly indicator glossary — 23 entries + popover + /indicators page`. Pushed. Working tree clean. Production aliased.
+`94ae128` — `feat(phase2): scoring transparency — direction + method + raw value rendering` on `main`. Pushed (origin in sync). Working tree clean.
 
 ## 4. Active Thread
 
-**Latest (2026-04-26): 23-indicator beginner glossary** (`b5c3c83`). Closes the §0.5 tenet 4 gap surfaced when the user noticed scores rendered without explaining what each underlying indicator measures or how rising/falling should change asset allocation. Pure additive layer:
-- `src/lib/utils/indicator-glossary.ts` — 23 entries (macro 7 + macro_signal 2 + regional_overlay 2 + technical 6 + onchain 4 + sentiment 2). Each entry: shortKo (popover), beginnerExplanationKo, bullishCaseKo + bearishCaseKo (asset-allocation framing), typicalRangeKo, optional caveatKo.
-- `IndicatorInfoPopover` ⓘ trigger inside ContributingIndicators rows. Verified on production: 7 macro indicators × ⓘ button each, aria-label `"<label> 지표 설명 열기"`.
-- `/indicators` glossary page with anchored articles per entry (`/indicators#VIXCLS` deep links). Sidebar nav "지표 사전" added under new "참고" group. Page rendered + 24+ 상승/하락 blocks visible on production.
-- 498/498 tests green (+9 new: 7 glossary structural + 2 nav-items drift).
-
-**This session shipped 7 commits (39e215f → b5c3c83):**
-
-| Commit | Scope |
-|---|---|
-| `39e215f` | Composite v2 category-score wiring (5 aggregators + ingest-macro extension + 36+3 tests) |
-| `b703bc0` | First source repair pass (BGeometrics, bitbo.io, batch-split, 5-hat fixes) |
-| `b861cfa` | Second source repair pass (Farside ETF + AV compact + BGeometrics 429 fail-fast) |
-| `d536141` | KR `.KS` ticker carve-out (12 tickers, single batch) |
-| `f863e81` | UI polish (size-11, motion-safe, PNG icons) |
-| `3d25e58` | Trigger 2 final review — 13 fixes (real ETF dedup bug + blueprint sync + version bump) |
-| `8261924` | Acceptance gaps closed — SignalCard on /changelog + ESLint §7.4 rule |
-
-**Production smoke results (post 8261924):**
-
-- `ingest-onchain`: partial 3/4 (BGeometrics 1 of 2 hit 8/hr quota; CRYPTO_FG + ETF flow OK).
-- `ingest-technical` (single batch): 12/12 success in 154s.
-- `ingest-macro`: 7/7 FRED + full category-aggregator pass — 5 composite_snapshots written.
-- `composite_snapshots` 2026-04-25:
-  - us_equity / global_etf / common → **4/6 categories** (macro / technical / sentiment / valuation).
-  - crypto → **3/6** (macro / onchain / sentiment) — all applicable.
-  - kr_equity → **2/6** (macro / regional_overlay) — KR ticker AV blocked.
-- `signal_events` populated with multi-asset variants. `ECONOMY_INTACT` firing on real ICSA/Sahm data.
-- Chrome MCP visual: dashboard hero, all 3 asset detail pages, and `/changelog` (with newly-added SignalAlignmentCard) render cleanly.
-
-**Cron cadence state:**
-- `cron-hourly.yml`: env-block secret pattern + PRODUCTION_URL with `https://` prefix verified. Auto-fires hourly.
-- `cron-technical.yml`: 12-ticker single batch (no `?batch=` query param). 22:00 UTC daily.
-- Vercel Hobby cron: `ingest-macro` 06:00 UTC daily.
+- **Just finished**: 사용자 두 차례 피드백 수용 완료 — (a) 23-지표 한국어 글로서리 + popover/페이지 (b) 점수 방향 + 점수 계산 + 자산 페이지 raw value column. 통계 용어(z-score/표준편차/σ) 일상 표현으로 전부 풀어쓴 톤 검증 통과.
+- **Production 시각 검증 통과** (Chrome MCP): `/indicators` 🧭 점수 읽는 법 info box + 23 카드 점수 방향/계산 섹션, `/asset/us-equity` "VIX 19.31 포인트" raw value 표시, popover에 "지금: 19.31 포인트 (보통 15~25)" 라인 모두 정상.
+- **About to start (next session)**: 7-day reliability watch (Day 1=2026-04-26) / Lighthouse PWA audit / 실기기 A2HS 테스트 / Phase 3 budget 결정 (Glassnode $29/mo, AV Premium $50/mo, ECOS API).
+- **Not blocked.** All deployments green; signal_events / composite_snapshots / technical_readings 모두 today's row 보유.
 
 ## 5. Pending User Decisions
 
-- **Phase 3 budget**: $29/mo Glassnode for MVRV/SOPR reliability vs accept BGeometrics 8/hr intermittent outages indefinitely.
-- **Phase 3 KR data**: ECOS API integration (free, requires API key registration) vs Yahoo Finance scrape vs accept null KR technical/sentiment.
+- **Phase 3 budget**: $29/mo Glassnode (MVRV/SOPR 안정화) vs BGeometrics 8/hr 무료 유지.
+- **Phase 3 KR equity**: ECOS API (무료, 키 등록) vs Yahoo Finance scrape vs KR technical 영구 null.
 
 ## 6. Recent Context (last 5 commits)
 
-- `8261924` Acceptance gap closures (changelog SignalCard + ESLint §7.4)
-- `3d25e58` Trigger 2 13-fix pack (ETF dedup bug + blueprint + TICKER_LIST_VERSION bump + dead code removal + sw.js PNG cache)
-- `f863e81` UI polish (44px touch targets, motion-safe, PNG icons rasterized via sharp)
-- `d536141` KR `.KS` removal + batch-split revert (12 single batch)
-- `b861cfa` Farside ETF + AV compact + BGeometrics 429 fail-fast
+- `94ae128` 점수 투명성 — 방향(거꾸로 보는 vs 그대로 보는) + 계산 방식(통계 용어 0개) + 자산 row raw value column. 505/505 tests, 사용자가 점수 의미를 직관적으로 이해 가능.
+- `540466a` Glossary 도입 직후 handoff 동기화.
+- `b5c3c83` 23-지표 초보자 글로서리 — popover + `/indicators` 페이지 + 사이드바 "참고" 그룹. §0.5 tenet 4 actionable 갭 메움.
+- `2f8b72c` Phase 2 implementation 완료 시점의 final handoff (acceptance 9 MET / 7 PARTIAL).
+- `8261924` `/changelog`에 SignalAlignmentCard 추가 + ESLint §7.4 invariant guard. Trigger 2 surfaced 갭 마감.
 
 ## 7. Open Issues to Watch
 
-### Production data freshness
-
-- **BGeometrics 8/hr quota intermittent**: 1 of 2 MVRV/SOPR queries hits 429 on each cron run from Vercel IPs. Aggregator returns null gracefully → "수집 중" amber chip. Long-term: Glassnode (~$29/mo) Phase 3.
-- **CNN F&G partial**: 51 history rows malformed but current value salvaged. EXTREME_FEAR signal fires on VIX alone via OR-arm. Phase 3 alternative.me stocks adapter candidate.
-- **MA(200) + Disparity always null**: Free AV `outputsize=compact` returns 100 bars only. Blueprint §10.2 row 1 was relaxed in `3d25e58` to clarify this. Phase 3 fix via AV Premium ($50/mo) or Glassnode.
-- **KR equity 2/6 categories**: Samsung etc unsupported on AV free tier. Documented in blueprint §3.2 + acceptance matrix.
-
-### Phase 3 deferrals
-
-- KR equity ECOS integration (free, Korean Statistical Information Service API, requires registration).
-- Glassnode upgrade for crypto onchain reliability.
-- Real-device PWA Lighthouse audit + iOS A2HS test on iPhone 14+.
-- Header copy route-aware ("오늘의 투자 환경" vs asset-specific copy on `/asset/[slug]`).
-- shadcn `tw-animate-css` v1.4 lacks `prefers-reduced-motion` rule on Sheet/Popover/Tooltip slide-ins; add custom CSS layer if needed.
-- `button.tsx` `icon-lg` (size-9) variant retained; new `icon-touch` (size-11) added. Migrate any legacy `icon-lg` callers to `icon-touch` if discovered.
-
-### Workflow gotchas (preserve in next session)
-
-- **CRON_SECRET sync** across Vercel + GH + .env.local must always match.
-- **PRODUCTION_URL must include `https://`** prefix or curl breaks.
-- **GHA cron-hourly `continue-on-error: true`** can hide false-success — check Vercel function logs in addition to `gh run view`.
-- **Vercel alias**: after `vercel --prod` may need explicit `vercel alias set <deployment> finance-manager-james.vercel.app`.
+- **GHA cron-technical 어제 22:00 UTC 자동 run** 결과 미확인 — `gh run list --workflow=cron-technical.yml --limit 3`로 확인. 12-ticker single batch 154s 예상.
+- **BGeometrics 8/hr quota**: cron-hourly 매번 1-2 매트릭에서 429 hit (예상 동작; `fetch_status:'error'` 정상 propagate).
+- **MA(200) + Disparity 영구 null** until Phase 3 (AV `outputsize=compact` 100바 한도). 글로서리에 명시되어 있음.
+- **KR equity 2/6 categories** 영구 (ECOS Phase 3 대기).
+- **shadcn `tw-animate-css` v1.4** prefers-reduced-motion 룰 미포함 — Sheet/Popover/Tooltip slide-in에 영향. 별도 CSS layer 필요 시 추가.
+- **`button.tsx` `icon-lg` (size-9) variant** 잔존; 새 `icon-touch` (size-11)로 마이그레이션 candidate.
+- **`indicator-glossary.test.ts` jargon banlist** scoping에 `BB_20_2.shortKo`/`beginnerExplanationKo`의 "2σ" 표기 예외 처리 필요 (Bollinger 표준 표기). 현재 test가 transparency 필드만 검사하도록 명시되어 있음 — 이 컨벤션 유지할 것.
 
 ## 8. Environment State
 
-- **Stack**: Next.js 16.2.4 + Turbopack + cacheComponents:true, React 19.2.4, Tailwind v4, @supabase/ssr 0.10.2, TypeScript 5 strict, Recharts 3.x, Vitest 4.1.4, sharp 0.34.5 (transitive Next dep, used in `scripts/generate-icons.mjs`).
-- **Tests**: **498/498 green** across 32 files. Net of: removed `sentiment.test.ts` (32 tests dead code), added 3 ETF dedup regressions, KR ticker test removal, +9 glossary structural + nav-items drift tests.
-- **Lint**: clean (1 pre-existing unused-var warning in `ingest-news/route.ts` — unrelated).
-- **MCP servers**: figma, supabase, context7, alphavantage, **Claude-in-Chrome** (jw.byun authenticated; tabGroupId=690806389).
-- **`.env.local`**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET (43-char), FINNHUB_API_KEY (unused, retained), VERCEL_OIDC_TOKEN.
-- **Vercel prod**: alias `finance-manager-james.vercel.app` → deployment `finance-manager-hrqkwrvfp-jaclyn6s-projects.vercel.app` (commit `3d25e58`; will redeploy on next push).
-- **GH repo secrets**: CRON_SECRET, PRODUCTION_URL (`https://finance-manager-james.vercel.app`), FINNHUB_API_KEY.
+- **Stack**: Next.js 16.2.4 (Turbopack, cacheComponents:true), React 19.2.4, Tailwind v4, @supabase/ssr 0.10.2, TS 5 strict, Recharts 3.x, Vitest 4.1.4, sharp 0.34.5 (Next 트랜지티브, `scripts/generate-icons.mjs` 사용).
+- **Tests**: **505/505 green** across 32 files.
+- **MCP servers**: figma, supabase, context7, alphavantage, **Claude-in-Chrome** (jw.byun@toss.im 인증, tabGroupId 690806389).
+- **`.env.local` keys**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET (43-char), FINNHUB_API_KEY (INACTIVE 배너), VERCEL_OIDC_TOKEN.
+- **Vercel prod**: alias `finance-manager-james.vercel.app` → 최근 deployment `finance-manager-m806gug8m-jaclyn6s-projects.vercel.app` (commit 94ae128).
+- **GitHub repo secrets**: CRON_SECRET, PRODUCTION_URL (`https://...` 프리픽스 포함), FINNHUB_API_KEY.
 - **Supabase**: hhohrclmfsvpkigbdpsb (Seoul, Postgres 17.6.1.104). Migrations 0001–0010 applied.
-- **Data state** (2026-04-25 post-final-deploy):
-  - `composite_snapshots`: 5 v2 rows for 2026-04-25 with multi-category JSONB.
-  - `technical_readings`: 72 success rows + 0 error rows (all 12 tickers OK).
-  - `price_readings`: 1095 crypto + 12 AV daily bars.
-  - `onchain_readings`: 4 rows (3 success, 1 BGeometrics 429).
-  - `news_sentiment`: 5 success rows.
-  - `signal_events`: ≥1 row for 2026-04-25.
-- **Blueprint versions**: Phase 2 v1.0 (2026-04-23) + 2026-04-25 amendments in §3.1 / §3.2 / §10.1 / §10.2 / §11. PRD v3.4. **TICKER_LIST_VERSION bumped to v2.0.0-2026-04-25** (commit 3d25e58).
+- **Known integrations broken / degraded**:
+  - BGeometrics MVRV/SOPR — 8/hr 무료 한도 (cron-hourly 부분 실패 정상).
+  - CNN F&G — partial (51 history rows malformed; 현재값 살아남음).
+  - AV `outputsize=full` paid-only → compact 100바.
+  - KR `.KS` tickers AV 미지원 (registry에서 제거됨).
 
 ## 9. How to Resume
 
-1. **Production reliability watch**: Days 1–7 from 2026-04-25. Check `gh run list` daily for cron-hourly + cron-technical green count. Goal: 7 consecutive days for §10.3 acceptance.
-2. **Lighthouse PWA audit** on `https://finance-manager-james.vercel.app` — record score in `docs/phase2_acceptance_matrix.md` row 13. Target ≥ 90.
-3. **Real-device A2HS test** — iPhone Safari 15+ + Android Chrome. Verify icon, splash, standalone display, offline shell loads in < 1s.
-4. **Phase 3 budget decision** with user — Glassnode ($29/mo) and/or AV Premium ($50/mo) and/or ECOS API (free + key).
-5. **Phase 3 plan authorship** — new `docs/phase3_plan.md` covering: regime classification engine, portfolio overlay, per-user personalization, backtest UI, ECOS for KR, Glassnode for crypto onchain.
-6. **Optional immediate polish** if continuing in Phase 2 envelope:
-   - Migrate any `icon-lg` button callers to `icon-touch`.
-   - Add `tw-animate-css` reduced-motion override CSS.
-   - Header route-aware copy.
+- Read `docs/phase2_architecture_blueprint.md` v1.0 §9 Build Sequence + 2026-04-25 amendments (§3.1/§3.2/§10.1/§10.2/§11) to understand the as-built state.
+- Read `docs/phase2_acceptance_matrix.md` for the 16-criterion status table (9 MET / 7 PARTIAL / 0 DEFERRED) — surface what's still PARTIAL and why.
+- **Concrete next action**: run `gh run list --workflow=cron-technical.yml --limit 3` + `gh run list --workflow=cron-hourly.yml --limit 3` to confirm overnight cron health (Day 1 of 7-day reliability watch). Then run a Lighthouse PWA audit on `https://finance-manager-james.vercel.app` and record the score in `docs/phase2_acceptance_matrix.md` row 13 (target ≥ 90).
 
 ---
 
