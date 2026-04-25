@@ -2,7 +2,7 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-25 (Phase 2 functionally complete — Steps 1–13 + composite category wiring + source recoveries + Trigger 2 review + acceptance matrix shipped). Production smoke green; 4/6 categories rendering on us_equity / global_etf / common, 3/6 on crypto, 2/6 on kr_equity (Phase 3 ECOS).
+2026-04-26 (Phase 2 functionally complete + beginner-friendly indicator glossary shipped). Steps 1–13 + composite category wiring + source recoveries + Trigger 2 review + acceptance matrix + glossary all in `main`. Production smoke green; 4/6 categories rendering on us_equity / global_etf / common, 3/6 on crypto, 2/6 on kr_equity (Phase 3 ECOS). 23-indicator Korean glossary live at `/indicators` with per-row popovers.
 
 ## 2. Current Phase / Step
 
@@ -12,11 +12,17 @@
 
 ## 3. Last Commit
 
-`8261924` — `feat(phase2): close acceptance gaps — SignalCard on /changelog + ESLint §7.4 guard`. Pushed. Working tree clean.
+`b5c3c83` — `feat(phase2): beginner-friendly indicator glossary — 23 entries + popover + /indicators page`. Pushed. Working tree clean. Production aliased.
 
 ## 4. Active Thread
 
-**This session shipped 6 commits (39e215f → 8261924):**
+**Latest (2026-04-26): 23-indicator beginner glossary** (`b5c3c83`). Closes the §0.5 tenet 4 gap surfaced when the user noticed scores rendered without explaining what each underlying indicator measures or how rising/falling should change asset allocation. Pure additive layer:
+- `src/lib/utils/indicator-glossary.ts` — 23 entries (macro 7 + macro_signal 2 + regional_overlay 2 + technical 6 + onchain 4 + sentiment 2). Each entry: shortKo (popover), beginnerExplanationKo, bullishCaseKo + bearishCaseKo (asset-allocation framing), typicalRangeKo, optional caveatKo.
+- `IndicatorInfoPopover` ⓘ trigger inside ContributingIndicators rows. Verified on production: 7 macro indicators × ⓘ button each, aria-label `"<label> 지표 설명 열기"`.
+- `/indicators` glossary page with anchored articles per entry (`/indicators#VIXCLS` deep links). Sidebar nav "지표 사전" added under new "참고" group. Page rendered + 24+ 상승/하락 blocks visible on production.
+- 498/498 tests green (+9 new: 7 glossary structural + 2 nav-items drift).
+
+**This session shipped 7 commits (39e215f → b5c3c83):**
 
 | Commit | Scope |
 |---|---|
@@ -86,7 +92,7 @@
 ## 8. Environment State
 
 - **Stack**: Next.js 16.2.4 + Turbopack + cacheComponents:true, React 19.2.4, Tailwind v4, @supabase/ssr 0.10.2, TypeScript 5 strict, Recharts 3.x, Vitest 4.1.4, sharp 0.34.5 (transitive Next dep, used in `scripts/generate-icons.mjs`).
-- **Tests**: **489/489 green** across 30 files. Net of: removed `sentiment.test.ts` (32 tests dead code), added 3 ETF dedup regressions, churn from KR ticker test removal.
+- **Tests**: **498/498 green** across 32 files. Net of: removed `sentiment.test.ts` (32 tests dead code), added 3 ETF dedup regressions, KR ticker test removal, +9 glossary structural + nav-items drift tests.
 - **Lint**: clean (1 pre-existing unused-var warning in `ingest-news/route.ts` — unrelated).
 - **MCP servers**: figma, supabase, context7, alphavantage, **Claude-in-Chrome** (jw.byun authenticated; tabGroupId=690806389).
 - **`.env.local`**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET (43-char), FINNHUB_API_KEY (unused, retained), VERCEL_OIDC_TOKEN.
