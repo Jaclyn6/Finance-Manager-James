@@ -37,7 +37,11 @@
   - Zero console errors, all pages render.
 
 **GHA `cron-technical` state (at session end):**
-- Manually dispatched run `24920958904` in progress at 2m39s. Expected to take ~5 min (19 AV tickers × 13-15s each + CoinGecko). Check `gh run list --workflow=cron-technical.yml --limit 1` in next session.
+- Manually dispatched run `24920958904` FAILED at 4m18s with **HTTP 500** after writing partial data (18 `technical_readings` rows = 3/19 tickers succeeded). Likely root cause: **Vercel Hobby 300s `maxDuration` timeout** — 19 tickers × 13s sleep ≈ 247s + AV fetch + Supabase writes pushes right up against the 300s wall. Solutions:
+  - Split cron into 2 batches (10 + 9 tickers) triggered 30 min apart OR
+  - Reduce AV sleep to 12s (still under 5/min = 12s floor) OR
+  - Upgrade to Vercel Pro (900s timeout) OR
+  - Move full ingestion to GHA runner (generous timeout, runs ingestion locally and writes direct to Supabase via service-role key)
 - Two earlier runs failed at 9s each due to `PRODUCTION_URL` secret value missing the `https://` prefix. Fixed via `gh secret set PRODUCTION_URL`.
 - `CRON_SECRET` also re-synced from `.env.local` → GH repo secret (was out of sync after earlier rotation, causing 401 in the second attempt).
 
