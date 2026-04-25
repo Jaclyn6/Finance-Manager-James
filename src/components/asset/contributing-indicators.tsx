@@ -1,6 +1,7 @@
 import { ExternalLink } from "lucide-react";
 
 import { CategoryContributionBar } from "@/components/asset/category-contribution-bar";
+import { IndicatorInfoPopover } from "@/components/asset/indicator-info-popover";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { INDICATOR_CONFIG } from "@/lib/score-engine/weights";
@@ -10,6 +11,7 @@ import {
   CATEGORY_DISPLAY_ORDER,
   CATEGORY_LABELS_KO,
 } from "@/lib/utils/category-labels";
+import { INDICATOR_GLOSSARY } from "@/lib/utils/indicator-glossary";
 import type { Json, Tables } from "@/types/database";
 
 /**
@@ -212,10 +214,20 @@ function CategorySection({ row }: { row: CategoryRow }) {
 function IndicatorRowView({ indicator }: { indicator: IndicatorRow }) {
   const config = INDICATOR_CONFIG[indicator.key];
   const label = config?.descriptionKo ?? indicator.key;
+  // Glossary lookup is keyed by the same canonical id (FEDFUNDS, RSI_14,
+  // …). When an indicator key is absent from the glossary (e.g. a future
+  // FRED series added before the glossary entry lands) we silently skip
+  // the ⓘ trigger — graceful degradation, no broken trigger button.
+  const glossaryEntry = INDICATOR_GLOSSARY[indicator.key];
   return (
     <li className="grid gap-2 border-b border-border/40 pb-2 last:border-0 last:pb-0 md:grid-cols-[1fr_auto] md:items-start md:gap-6">
       <div className="space-y-1">
-        <p className="text-sm font-medium text-foreground">{label}</p>
+        <div className="flex items-center gap-1">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          {glossaryEntry ? (
+            <IndicatorInfoPopover entry={glossaryEntry} />
+          ) : null}
+        </div>
         {config ? (
           <a
             href={config.sourceUrl}
