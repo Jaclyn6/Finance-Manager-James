@@ -18,9 +18,12 @@ import {
 } from "@/lib/score-engine/signals";
 import type { AssetType } from "@/lib/score-engine/types";
 import {
+  describeSignalSituation,
   resolveAlignmentBadge,
+  SIGNAL_DESCRIPTION_KO,
   SIGNAL_FULL_NAMES_KO,
   SIGNAL_LABELS_KO,
+  SIGNAL_STATE_LABEL_KO,
   SIGNAL_THRESHOLD_KO,
 } from "@/lib/utils/signal-labels";
 import { cn } from "@/lib/utils";
@@ -51,7 +54,7 @@ import type { Tables } from "@/types/database";
  *
  *   1. Background tint (green / grey / amber)
  *   2. Icon (check / minus / question-mark)
- *   3. Caption text (켜짐 / 꺼짐 / 불명)
+ *   3. Caption text (조건 충족 / 조건 미충족 / 데이터 부족)
  *
  * ─ Empty state ─────────────────────────────────────────────────────
  *
@@ -248,16 +251,14 @@ function SignalTile({
   const shortLabel = SIGNAL_LABELS_KO[name];
   const fullLabel = SIGNAL_FULL_NAMES_KO[name];
   const threshold = SIGNAL_THRESHOLD_KO[name];
-  const stateCaption = STATE_CAPTION_KO[state];
+  const description = SIGNAL_DESCRIPTION_KO[name];
+  const stateCaption = SIGNAL_STATE_LABEL_KO[state];
+  const situation = describeSignalSituation(name, detail ?? null);
   // Blueprint §4.5 line 384 requires the announcement to include the
   // underlying input values so SR users get the same "why" context
   // sighted users get from the tooltip (e.g.
-  // "시장 극단 공포 — 켜짐 (vix=37, cnnFg=22)").
-  const inputsText =
-    detail && detail.inputs && Object.keys(detail.inputs).length > 0
-      ? ` (${renderInputs(detail.inputs)})`
-      : "";
-  const ariaLabel = `${fullLabel} — ${stateCaption}${inputsText}`;
+  // "시장 극단 공포 — 조건 충족 (VIX 37, CNN F&G 22 — 시장이 공포에 빠진 상태)").
+  const ariaLabel = `${fullLabel} — ${stateCaption}. ${situation}`;
 
   return (
     <li>
@@ -266,7 +267,7 @@ function SignalTile({
           type="button"
           aria-label={ariaLabel}
           className={cn(
-            "flex min-h-11 min-w-11 w-full flex-col items-start justify-between gap-1 rounded-lg border p-3 text-left motion-safe:transition-colors",
+            "flex min-h-11 min-w-11 w-full flex-col items-start gap-2 rounded-lg border p-3 text-left motion-safe:transition-colors",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             STATE_PALETTE[state],
           )}
@@ -275,11 +276,24 @@ function SignalTile({
             <span className="text-sm font-semibold tracking-tight">
               {shortLabel}
             </span>
-            <StateIcon state={state} />
+            <div className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                  STATE_BADGE[state],
+                )}
+              >
+                {stateCaption}
+              </span>
+              <StateIcon state={state} />
+            </div>
           </div>
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {stateCaption}
-          </span>
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {description}
+          </p>
+          <p className="text-[11px] leading-snug font-medium text-foreground/80">
+            지금: {situation}
+          </p>
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
           <div className="space-y-1.5">
@@ -369,10 +383,12 @@ const STATE_PALETTE: Record<SignalState, string> = {
     "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-100",
 };
 
-const STATE_CAPTION_KO: Record<SignalState, string> = {
-  active: "켜짐",
-  inactive: "꺼짐",
-  unknown: "불명",
+/** Inline state pill — paired with the icon for non-color-alone reading. */
+const STATE_BADGE: Record<SignalState, string> = {
+  active:
+    "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200",
+  inactive: "bg-muted text-muted-foreground",
+  unknown: "bg-amber-500/15 text-amber-800 dark:text-amber-200",
 };
 
 // ---------------------------------------------------------------------------
