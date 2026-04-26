@@ -164,11 +164,16 @@ export async function fetchDailyBars(
   }
 
   // ---- All tiers failed or returned < 200 bars ----
-  // Pick the best available: prefer ANY tier with `ok` status (even
-  // if < 200 bars) over a hard error, then prefer the tier with the
-  // most bars. This preserves the pre-3.0 behavior where AV-compact
-  // 100-bar responses still let the cron compute RSI/MACD/MA50/BB20
-  // and write MA_200='partial'.
+  // Pick the best available with strict status preference:
+  //   1. Any tier with `ok` status, ranked by bars.length DESC.
+  //   2. Then any tier with `partial` status (i.e. bars present but
+  //      flagged degraded), ranked by bars.length DESC.
+  //   3. Hard `error` results never win this selection — using one
+  //      would let stale/cached bars in an error result override a
+  //      clean partial with fewer bars (Reviewer #4 R4.1, R2.1).
+  // This preserves the pre-3.0 behavior where AV-compact 100-bar
+  // responses still let the cron compute RSI/MACD/MA50/BB20 and
+  // write MA_200='partial'.
   const candidates = [avNormalized, td, yahoo];
   const okCandidates = candidates.filter((c) => c.fetch_status === "ok");
   if (okCandidates.length > 0) {
@@ -176,15 +181,16 @@ export async function fetchDailyBars(
     return { result: okCandidates[0]!, tiersAttempted };
   }
 
-  // No `ok` results → take whichever has the longest non-empty bars.
-  const partials = candidates.filter((c) => c.bars.length > 0);
-  if (partials.length > 0) {
-    partials.sort((a, b) => b.bars.length - a.bars.length);
-    return { result: partials[0]!, tiersAttempted };
+  const partialCandidates = candidates.filter(
+    (c) => c.fetch_status === "partial" && c.bars.length > 0,
+  );
+  if (partialCandidates.length > 0) {
+    partialCandidates.sort((a, b) => b.bars.length - a.bars.length);
+    return { result: partialCandidates[0]!, tiersAttempted };
   }
 
-  // Worst case: all three returned hard errors with empty bars. Use
-  // the AV (Tier 1) error since the route's existing diagnostics
-  // already speak Alpha-Vantage-isms; future iterations can pivot.
+  // Worst case: every tier returned a hard error. Surface the AV
+  // (Tier 1) error since the route's existing diagnostics already
+  // speak Alpha-Vantage-isms; future iterations can pivot.
   return { result: avNormalized, tiersAttempted };
 }

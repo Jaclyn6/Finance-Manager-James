@@ -299,14 +299,16 @@ function perTickerTechnicalScores(
  *    technical, so null propagates to the composite as "missing").
  *  - No usable per-ticker score could be computed.
  *
- * kr_equity at Phase 2: returns null. The Phase 2 ticker registry
- * carries no .KS symbols (KR carve-out 2026-04-25 — Alpha Vantage
- * free tier doesn't serve KOSPI in any format; see
- * `ingest-technical/ticker-registry.ts` for the Phase 3 ECOS / Yahoo
- * plan). With no kr_equity rows in the input, both the preferred-set
- * filter and the asset_type fallback hit zero, so the function
- * returns `{score: null, indicators: {}}` and the composite engine
- * surfaces it in `missingCategories`.
+ * kr_equity at Phase 3.0+: returns a real score. The 2026-04-25 KR
+ * carve-out (which made this function return null for kr_equity) was
+ * REVERSED in Phase 3.0 (2026-04-26). The ticker registry now
+ * includes 7 KR tickers (`005930.KS`, etc.) routed through Yahoo
+ * Finance via `daily-bar-fetcher.ts`. The preferred-set filter picks
+ * `005930.KS` first; if that ticker fails on a given day, the
+ * asset_type fallback aggregates the remaining 6 KR tickers. The
+ * `{score: null}` branch is now reserved for the genuine
+ * "all 7 KR tickers failed today" edge case, which surfaces in
+ * `missingCategories` as designed.
  */
 export function aggregateTechnical(
   assetType: AssetType,

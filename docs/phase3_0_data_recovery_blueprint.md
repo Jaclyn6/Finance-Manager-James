@@ -304,10 +304,10 @@ Each criterion is verifiable by a single command or query. Step 6 closes the mat
 5. **KR equity has live technical_readings**:
    ```sql
    SELECT count(*) FROM technical_readings
-   WHERE ticker LIKE '%.K_'
+   WHERE (ticker LIKE '%.KS' OR ticker LIKE '%.KQ')
      AND observed_at::date = CURRENT_DATE - INTERVAL '1 day';
    ```
-   Expected: 7 tickers × 5 indicators (RSI/MACD/MA_50/MA_200/Disparity) = 35 rows. (Bollinger adds 6 more if we re-run BB on KR; depends on timing.)
+   Expected: 7 tickers × 6 indicators (RSI/MACD/MA_50/MA_200/BB_20_2/Disparity) = 42 rows. The `LIKE '%.KS' OR LIKE '%.KQ'` pattern is unambiguous; do NOT use the looser `LIKE '%.K_'` (matches any `.K?`-suffixed ticker incl. non-existent `.KA`/`.KB`).
 
 6. **kr_equity composite categories non-null**:
    ```sql

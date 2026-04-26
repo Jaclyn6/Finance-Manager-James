@@ -1,9 +1,11 @@
 /**
- * Frozen Phase 2 ticker registry — the 12 Alpha Vantage symbols whose
- * daily bars feed both the `technical_readings` pipeline (RSI / MACD /
- * MA50 / MA200 / Bollinger / Disparity per blueprint §4.3) and the
- * `price_readings` visualization table (§7.4 visualization-only
- * invariant — same fetch, two writes, see §3.3).
+ * Phase 3.0 ticker registry — 19 symbols total (12 US/global via the
+ * Alpha Vantage / Twelve Data / Yahoo Finance fallback chain primary
+ * + 7 KR via Yahoo Finance only). Daily bars feed both the
+ * `technical_readings` pipeline (RSI / MACD / MA50 / MA200 / Bollinger /
+ * Disparity per blueprint §4.3) and the `price_readings` visualization
+ * table (§7.4 visualization-only invariant — same fetch, two writes,
+ * see §3.3).
  *
  * Kept in a separate file from `route.ts` so Vitest can import
  * `TICKER_REGISTRY` without dragging in `import "server-only"` or the

@@ -216,6 +216,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const durationMs = Date.now() - startMs;
 
   // ---- 3. Audit row (always) ----
+  // TODO(phase3.x R1.1+R1.3): per-source breakdown. The current
+  // ingest_runs row records aggregate ticker counts only; the per-tier
+  // diagnostic (which tier of `daily-bar-fetcher.ts` served each
+  // ticker) is logged into `error_summary` strings on failure but is
+  // not structured. Phase 3.0 blueprint §4.3 calls for a `notes`
+  // JSONB column (or per-source rows) so a future audit query can
+  // attribute coverage by tier. Deferring to a follow-up because the
+  // schema column doesn't exist yet — adding it requires a migration
+  // + audit-reader updates that are outside Phase 3.0 scope.
   try {
     await supabase.from("ingest_runs").insert({
       model_version: MODEL_VERSION,
