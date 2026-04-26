@@ -106,3 +106,25 @@ Source rows: blueprint lines 753–757.
 - **DEFERRED:** 0 / 16 = 0% (all deferred items are documented as Phase 3 gaps, not as deferred §10 rows; the §10 rows themselves are either MET or PARTIAL).
 
 Every PARTIAL row has a concrete remediation path captured in the "Deferred / known gaps" table above. None of the PARTIALs are blockers for Phase 2 release sign-off; they are operational tail items (7-day green window, Lighthouse audit, real-device A2HS) plus two upstream data-source gaps (MA_200, BGeometrics quota) that the blueprint already accepted at authoring time.
+
+---
+
+## Phase 3.0 Data Source Recovery — code shipped 2026-04-26 (verification in progress)
+
+Implementation of `docs/phase3_0_data_recovery_blueprint.md` Steps 1–6 landed in commits leading to (and including) the Phase 3.0 batch push. Acceptance criteria (§6 of the 3.0 blueprint) will be verified after the next scheduled cron-technical run lands fresh rows under the fallback chain. Until then, the §10.1 / §10.3 PARTIAL rows above remain PARTIAL — they will be promoted to MET when the SQL acceptance queries return non-zero rows for MA_200 and KR equity.
+
+Commits in scope (all on `main` post-batch push):
+- Step 1 — Twelve Data adapter (`src/lib/score-engine/sources/twelvedata.ts` + parse + 10 tests)
+- Step 2 — Yahoo Finance adapter (`yahoo-finance.ts` + parse + 11 tests, KR-offset case included)
+- Step 3+4 — `daily-bar-fetcher.ts` 3-tier chain + `ticker-registry.ts` re-add of 7 KR tickers + `TICKER_LIST_VERSION` v3.0.0-2026-04-26
+- Step 5 — `cron-onchain.yml` split (every 4h, 12 BGeometrics calls/day, under 15/day cap)
+- Step 6 — PRD v3.6 + this file + handoff snapshot
+
+Anticipated row promotions on next-day cron success:
+- §10.1 row 1 (RSI/MACD/MA coverage): PARTIAL → MET (MA_200 / Disparity now backed by Twelve Data Tier 2).
+- §10.3 row 1 (cron 7-day green): re-baselined to 2026-04-26 with onchain split. PARTIAL → MET on day 7.
+- Deferred row "MA_200 + Disparity always null": resolved.
+- Deferred row "MVRV/SOPR resilience under load": resolved (4h cadence).
+- Deferred row "KR equity technical category null": resolved (Yahoo Finance path).
+
+These promotions are gated on actual cron success — no premature MET status is recorded in the rows above until verified post-deploy.

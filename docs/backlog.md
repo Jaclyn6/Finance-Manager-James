@@ -52,30 +52,33 @@ overall review.
   expected; `fetch_status:"error"` propagates correctly. Phase 3 may
   swap to Glassnode ($29/mo) for stable MVRV/SOPR.
 
-## Phase 3 blueprint blockers (RESOLVED 2026-04-26)
+## Phase 3 blueprint blockers (RESOLVED 2026-04-26 — IMPLEMENTED in 3.0)
 
-User decisions:
+All three decisions landed in Phase 3.0 (`docs/phase3_0_data_recovery_blueprint.md`):
 
-1. **Onchain (MVRV/SOPR)** — **DECISION: stay on BGeometrics free (8/hr).**
-   Reject Glassnode $29/mo. Accept the 429 reality; smooth via cron
-   pacing if possible. `cron-hourly` continues with the existing
-   `retryOnRateLimit:false` + `fetch_status='error'` propagation.
+1. **Onchain (MVRV/SOPR)** — Stayed on BGeometrics free. Solved
+   via **cron split** (`cron-onchain.yml` every 4h, 12/day under
+   15/day cap) instead of paid tier. Step 5 of Phase 3.0.
 2. **Daily price bars (MA_200 / Disparity / MOMENTUM_TURN)** —
-   **DECISION: free alternative source, no AV Premium.** Candidates:
-   Twelve Data (800/d free, 5y history), Stooq CSV (free, no key),
-   Yahoo Finance via yfinance (free but aggressive rate limiting).
-   Phase 3.0 Step 1 picks the winner from a parallel-research pass.
-3. **KR equity source (technical + valuation categories)** —
-   **DECISION: must NOT remain null.** Try ECOS API + Yahoo first; if
-   neither holds, evaluate Korean brokerage open APIs (KIS / Kiwoom /
-   NH / Mirae) and `pykrx` (KRX-direct Python wrapper, no key).
-   Phase 3.0 Step 2 picks the winner.
+   **Twelve Data primary + Yahoo Finance fallback** chain shipped
+   in `daily-bar-fetcher.ts`. Free `TWELVEDATA_API_KEY` registered
+   in `.env.local`, GH secrets, Vercel Production. Steps 1-3.
+3. **KR equity source** — **Yahoo Finance** wins as the
+   only-free option that serves `.KS` / `.KQ` symbols without
+   broker account / desktop COM / Python dependency. KIS API
+   rejected (broker account onboarding); pykrx deferred as a
+   Phase 3.x fallback if Yahoo proves unreliable. Steps 3-4.
 
-These three decisions unlock Phase 3.0 = "Data Source Recovery"
-sub-phase, which closes the PARTIAL acceptance rows in
-`docs/phase2_acceptance_matrix.md` BEFORE the four big Phase 3 product
-modules (regime classification, portfolio overlay, personalization,
-backtest UI) are scoped.
+## Phase 3.x DART / ECOS adapters (committed, not in 3.0)
+
+User confirmed 2026-04-26: DART and ECOS WILL be implemented as part
+of Phase 3 scope, just NOT in 3.0. Both API keys provisioned ahead
+of time.
+
+| Adapter | Phase | Why | Key state |
+|---|---|---|---|
+| **ECOS** (한국은행 OpenAPI) | Phase 3.1 | Regime classification engine needs Korean macro inputs (BOK rate, KR 10Y, M2, KRW/USD) to define KR-specific market regimes. ECOS adapter ships alongside the regime engine. | Not yet provisioned. Will request when Phase 3.1 starts (free key, https://ecos.bok.or.kr/api/, 100k req/day). |
+| **DART** (전자공시 OpenAPI) | Phase 3.2 | Portfolio overlay needs P/E and P/B for held KR equities. DART exposes EPS / BPS via 정기보고서 endpoint; the adapter computes the ratios and feeds the KR `valuation` category, completing KR's 6/6 category coverage. | **Provisioned 2026-04-26**: `DART_API_KEY` in `.env.local`, GH secrets, Vercel Production env. Live smoke tested (Samsung 005930 임원공시 list returned 200). |
 
 ## Tech-debt nibbles (low priority)
 

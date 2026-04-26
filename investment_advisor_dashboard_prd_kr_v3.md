@@ -1,5 +1,7 @@
 # 투자 어드바이저 대시보드 PRD v3
 
+> **v3.6 개정 (2026-04-26)** — Phase 3.0 "Data Source Recovery" 구현 반영. (1) 일별 시계열 fallback chain 도입 — Tier 1 Alpha Vantage `compact` (100바, 기존) → Tier 2 Twelve Data (300바, 신규 `TWELVEDATA_API_KEY`) → Tier 3 Yahoo Finance (2년, 키 불필요). MA(200) · Disparity · MOMENTUM_TURN 입력 복구 → §8.2 / §10.4 / §17 반영. (2) KR equity 7개 티커 부활 — `005930.KS` Samsung, `000660.KS` SK Hynix, `373220.KS` LG에너지솔루션, `207940.KS` Samsung Bio, `005380.KS` Hyundai, `069500.KS` KODEX 200, `229200.KQ` KODEX KOSDAQ150 모두 Yahoo 경로로 운용. KR equity의 `technical` 카테고리가 영구 null에서 정상 가용으로 복구 → §10.3 / §17 반영. (3) cron-onchain 분리 (`cron-onchain.yml` 신설, 매 4시간 실행) — BGeometrics 8/hr · 15/day 한도 내 운영 (12 calls/day, 3 calls 헤드룸) → §17 반영. (4) Phase 3 sub-phase 분리 명시: Phase 3.0 (data recovery, 본 개정) / 3.1 regime classification (ECOS adapter 포함) / 3.2 portfolio overlay (DART adapter 포함) / 3.3 personalization / 3.4 backtest UI → §18 반영. 제품 철학·범위·acceptance 기준 변경 없음.
+>
 > **v3.5 개정 (2026-04-26)** — Phase 2 구현 완료 후 PRD ↔ 코드 정합성 점검. 두 가지 큰 변경: (1) 데이터 소스 마이그레이션 — Bitbo 비공식 엔드포인트 404로 BGeometrics(bitcoin-data.com) 대체, CoinGlass v4 유료화로 Farside Investors 대체, Alpha Vantage `outputsize=full` 유료 전환으로 `compact` 100바 기반으로 운영(MA_200·Disparity 영구 null) — §7.1 / §8.2 / §8.3 / §12.1 / §17 반영. (2) 시그널 엔진 실제 출하분 — 6→8 시그널(crypto-extra `CRYPTO_UNDERVALUED` + `CAPITULATION` 추가), 자산군별 매핑(us_equity 6 / crypto 7 / kr_equity 5 / global_etf 5) — §10.4 반영. 기타: §8.2 기술적 지표는 AV API가 아니라 OHLC 기반 로컬 계산임을 명시, §11.2/§11.6 히스토리 범위는 Phase 2 90일 / Phase 3 180일로 정정, §11.7 + §18 PWA Phase 2 출하 완료 표기, §12.2 Next.js 16 `cacheLife` named preset 구조 반영. Phase 2 구현 코드와 일치시키는 정합화 개정이며 제품 철학·범위·로드맵 변경 없음.
 >
 > **v3.4 개정 (2026-04-23)** — 자산제곱 유튜브 영상(https://youtu.be/TJ3uAYxPY5k) "4가지 전략"의 매수 타이밍 프레임워크 분석 반영. 핵심 철학 편입: "연속 점수 요약이 아닌 독립 매수 시그널의 동시 발화 여부로 행동 근거 제공". §8.1에 `ICSA`(주간 신규 실업수당, 30만 건 임계) + TGA 잔고(재무부 현금 계정, 유동성 방향) 2개 FRED 시리즈 추가, §8.2에 "이격도(Disparity)" 기술적 파생 지표 추가, §8.4에 CNN Fear & Greed Index(주식 전용) 명시(§8.3 alternative.me 크립토 F&G와 별개 소스), §10.4 "시그널 얼라인먼트 레이어" 신설(6개 독립 boolean 시그널 + alignment_count 기반 UI), §18 Phase 2에 "매수 타이밍 시그널 엔진" bullet 추가. Phase 1 v2.3 구현과 호환(기존 7 FRED 매크로 스코어 영향 없음 — Phase 2에서만 활성).
@@ -490,13 +492,13 @@ Next.js Middleware로 로그인 세션 없는 접근을 `/login`으로 리디렉
 
 | 리스크 | 설명 | 대응 |
 |---|---|---|
-| Alpha Vantage 호출 제한 | Free Tier는 25/day, 5/min 수준으로 제한적[web:154][web:156] | 배치 호출, 캐시, 로컬 계산(직접 OHLC→지표). Phase 2 단일 배치 ≈ 12 ticker × 1 call × 일 1회로 한도 내 운영 중. |
-| Alpha Vantage `outputsize` 제한 (현실화 2026-04-25) | `outputsize=full`이 유료 전환되어 Free Tier는 `compact` 100바만 반환. MA(200) · Disparity가 영구 null이며 `DISLOCATION` 시그널 입력 부재. | compact 100바 내 지표(RSI_14, MACD_12_26_9, MA_50, BB_20_2)만 운용. MA(200) · Disparity는 Phase 3에서 AV Premium($50/mo) 또는 Twelve Data(800/d free) / Yahoo Finance / Polygon으로 대체 검토. |
-| BGeometrics 의존성 (Bitbo 대체, 현실화) | bitcoin-data.com 무료 API — **8 req/hr** 쿼터(429 시 fail-fast). Bitbo 비공식 엔드포인트가 2026년 404 처리되어 대체했으나, 비공식 안정성 계약 없음. | 429 발생 시 `ingest-onchain`이 MVRV_Z/SOPR을 null로 기록(`fetch_status='error'`)하고 대시보드는 staleness 배지 표시. Phase 3 fallback은 Glassnode($29/mo) 유료 티어 검토. |
+| Alpha Vantage 호출 제한 | Free Tier는 25/day, 5/min 수준으로 제한적[web:154][web:156] | 배치 호출, 캐시, 로컬 계산(직접 OHLC→지표). Phase 3.0 단일 배치 ≈ 12 AV-served ticker × 1 call × 일 1회로 한도 내 운영 중. |
+| Alpha Vantage `outputsize` 제한 (현실화 2026-04-25 → **Phase 3.0 대응 완료 2026-04-26**) | `outputsize=full`이 유료 전환되어 Free Tier는 `compact` 100바만 반환. MA(200) · Disparity 입력 부족. | **Phase 3.0 fallback chain 도입**: AV `compact`로 1차 시도 후 200바 미만이면 Twelve Data (`outputsize=300`, free 800/d, 신규 `TWELVEDATA_API_KEY`)로 폴백, 그래도 실패 시 Yahoo Finance (`query2/v8/chart?range=2y`, 키 불필요)로 폴백. 결과적으로 MA(200) · Disparity · MOMENTUM_TURN 모두 정상 가용. 구현: `src/lib/score-engine/sources/daily-bar-fetcher.ts`. |
+| BGeometrics 의존성 (Bitbo 대체, 현실화 → **Phase 3.0 대응 완료**) | bitcoin-data.com 무료 API — 8 req/hr **AND 15 req/day**(15/day가 실제 차단선). Hourly cron × 2 endpoints = 48/day → 3배 초과로 429 발생. | **Phase 3.0 cron 분리**: `ingest-onchain`을 `cron-onchain.yml` (매 4시간) 별도 워크플로로 이전. 6 fires/day × 2 endpoints = 12 calls/day로 한도 내 운영 + 3 calls 헤드룸. 변경된 cadence는 4시간 — MVRV/SOPR은 일별 변동이 작아 충분. |
 | Farside ETF flow 의존성 (CoinGlass 대체, 현실화) | CoinGlass v4가 유료 키 필수로 전환되고 Bitbo CDN이 Vercel IP를 차단함. farside.co.uk 정적 HTML 스크래핑으로 대체. | 정식 contract 없는 비공식 소스. 파싱 실패 시 ETF flow 입력 null 처리. |
 | Finnhub 센티먼트 범위 제한 | 일부 센티먼트 엔드포인트는 북미 기업 중심[web:160] | 보조 지표로만 사용 |
 | 비공식 API 장애 | CNN F&G 등 스크래핑 리스크[web:31] | optional provider + 상태 배지. CNN F&G는 부분 파싱 오류 발생 중(history 일부 row malformed, 현재값은 살아남음); `EXTREME_FEAR`는 VIX 단독 fallback 구현. |
-| KR equity 티커 미지원 (현실화) | Alpha Vantage 무료 티어가 KR `.KS` / `.KQ` / 무접미사 모두 거부. | KR `.KS` 7개 티커를 ticker registry에서 제거. KR equity의 `technical` / `valuation` 카테고리는 영구 null이며 Phase 3에서 ECOS API 또는 Yahoo Finance scrape로 복구 검토. |
+| KR equity 티커 미지원 (현실화 2026-04-25 → **Phase 3.0 대응 완료 2026-04-26**) | Alpha Vantage 무료 티어가 KR `.KS` / `.KQ` / 무접미사 모두 거부. | **Phase 3.0 KR ticker 부활**: 7개 티커(005930.KS, 000660.KS, 373220.KS, 207940.KS, 005380.KS, 069500.KS, 229200.KQ)를 Yahoo Finance `query2/v8/chart` 경로로 운용. AV/Twelve Data는 `isKrTicker()` 가드로 스킵. KR `technical` 카테고리 정상 가용. KR `valuation` 카테고리는 Phase 3.2(포트폴리오 오버레이)에서 DART 어댑터 도입과 함께 활성화 예정. |
 | Windows MCP 불안정 | `/c` 처리 버그 및 연결 문제[web:173][web:176] | 설정 파일 직접 관리, 버전 고정 |
 | 사용자 과잉신뢰 | 점수를 절대 신호로 오해 가능 | 설명형 UX, 면책 문구, 근거 병기 |
 
@@ -521,10 +523,29 @@ Next.js Middleware로 로그인 세션 없는 접근을 `/login`으로 리디렉
 - **매수 타이밍 시그널 엔진 (§10.4)** — composite score와 병렬로 8개 독립 boolean 시그널(base 6: `EXTREME_FEAR` / `DISLOCATION` / `ECONOMY_INTACT` / `SPREAD_REVERSAL` / `LIQUIDITY_EASING` / `MOMENTUM_TURN` + crypto-extra 2: `CRYPTO_UNDERVALUED` / `CAPITULATION`) 계산. 대시보드/자산/changelog 상단에 "N/M 시그널 활성" 얼라인먼트 카드 노출(M은 자산군별 적용 시그널 수). 신규 데이터: FRED `ICSA` + `WDTGAL`(daily, 주력) / `WTREGEN`(weekly, fallback), CNN F&G (주식 — 부분 파싱 오류 시 VIX 단독 fallback), 기술적 파생 지표 "이격도"(현재 MA_200 영구 null로 입력 부재 — Phase 3 복구 예정).
 
 ### Phase 3 — Regime & Portfolio + 백테스트
-- 레짐 분류 엔진
-- 포트폴리오 오버레이
-- 사용자별 맞춤 해석
-- 백테스트 및 산식 튜닝 UI — 현재 산식을 과거 `raw_payload`에 재실행해 버전 간 비교(§11.6 Phase 3 범위). 단순 "그 시점 결과 조회"는 Phase 1에서 이미 제공되므로 이 UI는 replay·튜닝에 집중한다.
+
+Phase 3은 4개 product 모듈 + 1개 사전 sub-phase로 나누어 순차 진행한다.
+
+#### Phase 3.0 — Data Source Recovery (2026-04-26 출하 완료)
+Phase 2 acceptance matrix의 PARTIAL 행 5건을 닫는 사전 sub-phase. 신규 product 기능 없음. 자세한 설계는 `docs/phase3_0_data_recovery_blueprint.md`.
+- **일별 시계열 fallback chain**: AV `compact` → Twelve Data 800/d → Yahoo Finance. MA(200) · Disparity · MOMENTUM_TURN 입력 복구.
+- **KR equity 7 ticker 부활**: Yahoo Finance 경로로 `005930.KS` 등 7개 운용.
+- **cron-onchain 분리** (매 4시간): BGeometrics 15/day 한도 내 운영.
+- **DART/ECOS는 본 sub-phase 범위 밖** — Phase 3.1 / 3.2에서 도입 (아래).
+
+#### Phase 3.1 — Regime Classification (예정)
+시장 국면(불황/회복/과열/침체) 분류 엔진 + 점수 해석을 국면 기준으로 재가중. **ECOS 어댑터 도입** — 한국은행 OpenAPI에서 BOK 정책금리, KR 10Y 국채, M2, KRW/USD 환율을 받아 KR equity의 macro 카테고리를 한국 매크로로 보강. KR-specific economic regime 분류 가능. ECOS API 키 등록 필요(무료, 100k req/day).
+
+#### Phase 3.2 — Portfolio Overlay (예정)
+가족 3명 보유 종목 입력 → 합성 점수와 결합해 비중 조정 가이드. **DART 어댑터 도입** — 전자공시 시스템에서 EPS/BPS를 받아 KR equity P/E·P/B 산출, KR `valuation` 카테고리 활성화. 자산 상세 페이지에 펀더멘털 카드 추가. DART API 키 (`DART_API_KEY`, 무료, 1000 req/min) 이미 환경변수 등록됨(2026-04-26).
+
+#### Phase 3.3 — Personalization (예정)
+사용자별 맞춤 해석. 가족 3명(jw.byun / 여자친구 / 어머니) 각자 위험성향·관심자산 차이를 받아 동일 점수에서 다른 해석 분기.
+
+#### Phase 3.4 — Backtest UI (예정)
+백테스트 및 산식 튜닝 UI — 현재 산식을 과거 `raw_payload`에 재실행해 버전 간 비교(§11.6 Phase 3 범위). 단순 "그 시점 결과 조회"는 Phase 1에서 이미 제공되므로 이 UI는 replay·튜닝에 집중한다.
+
+**진행 순서**: 3.0 ✅ → 3.4 → 3.1 (ECOS) → 3.2 (DART) → 3.3. 백테스트가 기존 데이터 위에서 동작하므로 새 스키마 변경 최소이고, 사용자가 모델 신뢰도 검증 가능. 레짐은 백테스트로 검증된 후 추가하면 안전. 포트폴리오·개인화는 새 스키마+UX이므로 안정 단계 이후.
 
 ## 19. 최종 권장안
 v3 기준 가장 현실적인 시작점은 **Next.js + Supabase + Vercel**을 기본 축으로 하고, 매크로 코어 위에 기술적 지표와 BTC 온체인 오버레이를 올리는 구조다.[web:167][web:172][web:152][web:161] 즉, 제품의 차별점은 단순 지표 수집이 아니라 **거시 + 기술적 + 온체인 신호를 하나의 설명 가능한 점수 엔진으로 통합하는 것**이다.[web:145][web:155][web:158]
