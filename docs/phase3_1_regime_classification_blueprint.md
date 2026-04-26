@@ -250,20 +250,40 @@ Mirrors Phase 3.0 / 3.4 step-by-step structure. Each step ends with vitest + tsc
 
 ---
 
-## §8 — Approval gate (open as of 2026-04-27)
+## §8 — Approval gate (RESOLVED 2026-04-27)
 
-Decisions to confirm before Step 1 starts:
+User decisions:
 
-1. **The 5 regime taxonomy** — does the user want to start with these 5 (`risk_on_easing`, `risk_on_neutral`, `risk_off_tightening`, `risk_off_recession`, `transition`) or a smaller / larger set? More regimes = more nuance but harder to backtest meaningfully on 90-day history.
-2. **ECOS series choice** — the 4 series chosen (BOK rate, KR 10Y, M2, KRW/USD) are the canonical KR macro inputs. Add others (e.g. KOSPI 외국인 누적순매수, ECOS doesn't expose; CPI 물가지수 — quarterly/monthly cadence)?
-3. **kr_equity macro split ratio** — 60/40 (global FRED / ECOS) is a starting heuristic. Could be 50/50 or 70/30. User intuition for Korean market gravity should inform this.
-4. **Regime chip placement** — `/dashboard` top, or as a sidebar widget? Affects layout dev time.
-5. **Whether to ship a regime-history page** — `/regime` showing the regime label over time (90-day chart). Nice-to-have or deferred?
+1. **Regime taxonomy** — **5 regimes** (`risk_on_easing`, `risk_on_neutral`, `risk_off_tightening`, `risk_off_recession`, `transition`). Start safe, expand in Phase 3.1.x if backtest evidence warrants.
+2. **ECOS series** — **7 series**: BOK rate (`722Y001`), KR 10Y (`817Y002`), M2 (`101Y004`), KRW/USD (`731Y001`), **KRW/JPY** (`731Y003`, new), **CPI 물가지수** (`901Y009`, monthly), **수출입 통계** (`301Y013`, monthly). The two monthly series carry forward at the daily frequency the engine consumes — same DESC LIMIT 1 pattern that already handles weekend FRED.
+3. **kr_equity macro split** — **60/40** (global FRED 60% : ECOS 40%). Re-tune via WEIGHTS_REGISTRY v2.1.x if backtest shows otherwise.
+4. **Regime chip placement** — **`/dashboard` top horizontal band**. Single line, mobile-friendly, no hidden state.
+5. **`/regime` history page** — **INCLUDED in Phase 3.1**, made viable by adding a **Step 0 backfill** of 1-year history for ECOS + FRED + technical inputs. The page ships with a meaningful 252-day band chart from day one, not a sparse 90-day stub.
 
-Once these clear, Step 1 (ECOS adapter scaffold) starts.
+The Step-0 backfill changes the build sequence — see §9 below. Backfill is a one-shot operation; the daily cron picks up from the day after the backfill ends.
+
+**Overfitting risk acknowledged**: regime classifier rules will be kept simple (literature-anchored thresholds, broad bands), and validated against the 1-year backfill via Phase 3.4 backtest UI before the v2.1.0 cutover. If backtest shows the classifier overfits, thresholds widen or the regime count drops to 3 before cutover — not after.
 
 ---
 
-## §9 — Build sequence (post-approval, NOT YET STARTED)
+## §9 — Build sequence (post-approval, IN PROGRESS 2026-04-27)
 
-Filled in once §8 clears. Each step gets its own commit + Trigger 1 visual verification + 5-agent review on the step's commit, per CLAUDE.md.
+Each step ends with vitest + tsc + build green. Per CLAUDE.md Trigger 1, every step's commit is followed by user-confirmed verification (smoke test or Chrome MCP visual check) + 5-agent code review on the step's diff + fix-up for confidence ≥ 80 findings.
+
+| Step | Title | Surface | Depends on |
+|---|---|---|---|
+| **1** | **ECOS adapter** (pure fetch + parse) | `src/lib/score-engine/sources/ecos.ts` + `ecos-parse.ts` + tests | (none — mirrors `fred.ts`) |
+| **2** | **Schema migration** (`ecos_readings` table + `composite_snapshots` regime columns) | `supabase/migrations/0013_phase31_regime.sql` + `src/types/database.ts` regen | none |
+| **3** | **`ingest-ecos` cron route** + `cron-ecos.yml` (daily 22:30 UTC) | `src/app/api/cron/ingest-ecos/route.ts` + `.github/workflows/cron-ecos.yml` | Steps 1, 2 |
+| **4** | **One-shot 1-year backfill script** — pulls 252 trading days of ECOS + FRED-extra + technical history into the new schema | `scripts/backfill-phase31.ts` (or `npm run backfill:phase31`) | Steps 1, 2 |
+| **5** | **Regime classifier** (pure function + rule table) | `src/lib/score-engine/regime/classifier.ts` + `rules.ts` + `types.ts` + tests | none (pure) |
+| **6** | **Weight overlay** (regime → category-weight multiplier) | `src/lib/score-engine/regime/weight-overlay.ts` + tests | Step 5 |
+| **7** | **`WEIGHTS_REGISTRY["v2.1.0-baseline"]`** entry + `CURRENT_WEIGHTS_VERSION` bump + drift snapshot test | `src/lib/score-engine/weights-registry.ts` + tests | Steps 5, 6 |
+| **8** | **ECOS aggregator + KR macro 60/40 split** | `src/lib/score-engine/aggregators/ecos-macro.ts` + tests | Steps 1, 2, 7 |
+| **9** | **`composite_snapshots` writer integration** — regime classifier called pre-composite, stamps `regime_label/confidence/features` columns. **Backfill past 252 days with regime labels** (weights stay v2.0.0, score unchanged — only the new columns populate). | `src/app/api/cron/ingest-macro/route.ts` orchestration path + backfill SQL | Steps 5, 6, 7, 8 |
+| **10** | **Dashboard regime chip** (top horizontal band on `/dashboard`) | `src/app/(protected)/dashboard/*` + new `RegimeChip.tsx` | Step 9 |
+| **11** | **`/regime` history page** — 252-day stacked-band chart + per-regime stats (% of days, avg duration) | `src/app/(protected)/regime/page.tsx` + `regime-content.tsx` + `regime-band-chart.tsx` | Step 9 |
+
+**Step 0** (one-time prerequisite, NOT a numbered step): set `ECOS_API_KEY` in GH repo secrets + Vercel Production env. Currently in `.env.local` only (provisioned 2026-04-27). Target: before Step 3 cron deploy.
+
+**Cutover gate**: Step 9's regime backfill MUST stay under the §5 acceptance criteria (drift = 0 for non-KR; KR deltas explainable). If the 252-day backfill shows wild swings, the v2.1.0 cutover is held until classifier thresholds are tuned. The cutover itself is a single commit that flips `CURRENT_WEIGHTS_VERSION` from `v2.0.0-baseline` to `v2.1.0-baseline`.
