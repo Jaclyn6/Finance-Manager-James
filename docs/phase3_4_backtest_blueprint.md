@@ -1,9 +1,9 @@
 # Phase 3.4 — Backtest UI Blueprint
 
-**Authored:** 2026-04-26
+**Authored:** 2026-04-26 · **§8 gate approved 2026-04-27** (user decisions resolved — see §8).
 **Scope:** PRD §18 Phase 3 module #4. The "replay current scoring math against past raw indicator data, compare versions" UI. Independent from Phase 3.1 (regime), 3.2 (portfolio), 3.3 (personalization).
 **Recommended position in Phase 3 sequence:** FIRST product module after Phase 3.0 — backtest validates the engine on existing data, gives the user confidence in scoring math BEFORE we add a regime layer or portfolio overlay on top.
-**Estimated effort:** 2-3 sessions (1 schema/data, 1 engine refactor + replay route, 1 UI).
+**Estimated effort:** 3-4 sessions (1 schema/data, 1 engine refactor + replay route, 1 UI base, 1 tuning slider + family share + closeout). Increased from initial 2-3 estimate after user approved tuning slider in scope.
 **Dependencies:** Phase 3.0 (data recovery — completed 2026-04-26). Existing `raw_payload` JSONB columns on `indicator_readings` + `technical_readings` + `onchain_readings` + `news_sentiment` (preserved from Phase 1 schema).
 
 ---
@@ -128,26 +128,69 @@ The route:
 3. Memoizes result into `backtest_runs` keyed by `(asset_type, from, to, model_version, weights_version, run_id)`.
 4. Returns the result.
 
-### §2.4 New schema: `backtest_runs` table
+### §2.4 New schema: `backtest_runs` + `backtest_snapshots` (Hybrid 2-table per §8 decision #1)
+
+User decision 2026-04-27 (§8 gate): use **normalized per-day rows for analytics access**, but keep a small `backtest_runs` table for memoization metadata. This hybrid is best of both: per-request memoization stays cheap, per-day analytics SQL stays clean.
+
+Capacity check (Supabase Free 500 MB DB ceiling): 30 backtests/month × 60 trading days = 1,800 detail rows/month + 30 meta rows/month ≈ 2.1 MB/month → ~25 MB/year → 5% of free-tier ceiling. No squeeze.
 
 ```sql
+-- Memoization metadata + summary stats (one row per backtest run).
 CREATE TABLE public.backtest_runs (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id         UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   request_hash    TEXT NOT NULL,        -- sha256(canonical(request)) for memoization
-  request_json    JSONB NOT NULL,
-  result_json     JSONB NOT NULL,       -- full BacktestResult
+  request_json    JSONB NOT NULL,       -- the full BacktestRequest (asset_type, range, model_version, weights_version, optional custom_weights)
+  -- Summary stats (small set, normalized so dashboards can SELECT directly).
+  asset_type      asset_type_enum NOT NULL,
+  date_from       DATE NOT NULL,
+  date_to         DATE NOT NULL,
+  model_version   TEXT NOT NULL,
+  weights_version TEXT NOT NULL,
+  total_days      INT  NOT NULL,
+  days_with_replay INT NOT NULL,
+  days_missing_inputs INT NOT NULL,
+  avg_abs_delta   NUMERIC(6,3),
+  max_abs_delta   NUMERIC(6,3),
+  days_above_5pp  INT NOT NULL,
   duration_ms     INT  NOT NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE UNIQUE INDEX backtest_runs_hash_idx ON public.backtest_runs (request_hash, user_id);
+CREATE UNIQUE INDEX backtest_runs_hash_user_idx ON public.backtest_runs (request_hash, user_id);
+CREATE INDEX backtest_runs_user_recent_idx ON public.backtest_runs (user_id, created_at DESC);
 
--- RLS: family members only see their own backtest runs. Read everyone's
--- runs (within family) is also fine since the data isn't sensitive — but
--- write+update only your own. Mirror the Phase 1 RLS pattern.
+-- Per-day replay results (one row per [run_id, date]).
+CREATE TABLE public.backtest_snapshots (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id          UUID NOT NULL REFERENCES public.backtest_runs(id) ON DELETE CASCADE,
+  snapshot_date   DATE NOT NULL,
+  replay_score    NUMERIC(6,3),
+  replay_band     TEXT,
+  original_score  NUMERIC(6,3),
+  original_model_version TEXT,
+  delta           NUMERIC(6,3),         -- replay_score - original_score (when both present)
+  raw_inputs      JSONB,                -- the macro/technical/onchain/sentiment dict used
+  contributing    JSONB,                -- replay's per-category breakdown
+  signal_state    JSONB,                -- replay signals (compact form)
+  gaps            TEXT[]                -- structured gap reasons (e.g. {"MA_200 missing for SPY"})
+);
+CREATE UNIQUE INDEX backtest_snapshots_run_date_idx ON public.backtest_snapshots (run_id, snapshot_date);
+CREATE INDEX backtest_snapshots_date_idx ON public.backtest_snapshots (snapshot_date);
+
+-- RLS: §8 decision #4 brought "family share read" into scope.
+-- All authenticated family members can READ all backtest_runs +
+-- backtest_snapshots (the data isn't sensitive within the family).
+-- Only the original creator can INSERT/DELETE their own runs.
 ALTER TABLE public.backtest_runs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "family read all backtests" ON public.backtest_runs FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "family write own backtests" ON public.backtest_runs FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "family delete own backtests" ON public.backtest_runs FOR DELETE USING (user_id = auth.uid());
+
+ALTER TABLE public.backtest_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "family read all snapshots" ON public.backtest_snapshots FOR SELECT USING (auth.role() = 'authenticated');
+-- INSERTs into backtest_snapshots happen server-side via service-role
+-- key (the API route uses the admin client to write the per-day rows
+-- transactionally with the parent run). No user-side INSERT policy.
 ```
 
 ### §2.5 New route surface: `/backtest` page
@@ -306,39 +349,53 @@ Each verifiable by SQL or UI check post-implementation:
 
 ---
 
-## §7 — Out of scope for 3.4 (deferred)
+## §7 — In scope vs out of scope for 3.4
 
-- **Tuning persistence** — saving custom weights as a named version. Phase 3.4.1.
-- **Backtest sharing across family members** — Phase 3.4.1 (RLS allows family-wide reads but no UI for it yet).
-- **Signal-only backtest** — `signal_replays` separate table. Phase 3.4.1.
-- **Multi-asset overlay** — running backtest for ALL asset types in one chart. Phase 3.4.1.
-- **DART / ECOS replay** — those adapters aren't built yet (Phase 3.1 / 3.2). Backtest replays only what's in the existing tables.
-- **`/changelog` integration** — the changelog continues to show actual historical scores; backtest is a distinct "what-if" surface.
+**In scope (per §8 gate decisions 2026-04-27):**
+- Backtest core (replay engine, weights registry, schema, API route, /backtest page).
+- **Tuning slider panel (Step 8)** — sliders for per-asset weights + per-signal thresholds; on "Apply & Re-run" the route is invoked with `customWeights` field. Custom-weights NOT persisted as named versions in 3.4 base — they POST inline and the resulting `backtest_runs.weights_version` is `"v2.0.0-baseline"` plus a derived `custom_hash` suffix (e.g. `"v2.0.0-baseline+c7a2"`).
+- **Tuning persistence** (formerly OOS #1) — saving custom weights with a user-supplied name (e.g. "내 v3 가설"). Implemented as a small `user_weights` table referenced by `backtest_runs.weights_version`. Lets the user iterate over custom weights without re-typing every slider.
+- **Backtest family sharing** (formerly OOS #2) — RLS opens read-all to authenticated family. UI adds a "다른 가족이 만든 백테스트" reader on `/backtest` so the user can browse jw.byun's, edc0422's, and odete4's runs.
 
----
+**Deferred to Phase 3.4.1:**
+- **Signal-only backtest** — `signal_replays` separate table. Out of base scope.
+- **Multi-asset overlay** — single chart with all 4 asset_types. Out of base scope.
+- **DART / ECOS replay** — adapters arrive in Phase 3.1 / 3.2; backtest replays only what's in existing tables.
 
-## §8 — Approval gate
-
-Before any Phase 3.4 step is implemented, user must approve:
-
-- [ ] §2.4 schema choice (`backtest_runs` JSONB-blob result vs normalized columns) — JSONB chosen for flexibility; trade-off is harder ad-hoc SQL queries on results.
-- [ ] §3.1 single-table memoization (vs per-day rows) — single-table chosen for simpler API.
-- [ ] §5 acceptance criterion 2 (replay vs original score within 0.01pp) — strict tolerance; bumps to 0.1pp if floating-point drift surfaces.
-- [ ] §7 deferred items — confirm tuning panel + multi-asset overlay are 3.4.1.
-- [ ] Step 8 stretch — confirm whether to attempt the tuning panel in this phase or defer.
+**Out of scope permanently (different surface):**
+- **`/changelog` integration** — changelog shows actual historical scores; backtest is distinct "what-if" surface.
 
 ---
 
-## §9 — Concrete next action (post-approval)
+## §8 — Approval gate (RESOLVED 2026-04-27)
+
+User decisions:
+
+- [x] **§2.4 schema** — **Hybrid 2-table** (orchestrator-revised): `backtest_runs` for metadata + summary (1 row per request, memoization key) + `backtest_snapshots` for per-day rows (analytics-friendly normalized columns). Combines user's "normalize for analytics" preference with engineering's "single-row memoization is simpler" preference. Capacity 5% of Supabase Free DB ceiling at expected 30 backtests/month family usage.
+- [x] **§3.1 memoization** — **Per-request via `request_hash`**, single row per (request, user). Confirmed.
+- [x] **§5 acceptance criterion 2** — **0.01pp strict** to start. If floating-point drift surfaces in CI, relax to 0.1pp with a documented commit. Confirmed.
+- [x] **§7 deferred items** — **OOS #1 (tuning persistence) + OOS #2 (family sharing) NOW IN SCOPE for 3.4.** OOS #3 (signal-only backtest), #4 (multi-asset overlay), #5 (DART/ECOS replay) stay deferred to 3.4.1.
+- [x] **Step 8 tuning slider** — **IN SCOPE for 3.4.** Implemented as live-controlled sliders + "Apply & Re-run" button.
+
+---
+
+## §9 — Build sequence (post-approval, IN PROGRESS 2026-04-27)
+
+Updated for §8 in-scope additions (tuning slider, custom-weights persistence, family sharing read).
 
 1. **Step 1 (weights registry)**: refactor `weights.ts` into `WEIGHTS_REGISTRY` keyed by version string. Snapshot test asserts drift = 0. Single commit.
 2. **Step 2 (backtest engine)**: pure orchestrator + DB loader + 7-day fixture test. Single commit.
-3. **Step 3 (migration)**: `0011_backtest_runs.sql` + RLS + types regen. Single commit.
-4. Continue Steps 4-7 in subsequent commits.
-5. Trigger 2 5-agent review on the full 3.4 diff before push.
-6. Production deploy + Chrome MCP visual verify of `/backtest` page.
+3. **Step 3 (migration)**: `0011_backtest_runs.sql` + `backtest_snapshots` + `user_weights` (for tuning persistence) + RLS + types regen. Single commit.
+4. **Step 4 (API route)**: `POST /api/backtest/run` with hybrid 2-table write transaction + custom-weights inline support. Single commit.
+5. **Step 5 (UI scaffolding)**: `/backtest` page with controls + chart + summary + deviation table. Single commit.
+6. **Step 6 (sidebar nav)**: "분석 / 백테스트" group entry. Single commit.
+7. **Step 7 (tuning slider panel)**: editable sliders + "Apply & Re-run" + "이름 붙여 저장" → `user_weights` row. Single commit.
+8. **Step 8 (family sharing reader)**: side-panel listing other family members' recent backtests; click loads. Single commit.
+9. **Step 9 (docs + acceptance)**: PRD §18 update, matrix entry, handoff snapshot. Single commit.
+10. **Trigger 2 5-agent review** on the full 3.4 diff before push.
+11. **Production deploy + Chrome MCP visual verify** of `/backtest` page.
 
-Estimated total: 6 commits + 1 review fix commit. 2-3 sessions.
+Estimated total: 9 commits + 1 review fix commit. 3-4 sessions.
 
 ---
 
