@@ -52,15 +52,30 @@ overall review.
   expected; `fetch_status:"error"` propagates correctly. Phase 3 may
   swap to Glassnode ($29/mo) for stable MVRV/SOPR.
 
-## Phase 3 blueprint blockers (must resolve before authoring)
+## Phase 3 blueprint blockers (RESOLVED 2026-04-26)
 
-1. **Glassnode $29/mo vs BGeometrics free** — affects MVRV/SOPR
-   reliability and CRYPTO_UNDERVALUED / CAPITULATION uptime.
-2. **AV Premium $50/mo vs alternate daily-bar source (Twelve Data 800/d
-   free?, Yahoo Finance scrape, Polygon)** — affects DISLOCATION,
-   MOMENTUM_TURN, MA(200), Disparity.
-3. **KR equity source — ECOS API (free, key registration) vs Yahoo
-   Finance scrape vs permanent null** — affects 2/6 KR categories.
+User decisions:
+
+1. **Onchain (MVRV/SOPR)** — **DECISION: stay on BGeometrics free (8/hr).**
+   Reject Glassnode $29/mo. Accept the 429 reality; smooth via cron
+   pacing if possible. `cron-hourly` continues with the existing
+   `retryOnRateLimit:false` + `fetch_status='error'` propagation.
+2. **Daily price bars (MA_200 / Disparity / MOMENTUM_TURN)** —
+   **DECISION: free alternative source, no AV Premium.** Candidates:
+   Twelve Data (800/d free, 5y history), Stooq CSV (free, no key),
+   Yahoo Finance via yfinance (free but aggressive rate limiting).
+   Phase 3.0 Step 1 picks the winner from a parallel-research pass.
+3. **KR equity source (technical + valuation categories)** —
+   **DECISION: must NOT remain null.** Try ECOS API + Yahoo first; if
+   neither holds, evaluate Korean brokerage open APIs (KIS / Kiwoom /
+   NH / Mirae) and `pykrx` (KRX-direct Python wrapper, no key).
+   Phase 3.0 Step 2 picks the winner.
+
+These three decisions unlock Phase 3.0 = "Data Source Recovery"
+sub-phase, which closes the PARTIAL acceptance rows in
+`docs/phase2_acceptance_matrix.md` BEFORE the four big Phase 3 product
+modules (regime classification, portfolio overlay, personalization,
+backtest UI) are scoped.
 
 ## Tech-debt nibbles (low priority)
 
