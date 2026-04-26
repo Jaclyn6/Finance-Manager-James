@@ -1,0 +1,61 @@
+# Phase 3.0 Step 5 — onchain-only cron (every 4 hours UTC).
+#
+# Spun off from `cron-hourly.yml` on 2026-04-26 to live within
+# BGeometrics' free-tier rate limit. BGeometrics serves both
+# MVRV Z-Score and SOPR free of charge but caps at:
+#   - 8 requests / hour (per IP, undocumented per-key)
+#   - 15 requests / day (the harder ceiling)
+#
+# At hourly × 2 endpoints, the cron consumed 48 calls/day → 3× the
+# 15/day cap → produced the intermittent 429s seen in Phase 2.
+# Every-4-hours × 2 endpoints = 12 calls/day, safely under 15/day with
+# 3 calls of headroom for `workflow_dispatch` testing or backfill.
+#
+# Trade-off: MVRV/SOPR are slow-moving "macro on-chain" indicators
+# (whole-market valuation). 4-hour cadence is plenty for the dashboard's
+# composite scoring; the hourly granularity buys nothing because the
+# upstream BGeometrics endpoint is itself updated daily-ish.
+#
+# Single endpoint per run: `ingest-onchain` invokes the existing
+# `src/app/api/cron/ingest-onchain/route.ts` which fetches MVRV_Z, SOPR,
+# the Farside ETF flow, and the alternative.me crypto F&G in one batch.
+# We do NOT bypass the route's existing in-route Bitbo + Farside +
+# CoinGecko orchestration — this workflow just changes WHEN it fires.
+#
+# `continue-on-error: true` per blueprint §0.5 tenet 1 ("partial
+# success > no data"). The route itself is the source of truth for
+# per-source success/failure via `ingest_runs`.
+#
+# Reference: docs/phase3_0_data_recovery_blueprint.md §2.3, §5 Step 5
+
+name: Onchain cron (BGeometrics MVRV + SOPR + ETF flow + crypto F&G, every 4h)
+
+on:
+  schedule:
+    # Every 4 hours UTC, on the hour. 6 fires/day = 12 BGeometrics calls.
+    # Drift up to ~10 min under GHA load is fine — staleness threshold
+    # for onchain is 4h (Phase 3.0 §2.3 cadence change).
+    - cron: "0 */4 * * *"
+  workflow_dispatch:
+
+# Never overlap two runs of this workflow. Cancel an in-flight run when
+# a newer one starts. A race would have BOTH runs hitting BGeometrics at
+# the same window and tripping the 429 floor.
+concurrency:
+  group: cron-onchain
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: ingest-onchain
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-onchain"

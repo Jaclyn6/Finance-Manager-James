@@ -5,28 +5,34 @@
 # scheduled workflows, which hit the production Next.js API with the
 # shared `CRON_SECRET` bearer.
 #
-# This workflow bundles the three unofficial / sentiment-ish sources
-# that refresh hourly:
-#   1. ingest-onchain  — Bitbo MVRV_Z + SOPR, CoinGlass ETF flow,
-#                         alternative.me crypto F&G   (Agent B)
-#   2. ingest-cnn-fg   — CNN Markets Data stock F&G                (Agent B)
-#   3. ingest-news     — Finnhub news sentiment                    (Agent C)
+# This workflow bundles the two sentiment-ish sources that refresh hourly:
+#   1. ingest-cnn-fg   — CNN Markets Data stock F&G
+#   2. ingest-news     — Finnhub news sentiment
+#
+# Phase 3.0 cron split (2026-04-26):
+# ----------------------------------
+# `ingest-onchain` was REMOVED from this hourly bundle and moved to its
+# own `cron-onchain.yml` workflow firing every 4 hours. Reason:
+# BGeometrics free tier is 8 req/hour AND 15 req/day. Hourly × 2
+# endpoints (MVRV + SOPR) = 48 calls/day → far past the 15/day cap,
+# producing the intermittent 429 spikes seen in Phase 2 production.
+# 4-hour cadence × 2 endpoints = 12 calls/day, safely under 15/day with
+# 3 calls of headroom for manual `workflow_dispatch` testing.
 #
 # continue-on-error: true on every step — blueprint §0.5 tenet 1
-# "partial success > no data". If Bitbo is flapping we still want
-# CNN F&G + news to ingest; each endpoint's own `ingest_runs` row
-# records per-source success/failure regardless of the curl exit.
+# "partial success > no data". If one endpoint flaps we still want the
+# other to ingest; each endpoint's own `ingest_runs` row records
+# per-source success/failure regardless of the curl exit.
 #
-# The job itself does not fail even if all three endpoints fail; the
-# audit trail in `ingest_runs` is the source of truth. A missing
-# `ingest_runs` row (no audit written) is what a postmortem flags, not
-# a red GHA badge.
+# The job itself does not fail even if all endpoints fail; the audit
+# trail in `ingest_runs` is the source of truth. A missing `ingest_runs`
+# row (no audit written) is what a postmortem flags, not a red GHA badge.
 #
 # CRON_SECRET is synced into GitHub Actions secrets manually
 # (plan §0.2 #8 — no OIDC). PRODUCTION_URL points at the current
 # Vercel production deployment.
 
-name: Hourly cron (onchain / cnn-fg / news)
+name: Hourly cron (cnn-fg / news)
 
 on:
   schedule:
@@ -41,16 +47,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: ingest-onchain
-        continue-on-error: true
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
-        run: |
-          curl -sS -f \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${PRODUCTION_URL}/api/cron/ingest-onchain"
-
       - name: ingest-cnn-fg
         continue-on-error: true
         env:
