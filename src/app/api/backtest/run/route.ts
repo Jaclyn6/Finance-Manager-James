@@ -70,6 +70,13 @@ interface PostBody {
   weightsVersion?: string;
   /** When `weightsVersion === "custom"`, this points to a `user_weights.id`. */
   customWeightsId?: string;
+  /**
+   * Step 7 inline tuning slider — POSTs the edited per-asset
+   * categoryWeights map directly. Bypasses both the registry and
+   * `user_weights` table. The route stamps `weights_version` =
+   * `custom-{8 chars of payload hash}` for the audit row.
+   */
+  customWeights?: Record<string, Record<string, number>>;
   modelVersion?: string;
   assetType?: Database["public"]["Enums"]["asset_type_enum"];
   dateRange?: { from?: string; to?: string };
@@ -124,7 +131,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ---- 4. Resolve weights ----
   let weights: EngineWeights;
   let resolvedUserWeightsId: string | null = null;
-  if (customWeightsId) {
+  // Inline custom weights from the tuning slider take precedence
+  // over both customWeightsId and weightsVersion. We OVERLAY the
+  // user-supplied per-asset categoryWeights onto the baseline so the
+  // engine still has indicatorConfig + regionalOverlayConfig from the
+  // registry (Step 7 doesn't yet expose those for tuning).
+  if (validation.inlineCustomWeights) {
+    const baseline = getWeights(CURRENT_WEIGHTS_VERSION);
+    const overlaidCategoryWeights = {
+      ...baseline.categoryWeights,
+      ...(validation.inlineCustomWeights as Partial<
+        typeof baseline.categoryWeights
+      >),
+    } as typeof baseline.categoryWeights;
+    weights = {
+      ...baseline,
+      categoryWeights: overlaidCategoryWeights,
+    };
+  } else if (customWeightsId) {
     const customRow = await admin
       .from("user_weights")
       .select("id, payload, user_id")
@@ -207,7 +231,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 function validateRequest(
   body: PostBody,
 ):
-  | { request: BacktestRequest; customWeightsId: string | null }
+  | {
+      request: BacktestRequest;
+      customWeightsId: string | null;
+      inlineCustomWeights: Record<string, Record<string, number>> | null;
+    }
   | { error: string } {
   // assetType
   if (!body.assetType || !ASSET_TYPES.includes(body.assetType)) {
@@ -249,19 +277,58 @@ function validateRequest(
     return { error: "customWeightsId must be a UUID" };
   }
 
+  // Inline custom weights validation — must be a plain object of
+  // assetType → categoryName → number-in-[0,200].
+  const inlineCustomWeights = body.customWeights ?? null;
+  if (inlineCustomWeights) {
+    if (typeof inlineCustomWeights !== "object" || Array.isArray(inlineCustomWeights)) {
+      return { error: "customWeights must be an object" };
+    }
+    for (const [aType, weightMap] of Object.entries(inlineCustomWeights)) {
+      if (!ASSET_TYPES.includes(aType as never)) {
+        return { error: `customWeights has unknown assetType: ${aType}` };
+      }
+      if (!weightMap || typeof weightMap !== "object" || Array.isArray(weightMap)) {
+        return { error: `customWeights[${aType}] must be an object` };
+      }
+      for (const [cat, w] of Object.entries(weightMap)) {
+        if (typeof w !== "number" || !Number.isFinite(w) || w < 0 || w > 200) {
+          return {
+            error: `customWeights[${aType}][${cat}] must be a number in [0, 200]`,
+          };
+        }
+      }
+    }
+  }
+
   // modelVersion (optional, defaults to current MODEL_VERSION)
   const modelVersion = body.modelVersion ?? MODEL_VERSION;
 
+  // Stamp weights_version for audit. Inline-custom > stored-custom
+  // (UUID-keyed) > registry version.
+  let stampedWeightsVersion = weightsVersion;
+  if (inlineCustomWeights) {
+    // Tiny non-crypto hash for the audit suffix only — collisions
+    // are non-fatal (memoization keys off the full request_hash).
+    const sig = JSON.stringify(inlineCustomWeights);
+    let h = 0;
+    for (let i = 0; i < sig.length; i++) {
+      h = (h * 31 + sig.charCodeAt(i)) | 0;
+    }
+    stampedWeightsVersion = `custom-${(h >>> 0).toString(16).slice(0, 8)}`;
+  } else if (customWeightsId) {
+    stampedWeightsVersion = `custom-${customWeightsId.slice(0, 8)}`;
+  }
+
   return {
     request: {
-      weightsVersion: customWeightsId
-        ? `custom-${customWeightsId.slice(0, 8)}`
-        : weightsVersion,
+      weightsVersion: stampedWeightsVersion,
       modelVersion,
       assetType: body.assetType,
       dateRange: { from, to },
     },
     customWeightsId,
+    inlineCustomWeights,
   };
 }
 

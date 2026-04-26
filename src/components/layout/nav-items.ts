@@ -22,7 +22,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/asset/crypto", label: "암호화폐", group: "자산군" },
   { href: "/asset/global-etf", label: "글로벌 ETF", group: "자산군" },
   { href: "/changelog", label: "변화 로그", group: "히스토리" },
+  { href: "/backtest", label: "백테스트", group: "분석" },
   { href: "/indicators", label: "지표 사전", group: "참고" },
 ];
 
-export const GROUP_ORDER = ["홈", "자산군", "히스토리", "참고"] as const;
+export const GROUP_ORDER = ["홈", "자산군", "히스토리", "분석", "참고"] as const;
