@@ -2,7 +2,7 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-26 (UTC ~20:50 / KST 2026-04-26 05:50) — **Phase 3.0 "Data Source Recovery" production deploy 완료** (`52601f8`). Trigger 2 5-agent review 4건 fix 적용 → push → vercel deploy → alias swap 모두 완료. 기다리는 단계: 다음 scheduled cron-technical fire (2026-04-25 22:00 UTC, 약 1시간 뒤)에서 새 fallback chain이 실제 데이터를 채워야 acceptance SQL 검증 가능. 시각 검증 결과: 페이지 렌더링 정상, 데이터는 어제 cron 결과 (변화 미반영 — 다음 cron fire가 진정한 검증).
+2026-04-26 (UTC ~08:45 / KST 17:45) — **Phase 3.0 "Data Source Recovery" 완전 완료**. 전체 파이프라인이 production에서 검증됨: manual cron-technical 19/18 success, MA_200 18/18 non-null, KR 42/42 success (KOSDAQ 티커 `.KQ→.KS` 수정 후), kr_equity composite의 technical 카테고리 score=35.48 산출, US DISLOCATION → "조건 미충족" (unknown 탈출). 합성 점수 변화 production 시각 확인: KR 45.2→42.5, US 45.9→46.2. acceptance matrix **11/16 → 13/16 MET**.
 
 ## 2. Current Phase / Step
 
@@ -12,7 +12,7 @@
 
 ## 3. Last Commit (pushed to origin/main)
 
-`52601f8` — `fix(phase3.0): Trigger 2 review fixes (4 findings ≥80 confidence)`. Phase 3.0 모든 commits (96865e8..52601f8) push 완료. Production deployment `dpl_qn9lb996w` (READY), alias `finance-manager-james.vercel.app` 신규 배포로 갱신 완료.
+`bb89db0` — `fix(phase3.0): KODEX KOSDAQ150 → 229200.KS (was .KQ — Yahoo stale)`. Production deployment `dpl_Dv46zHWWur2X39wsTEXTEuixBjYM` aliased to `finance-manager-james.vercel.app`. 모든 Phase 3.0 작업 (96865e8..bb89db0) origin/main 동기화 완료.
 
 ## 4. Active Thread
 
@@ -76,18 +76,14 @@
 
 ## 9. How to Resume
 
-1. **첫 액션**: Phase 3.0 5개 commits를 push하기 전에 Trigger 2 5-agent review 실행.
-   - 대상 diff: `git diff 96865e8..HEAD`
-   - 5 agents: AGENTS.md/blueprint compliance / shallow bug scan / git history regression / code-comments-vs-reality / a11y+i18n.
-   - confidence ≥ 80 findings 수정 후 별도 commit, 그 다음 push.
-2. **Production deploy**: `vercel deploy --prod --yes` + `vercel alias set <new-url> finance-manager-james.vercel.app`.
-3. **Chrome MCP visual verify**: `/asset/kr-equity` 페이지에서 005930.KS 가격/MA/RSI 등이 실제로 렌더되는지 + composite 점수의 technical 카테고리 non-null 확인. `/asset/us-equity` 에서 SPY MA(200) / Disparity 시리즈가 채워지는지 확인 (다음 cron-technical fire 후).
-4. **Acceptance criteria SQL 검증** (다음 cron-technical fire 후):
-   - `SELECT count(*) FROM technical_readings WHERE indicator_key='MA_200' AND value_raw IS NOT NULL AND observed_at::date = CURRENT_DATE - INTERVAL '1 day';` (≥ 10 expected)
-   - `SELECT per_signal_detail->'DISLOCATION'->>'state' FROM signal_events ORDER BY snapshot_date DESC LIMIT 1;` (active/inactive expected, NOT unknown)
-   - 같은 패턴으로 MOMENTUM_TURN, KR row count, kr_equity composite categories 검증.
-5. **Phase 3.0 closeout commit**: acceptance matrix의 PARTIAL 행을 MET으로 promote + handoff 갱신.
-6. **참고 문서**: `docs/phase3_0_data_recovery_blueprint.md` (as-built), `docs/phase2_acceptance_matrix.md` (현재 11/16 MET → Phase 3.0 후 13–14/16 예상), `docs/backlog.md` (Phase 3.x DART/ECOS 일정), `investment_advisor_dashboard_prd_kr_v3.md` v3.6.
+Phase 3.0 완전 완료. 다음 진행 옵션:
+
+1. **Phase 3.4 Backtest UI** (사용자 추천 순서 1번) — `docs/phase3_4_backtest_blueprint.md` 저작 시작. PRD §18에 명시된 "raw_payload 재실행 + 버전 비교 UI". Phase 1 schema의 `raw_payload` JSONB 컬럼이 이미 보존되어 있어 신규 마이그레이션 최소.
+2. **MOMENTUM_TURN 시그널 정상화 모니터링** — 현재 unknown (MACD 7일 윈도우 누적 필요). 다음 7일간 daily cron이 쌓이면 자연 회복. 별도 작업 불필요.
+3. **7-day reliability watch** — Day 1 = 2026-04-26 post-Phase-3.0, 만료 = 2026-05-03. 매일 cron-hourly + cron-onchain + cron-technical SUCCESS 비율 체크.
+4. **Phase 3.1 ECOS 키 발급 요청** — Phase 3.4 끝나고 Phase 3.1로 이동할 때 사용자에게 https://ecos.bok.or.kr/api/ 무료 키 등록 요청.
+
+참고 문서 우선순위: `docs/phase3_0_data_recovery_blueprint.md` (as-built reference) → `docs/phase2_acceptance_matrix.md` (현재 13/16 MET) → `docs/backlog.md` (DART/ECOS 일정) → PRD v3.6 §18 (Phase 3 sub-phase 로드맵).
 
 ---
 
