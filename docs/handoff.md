@@ -12,7 +12,7 @@
 
 ## 3. Last Commit (pushed to origin/main)
 
-`3ee42da` — Phase 3.4 Steps 5-7 inline (UI scaffolding + tuning slider). 후속 commit (Step 7b save endpoint + Step 8 family reader + Step 9 docs)은 본 핸드오프 commit과 함께 push 예정. Production deployment `dpl_mwhrv7i4o` aliased to `finance-manager-james.vercel.app`.
+`b93098b` — `feat(phase3.4): Steps 7b + 8 + 9 — save-weights endpoint, family reader, docs`. Production deployment `dpl_2mlggd8ei` aliased to `finance-manager-james.vercel.app`. /backtest live, drift = 0 검증 (평균 절대 차이 0.00점), 이름 붙여 저장 + 가족 공유 reader 모두 동작 확인.
 
 ## 4. Active Thread
 
