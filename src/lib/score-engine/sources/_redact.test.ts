@@ -43,4 +43,20 @@ describe("redactSecretsFromErrorMessage", () => {
       "fetch failed: ?APIKEY=REDACTED&TOKEN=REDACTED",
     );
   });
+
+  it("redacts ECOS path-segment API key", () => {
+    const msg =
+      "ECONNRESET: GET https://ecos.bok.or.kr/api/StatisticSearch/M0T936QKWFBZB05LH4LH/json/kr/1/200/722Y001/M/202504/202604";
+    expect(redactSecretsFromErrorMessage(msg)).toBe(
+      "ECONNRESET: GET https://ecos.bok.or.kr/api/StatisticSearch/REDACTED/json/kr/1/200/722Y001/M/202504/202604",
+    );
+  });
+
+  it("redacts ECOS path key for any endpoint variant (StatisticItemList etc.)", () => {
+    const msg =
+      "DNS fail: https://ecos.bok.or.kr/api/StatisticItemList/SECRET_KEY/json/kr/1/100/722Y001";
+    expect(redactSecretsFromErrorMessage(msg)).toBe(
+      "DNS fail: https://ecos.bok.or.kr/api/StatisticItemList/REDACTED/json/kr/1/100/722Y001",
+    );
+  });
 });

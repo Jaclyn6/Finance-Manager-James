@@ -80,14 +80,21 @@ Five regimes — to be tuned during the build with backtest evidence (Phase 3.4 
 
 **Endpoint**: `https://ecos.bok.or.kr/api/StatisticSearch/{API_KEY}/json/kr/{start}/{end}/{stat_code}/{freq}/{from_date}/{to_date}`
 
-**Series under Phase 3.1**:
+**Series under Phase 3.1** (verified live 2026-04-27 via Step 1 smoke test — see `__fixtures__/ecos-bok-rate.json`):
 
-| ECOS code | Series | Frequency | Used in |
-|---|---|---|---|
-| `722Y001` | BOK 기준금리 (Base rate) | Monthly (effective immediate) | macro (KR), regime classifier |
-| `817Y002` | 국고채 10년 (KR 10Y) | Daily | regional_overlay, regime classifier (US-KR diff) |
-| `101Y004` | M2 통화량 | Monthly | macro (KR) |
-| `731Y001` | KRW/USD 환율 | Daily | regional_overlay (replaces FRED `DEXKOUS` for KR) |
+| ECOS stat code | ITEM_CODE1 | Series | Cycle | Used in |
+|---|---|---|---|---|
+| `722Y001` | `0101000` | BOK 기준금리 (Base rate) | M | macro (KR), regime classifier |
+| `817Y002` | `010210000` | 국고채 10Y | D | regional_overlay, regime classifier (US-KR diff) |
+| `731Y001` | `0000001` | KRW/USD 환율 (시가) | D | regional_overlay (replaces FRED `DEXKOUS` for KR) |
+| `731Y001` | `0000002` | KRW/JPY 환율 (per 100 JPY) | D | regional_overlay (KR-specific) |
+| `901Y009` | `0` | CPI 총지수 | M | macro (KR) |
+| `301Y013` | `000000` | 국제수지 경상수지 (수출입 대용) | M | macro (KR) |
+| **TBD (M2)** | TBD | M2 통화량 | M | macro (KR) — **PENDING** |
+
+**M2 lookup blocker** (must resolve before Step 3 cron deploy): the original `101Y004` rejected with `INFO-200`. Step 1 agent tried `101Y001/002/003/005/006/014/015/016/017` — all rejected. Correct M2 stat code requires human lookup from the ECOS portal at https://ecos.bok.or.kr/jsp/vis/keystat/index.jsp or equivalent catalog browser. Tracked as a Step-3 prerequisite.
+
+**KRW/JPY correction**: blueprint originally listed `731Y003 = KRW/JPY`. Live verification showed `731Y003` is "원화의 대미달러, 원화의 대위안/대엔 환율" group containing 원/달러 시가/종가 etc. — NOT JPY. KRW/JPY (per 100 JPY) is `731Y001:0000002`. Two of the 7 series therefore share the same `STAT_CODE` (`731Y001`) with different `ITEM_CODE1`s — supported by the adapter's required-when-grouped `itemCode` parameter.
 
 **Failure mode**: same loud-fail pattern as FRED — if ECOS returns nothing for a day, the cron writes `fetch_status = "error"` and the regime classifier marks `confidence = 0` for any regime that depends on the missing input. Weekend skip rule (Phase 3.0.1 hotfix `c19bd72`) does NOT apply to ECOS — Korean public holidays differ from US, but the broader fix (market-holiday calendar) is in `docs/backlog.md`.
 
