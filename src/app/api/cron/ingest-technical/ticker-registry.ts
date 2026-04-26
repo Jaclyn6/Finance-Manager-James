@@ -111,7 +111,12 @@ export const TICKER_REGISTRY: readonly TickerRegistryEntry[] = [
   { ticker: "005380.KS", asset_type: "kr_equity" }, // Hyundai Motor
   // ----- 2 KR broad-index ETFs (Yahoo-served) -----
   { ticker: "069500.KS", asset_type: "kr_equity" }, // KODEX 200 (KOSPI proxy)
-  { ticker: "229200.KQ", asset_type: "kr_equity" }, // KODEX KOSDAQ150 (KOSDAQ proxy)
+  // NOTE: KODEX KOSDAQ150 = ticker code 229200, but Yahoo serves it
+  // under the `.KS` suffix (not `.KQ`). The `.KQ` variant returns a
+  // stale "MUTUALFUND" record with last trade 2019-06-29 and no
+  // chart bars. `.KS` returns live data (currency=KRW, tz=KST).
+  // Verified 2026-04-26 via curl.
+  { ticker: "229200.KS", asset_type: "kr_equity" }, // KODEX KOSDAQ150 (KOSDAQ proxy)
 ] as const;
 
 /**

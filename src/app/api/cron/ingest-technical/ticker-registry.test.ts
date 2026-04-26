@@ -41,7 +41,9 @@ describe("TICKER_REGISTRY", () => {
     // LG Energy Solution 373220, Samsung Bio 207940, Hyundai 005380)
     // + 069500 KODEX 200 (KOSPI proxy) + 229200 KODEX KOSDAQ150 (KOSDAQ
     // proxy). All routed through Yahoo Finance via the Phase 3.0
-    // fallback chain.
+    // fallback chain. Note: KODEX KOSDAQ150 uses the `.KS` suffix on
+    // Yahoo (the `.KQ` suffix returns a stale 2019-era MUTUALFUND
+    // record with no chart bars).
     const krEntries = TICKER_REGISTRY.filter(
       (e) => e.asset_type === "kr_equity",
     );
@@ -55,7 +57,7 @@ describe("TICKER_REGISTRY", () => {
         "005930.KS",
         "069500.KS",
         "207940.KS",
-        "229200.KQ",
+        "229200.KS",
         "373220.KS",
       ].sort(),
     );
