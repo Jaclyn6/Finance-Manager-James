@@ -542,8 +542,24 @@ Phase 2 acceptance matrix의 PARTIAL 행 5건을 닫는 사전 sub-phase. 신규
 #### Phase 3.3 — Personalization (예정)
 사용자별 맞춤 해석. 가족 3명(jw.byun / 여자친구 / 어머니) 각자 위험성향·관심자산 차이를 받아 동일 점수에서 다른 해석 분기.
 
-#### Phase 3.4 — Backtest UI (예정)
-백테스트 및 산식 튜닝 UI — 현재 산식을 과거 `raw_payload`에 재실행해 버전 간 비교(§11.6 Phase 3 범위). 단순 "그 시점 결과 조회"는 Phase 1에서 이미 제공되므로 이 UI는 replay·튜닝에 집중한다.
+#### Phase 3.4 — Backtest UI (2026-04-27 출하)
+백테스트 및 산식 튜닝 UI — 현재 산식을 과거 `composite_snapshots.contributing_indicators`에 재실행해 버전 간 비교(§11.6 Phase 3 범위). 단순 "그 시점 결과 조회"는 Phase 1에서 이미 제공되므로 이 UI는 replay·튜닝에 집중한다.
+
+**구현된 범위:**
+- `/backtest` 신규 라우트 + 사이드바 "분석" 그룹 추가
+- `WEIGHTS_REGISTRY` versioned weights 도입 (현재 `v2.0.0-baseline`만 등록, 미래 `v2.1.0` cutover 시 신규 키 추가)
+- 새 schema: `backtest_runs` (메모화 + summary stats normalized columns) + `backtest_snapshots` (per-day analytics) + `user_weights` (튜닝 슬라이더 명명 저장)
+- `POST /api/backtest/run` (auth=family, 365일 cap, request_hash sha256 메모화)
+- `POST /api/backtest/save-weights` (user_weights upsert, owner-only RLS)
+- 튜닝 슬라이더 패널 — 자산군별 카테고리 가중치 직접 조정, "이름 붙여 저장" 영구화
+- 가족 공유 reader — 다른 가족 멤버의 최근 백테스트 20건 표시 (RLS family-read 허용)
+
+**OOS (Phase 3.4.1로 이연):**
+- 시그널만 따로 백테스트 (`signal_replays` 별도 테이블)
+- 멀티 자산 한 차트 오버레이
+- DART/ECOS 데이터 백테스트 (어댑터 자체가 Phase 3.1/3.2에서 도입 예정)
+
+자세한 설계 문서: `docs/phase3_4_backtest_blueprint.md`
 
 **진행 순서**: 3.0 ✅ → 3.4 → 3.1 (ECOS) → 3.2 (DART) → 3.3. 백테스트가 기존 데이터 위에서 동작하므로 새 스키마 변경 최소이고, 사용자가 모델 신뢰도 검증 가능. 레짐은 백테스트로 검증된 후 추가하면 안전. 포트폴리오·개인화는 새 스키마+UX이므로 안정 단계 이후.
 

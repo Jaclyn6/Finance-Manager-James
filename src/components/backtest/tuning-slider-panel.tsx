@@ -162,6 +162,7 @@ export function TuningSliderPanel({
           >
             초기화
           </button>
+          <SaveWeightsButton draft={draft} assetType={assetType} />
           {active ? (
             <span className="self-center text-[11px] text-amber-700 dark:text-amber-300">
               ✓ 적용됨 — 백테스트 실행 시 사용
@@ -170,5 +171,111 @@ export function TuningSliderPanel({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Phase 3.4 Step 7b — "이름 붙여 저장" mini-form.
+ *
+ * Inline expanding text input + 저장 button. POSTs to
+ * `/api/backtest/save-weights` and toasts on success. Does NOT
+ * automatically apply the saved weights — user still needs to click
+ * "적용" if they want to backtest with them.
+ */
+function SaveWeightsButton({
+  draft,
+  assetType,
+}: {
+  draft: Record<string, number>;
+  assetType: AssetType;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const payload = {
+        // Wrap the slider draft as a single-asset categoryWeights map so the
+        // server-side API stamps weights_version with the same hash shape
+        // it would for inline customWeights.
+        categoryWeights: { [assetType]: draft },
+        // Mirror the EngineWeights interface minimally — modelVersion +
+        // signalRulesVersion are stamped at save time so cross-version
+        // comparison is reproducible later.
+        modelVersion: "v2.0.0",
+        signalRulesVersion: "v1.0.0",
+      };
+      const res = await fetch("/api/backtest/save-weights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), payload }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        setFeedback(`저장 실패: ${t}`);
+      } else {
+        setFeedback("저장 완료 ✓");
+        setOpen(false);
+        setName("");
+      }
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="h-9 rounded-md border px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted/40"
+      >
+        이름 붙여 저장
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="예: 내 v3 가설"
+        maxLength={60}
+        className="h-9 rounded-md border bg-background px-2 text-xs"
+      />
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={busy || !name.trim()}
+        className={cn(
+          "h-9 rounded-md bg-foreground px-3 text-xs font-semibold text-background transition-colors",
+          "hover:opacity-90 disabled:opacity-50",
+        )}
+      >
+        {busy ? "저장 중…" : "저장"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(false);
+          setName("");
+        }}
+        className="h-9 rounded-md border px-3 text-xs"
+      >
+        취소
+      </button>
+      {feedback ? (
+        <span className="text-[11px] text-muted-foreground">{feedback}</span>
+      ) : null}
+    </div>
   );
 }

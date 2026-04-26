@@ -2,7 +2,7 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-26 (UTC ~08:45 / KST 17:45) — **Phase 3.0 "Data Source Recovery" 완전 완료**. 전체 파이프라인이 production에서 검증됨: manual cron-technical 19/18 success, MA_200 18/18 non-null, KR 42/42 success (KOSDAQ 티커 `.KQ→.KS` 수정 후), kr_equity composite의 technical 카테고리 score=35.48 산출, US DISLOCATION → "조건 미충족" (unknown 탈출). 합성 점수 변화 production 시각 확인: KR 45.2→42.5, US 45.9→46.2. acceptance matrix **11/16 → 13/16 MET**.
+2026-04-27 (KST) — **Phase 3.4 "Backtest UI" 코어 출하 + production 검증 완료**. /backtest 라이브, 백테스트 실행 시 평균 절대 차이 = 0.00점 (drift = 0, §5 acceptance #2 PASS). 9 build steps + Step 7b user_weights 영구화 + Step 8 family sharing reader 모두 구현. 누적 39 test files / 571 tests green. (Phase 3.0 day-1 운영 결과: 13/16 MET 유지)
 
 ## 2. Current Phase / Step
 
@@ -12,7 +12,7 @@
 
 ## 3. Last Commit (pushed to origin/main)
 
-`bb89db0` — `fix(phase3.0): KODEX KOSDAQ150 → 229200.KS (was .KQ — Yahoo stale)`. Production deployment `dpl_Dv46zHWWur2X39wsTEXTEuixBjYM` aliased to `finance-manager-james.vercel.app`. 모든 Phase 3.0 작업 (96865e8..bb89db0) origin/main 동기화 완료.
+`3ee42da` — Phase 3.4 Steps 5-7 inline (UI scaffolding + tuning slider). 후속 commit (Step 7b save endpoint + Step 8 family reader + Step 9 docs)은 본 핸드오프 commit과 함께 push 예정. Production deployment `dpl_mwhrv7i4o` aliased to `finance-manager-james.vercel.app`.
 
 ## 4. Active Thread
 
@@ -76,14 +76,14 @@
 
 ## 9. How to Resume
 
-Phase 3.0 완전 완료. 다음 진행 옵션:
+Phase 3.0 완료 + Phase 3.4 코어 출하. 다음 옵션:
 
-1. **Phase 3.4 Backtest UI** (사용자 추천 순서 1번) — `docs/phase3_4_backtest_blueprint.md` 저작 시작. PRD §18에 명시된 "raw_payload 재실행 + 버전 비교 UI". Phase 1 schema의 `raw_payload` JSONB 컬럼이 이미 보존되어 있어 신규 마이그레이션 최소.
-2. **MOMENTUM_TURN 시그널 정상화 모니터링** — 현재 unknown (MACD 7일 윈도우 누적 필요). 다음 7일간 daily cron이 쌓이면 자연 회복. 별도 작업 불필요.
-3. **7-day reliability watch** — Day 1 = 2026-04-26 post-Phase-3.0, 만료 = 2026-05-03. 매일 cron-hourly + cron-onchain + cron-technical SUCCESS 비율 체크.
-4. **Phase 3.1 ECOS 키 발급 요청** — Phase 3.4 끝나고 Phase 3.1로 이동할 때 사용자에게 https://ecos.bok.or.kr/api/ 무료 키 등록 요청.
+1. **Phase 3.4 Trigger 2 review (5-agent)** — 본 세션 마지막 단계. Phase 3.4 full diff (96865e8..HEAD)에 대해 5-agent 리뷰 → confidence ≥ 80 fix → 최종 push.
+2. **Phase 3.1 ECOS** — 다음 sub-phase. ECOS API 키 발급 요청 (https://ecos.bok.or.kr/api/) → 사용자가 키 전달 → 어댑터 + regime 분류 엔진.
+3. **MOMENTUM_TURN 정상화** — 현재 unknown (MACD 7일 윈도우 누적 중). 자연 회복 (~7일).
+4. **7-day reliability watch** — Day 1 = 2026-04-26, 만료 = 2026-05-03. 매일 cron 결과 점검.
 
-참고 문서 우선순위: `docs/phase3_0_data_recovery_blueprint.md` (as-built reference) → `docs/phase2_acceptance_matrix.md` (현재 13/16 MET) → `docs/backlog.md` (DART/ECOS 일정) → PRD v3.6 §18 (Phase 3 sub-phase 로드맵).
+참고 문서: `docs/phase3_4_backtest_blueprint.md` (as-built) → `docs/phase3_0_data_recovery_blueprint.md` → PRD v3.6 §18.
 
 ---
 

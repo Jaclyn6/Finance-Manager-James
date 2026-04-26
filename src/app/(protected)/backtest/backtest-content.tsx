@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 
 import { BacktestPanel } from "@/components/backtest/backtest-panel";
+import { FamilyRunsReader } from "@/components/backtest/family-runs-reader";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 import {
   CURRENT_WEIGHTS_VERSION,
   WEIGHTS_REGISTRY_KEYS,
@@ -76,7 +78,43 @@ export async function BacktestContent({
         modelVersion={MODEL_VERSION}
         availableWeightsVersions={WEIGHTS_REGISTRY_KEYS}
       />
+
+      {/* Step 8 — family-shared backtest reader */}
+      <FamilyRunsReaderServer />
     </>
+  );
+}
+
+async function FamilyRunsReaderServer() {
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: rows } = await supabase
+    .from("backtest_runs")
+    .select(
+      "id, user_id, asset_type, date_from, date_to, weights_version, avg_abs_delta, days_above_5pp, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  // Resolve user_id → email best-effort. RLS lets us read the
+  // backtest row but auth.users is not directly readable; we use a
+  // placeholder until a future iteration plumbs user metadata
+  // through a dedicated reader.
+  const initial = (rows ?? []).map((r) => ({
+    ...r,
+    avg_abs_delta:
+      typeof r.avg_abs_delta === "number"
+        ? r.avg_abs_delta
+        : r.avg_abs_delta === null
+          ? null
+          : Number(r.avg_abs_delta),
+    user_email: r.user_id ? r.user_id.slice(0, 8) : null,
+  }));
+
+  return (
+    <FamilyRunsReader initialRows={initial} currentUserId={user?.id ?? null} />
   );
 }
 
