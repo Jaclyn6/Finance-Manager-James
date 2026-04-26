@@ -14,6 +14,127 @@ export type Database = {
   }
   public: {
     Tables: {
+      backtest_runs: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          avg_abs_delta: number | null
+          created_at: string
+          date_from: string
+          date_to: string
+          days_above_5pp: number
+          days_missing_inputs: number
+          days_with_replay: number
+          duration_ms: number
+          id: string
+          max_abs_delta: number | null
+          model_version: string
+          request_hash: string
+          request_json: Json
+          total_days: number
+          user_id: string | null
+          user_weights_id: string | null
+          weights_version: string
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          avg_abs_delta?: number | null
+          created_at?: string
+          date_from: string
+          date_to: string
+          days_above_5pp: number
+          days_missing_inputs: number
+          days_with_replay: number
+          duration_ms: number
+          id?: string
+          max_abs_delta?: number | null
+          model_version: string
+          request_hash: string
+          request_json: Json
+          total_days: number
+          user_id?: string | null
+          user_weights_id?: string | null
+          weights_version: string
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          avg_abs_delta?: number | null
+          created_at?: string
+          date_from?: string
+          date_to?: string
+          days_above_5pp?: number
+          days_missing_inputs?: number
+          days_with_replay?: number
+          duration_ms?: number
+          id?: string
+          max_abs_delta?: number | null
+          model_version?: string
+          request_hash?: string
+          request_json?: Json
+          total_days?: number
+          user_id?: string | null
+          user_weights_id?: string | null
+          weights_version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backtest_runs_user_weights_id_fkey"
+            columns: ["user_weights_id"]
+            isOneToOne: false
+            referencedRelation: "user_weights"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      backtest_snapshots: {
+        Row: {
+          contributing: Json | null
+          delta: number | null
+          gaps: string[] | null
+          id: string
+          original_model_version: string | null
+          original_score: number | null
+          replay_band: string | null
+          replay_score: number | null
+          run_id: string
+          signal_state: Json | null
+          snapshot_date: string
+        }
+        Insert: {
+          contributing?: Json | null
+          delta?: number | null
+          gaps?: string[] | null
+          id?: string
+          original_model_version?: string | null
+          original_score?: number | null
+          replay_band?: string | null
+          replay_score?: number | null
+          run_id: string
+          signal_state?: Json | null
+          snapshot_date: string
+        }
+        Update: {
+          contributing?: Json | null
+          delta?: number | null
+          gaps?: string[] | null
+          id?: string
+          original_model_version?: string | null
+          original_score?: number | null
+          replay_band?: string | null
+          replay_score?: number | null
+          run_id?: string
+          signal_state?: Json | null
+          snapshot_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "backtest_snapshots_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "backtest_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       composite_snapshots: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type_enum"]
@@ -430,6 +551,33 @@ export type Database = {
         Update: {
           persona?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_weights: {
+        Row: {
+          created_at: string
+          description_ko: string | null
+          id: string
+          name: string
+          payload: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description_ko?: string | null
+          id?: string
+          name: string
+          payload: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description_ko?: string | null
+          id?: string
+          name?: string
+          payload?: Json
           user_id?: string
         }
         Relationships: []
