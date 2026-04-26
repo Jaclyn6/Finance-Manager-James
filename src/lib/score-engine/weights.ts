@@ -57,13 +57,15 @@ export const SIGNAL_RULES_VERSION = "v1.0.0";
  * v2.0.0-2026-04-25 cutover (commit `d536141`): the 7 KR `.KS` tickers
  * were removed after Alpha Vantage free tier was verified to reject
  * every KOSPI / KOSDAQ symbol format. Pre-cutover registry had 22
- * tickers (19 AV + 3 CoinGecko); the post-cutover registry has 15
- * (12 AV + 3 CoinGecko). KR equity technical category is null at
- * Phase 2; Phase 3 candidate is ECOS (한국은행 OpenAPI) or Yahoo
- * Finance — see `src/app/api/cron/ingest-technical/ticker-registry.ts`
- * header.
+ * tickers (19 AV + 3 CoinGecko); the 2026-04-25 cutover dropped to
+ * 15 (12 AV + 3 CoinGecko) under the KR carve-out. The 2026-04-26
+ * Phase 3.0 cutover restores the 7 KR tickers under a 3-tier
+ * fallback chain (AV → Twelve Data → Yahoo Finance), routed by
+ * `src/lib/score-engine/sources/daily-bar-fetcher.ts`. Total registry
+ * is back to 19 (12 US/global via AV-primary + 7 KR via Yahoo) plus
+ * 3 CoinGecko crypto IDs.
  */
-export const TICKER_LIST_VERSION = "v2.0.0-2026-04-25";
+export const TICKER_LIST_VERSION = "v3.0.0-2026-04-26";
 
 /**
  * Phase 1 macro-only indicator set. All seven FRED series from

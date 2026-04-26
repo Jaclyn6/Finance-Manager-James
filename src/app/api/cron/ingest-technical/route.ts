@@ -9,11 +9,11 @@ import {
   writeSignalEvents,
 } from "@/lib/data/signals";
 import { CACHE_TAGS } from "@/lib/data/tags";
-import {
-  fetchAlphaVantageDaily,
-  type AlphaVantageDailyBar,
-  type AlphaVantageFetchResult,
-} from "@/lib/score-engine/sources/alpha-vantage";
+import { fetchDailyBars } from "@/lib/score-engine/sources/daily-bar-fetcher";
+import type {
+  DailyBar,
+  DailyBarSeries,
+} from "@/lib/score-engine/sources/daily-bar-types";
 import { computeSignals } from "@/lib/score-engine/signals";
 import {
   bollingerBands,
@@ -132,30 +132,42 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const entry = TICKER_REGISTRY[i];
       tickersAttempted++;
 
-      // ----- 2a. Fetch -----
-      let fetchResult: AlphaVantageFetchResult;
+      // ----- 2a. Fetch through Phase 3.0 fallback chain -----
+      // KR tickers (`.KS` / `.KQ`) skip AV/Twelve Data and go
+      // straight to Yahoo Finance per `daily-bar-fetcher.ts`.
+      let outcome: Awaited<ReturnType<typeof fetchDailyBars>>;
       try {
-        fetchResult = await fetchAlphaVantageDaily(entry.ticker);
+        outcome = await fetchDailyBars(entry.ticker);
       } catch (err) {
-        // fetchAlphaVantageDaily only throws when ALPHA_VANTAGE_API_KEY
-        // is missing — a config error, not a per-ticker failure. Stop
-        // the loop rather than burn 12 × 13s of useless sleeps.
+        // Adapter throws are config errors (missing API key) — bail
+        // the loop rather than burn 11 × 13s of useless sleeps.
         throw err;
       }
 
-      if (fetchResult.fetch_status !== "success" || fetchResult.bars.length === 0) {
+      const fetchResult: DailyBarSeries = outcome.result;
+
+      if (fetchResult.fetch_status === "error" || fetchResult.bars.length === 0) {
         tickersFailed++;
         perTickerErrors.push(
-          `${entry.ticker}: ${fetchResult.error ?? "no bars"}`,
+          `${entry.ticker}: ${fetchResult.error ?? "no bars"} (tiers tried: ${outcome.tiersAttempted.join(",")})`,
         );
         // Write 6 error-rows so the staleness badge can show "last
         // attempt failed today" instead of silently reading yesterday.
-        const errorRows = buildErrorTechnicalRows(entry, today, fetchResult.error);
+        const errorRows = buildErrorTechnicalRows(
+          entry,
+          today,
+          fetchResult.error,
+          fetchResult.source_name,
+        );
         await upsertTechnicalRows(supabase, errorRows);
         technicalRowsWritten += errorRows.length;
 
-        // Sleep before next ticker unless we're on the last one.
-        if (i < TICKER_REGISTRY.length - 1) {
+        // Sleep ONLY if Tier 1 (AV) was actually attempted on this
+        // ticker — KR tickers skip AV entirely and don't need pacing.
+        if (
+          i < TICKER_REGISTRY.length - 1 &&
+          outcome.tiersAttempted.includes("alpha_vantage")
+        ) {
           await sleep(ALPHA_VANTAGE_SLEEP_MS);
         }
         continue;
@@ -165,6 +177,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const { technicalRows, priceRow } = computeTickerRows(
         entry,
         fetchResult.bars,
+        fetchResult.source_name,
       );
 
       // ----- 2d. Write technical_readings -----
@@ -180,8 +193,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       tickersSuccess++;
 
-      // ----- 2f. Sleep for AV 5/min compliance (skip after last) -----
-      if (i < TICKER_REGISTRY.length - 1) {
+      // ----- 2f. Sleep for AV 5/min compliance (only if AV was hit) -----
+      if (
+        i < TICKER_REGISTRY.length - 1 &&
+        outcome.tiersAttempted.includes("alpha_vantage")
+      ) {
         await sleep(ALPHA_VANTAGE_SLEEP_MS);
       }
     }
@@ -283,13 +299,14 @@ interface ComputedRows {
 
 function computeTickerRows(
   entry: TickerRegistryEntry,
-  bars: AlphaVantageDailyBar[],
+  bars: ReadonlyArray<DailyBar>,
+  sourceName: DailyBarSeries["source_name"],
 ): ComputedRows {
   // Parser returns bars ascending. Defensive sort to survive a future
   // parser refactor that breaks the invariant — the indicator math
   // fundamentally requires chronological input.
   const ordered = [...bars].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
-  const latest = ordered[ordered.length - 1];
+  const latest = ordered[ordered.length - 1]!;
   const closes = ordered.map((b) => b.close);
   const observedAt = latest.date;
 
@@ -308,6 +325,7 @@ function computeTickerRows(
       value_normalized: null,
       score_0_100: rsiValue === null ? null : rsiToScore(rsiValue),
       status: rsiValue === null ? "partial" : "success",
+      source_name: sourceName,
     }),
   );
 
@@ -357,6 +375,7 @@ function computeTickerRows(
               signal: latestMacd.signal,
               histogram: latestMacd.histogram,
             } satisfies Json),
+      source_name: sourceName,
     }),
   );
 
@@ -374,6 +393,7 @@ function computeTickerRows(
       value_normalized: null,
       score_0_100: null,
       status: ma50 === null ? "partial" : "success",
+      source_name: sourceName,
     }),
   );
 
@@ -387,6 +407,7 @@ function computeTickerRows(
       value_normalized: null,
       score_0_100: null,
       status: ma200 === null ? "partial" : "success",
+      source_name: sourceName,
     }),
   );
 
@@ -417,6 +438,7 @@ function computeTickerRows(
               lower: bands.lower,
               close: latest.close,
             } satisfies Json),
+      source_name: sourceName,
     }),
   );
 
@@ -432,10 +454,14 @@ function computeTickerRows(
       score_0_100:
         disparityValue === null ? null : disparityToScore(disparityValue),
       status: disparityValue === null ? "partial" : "success",
+      source_name: sourceName,
     }),
   );
 
   // ---- Price readings row for the latest bar ----
+  // Visualization-only (blueprint §7.4). Source matches whichever tier
+  // of the fallback chain served the bars, so a future audit-trail
+  // query can attribute price coverage by tier.
   const priceRow: PriceReadingInsert = {
     ticker: entry.ticker,
     asset_type: entry.asset_type,
@@ -445,7 +471,7 @@ function computeTickerRows(
     low: latest.low,
     close: latest.close,
     volume: latest.volume,
-    source_name: "alpha_vantage",
+    source_name: sourceName,
   };
 
   return { technicalRows, priceRow };
@@ -464,6 +490,7 @@ interface BuildTechnicalRowArgs {
   score_0_100: number | null;
   status: FetchStatus;
   raw_payload?: Json | null;
+  source_name: DailyBarSeries["source_name"];
 }
 
 function buildTechnicalRow(args: BuildTechnicalRowArgs): TechnicalReadingInsert {
@@ -475,7 +502,7 @@ function buildTechnicalRow(args: BuildTechnicalRowArgs): TechnicalReadingInsert 
     value_normalized: args.value_normalized,
     score_0_100: args.score_0_100,
     observed_at: args.observed_at,
-    source_name: "alpha_vantage",
+    source_name: args.source_name,
     model_version: MODEL_VERSION,
     fetch_status: args.status,
     raw_payload: args.raw_payload ?? null,
@@ -483,15 +510,16 @@ function buildTechnicalRow(args: BuildTechnicalRowArgs): TechnicalReadingInsert 
 }
 
 /**
- * Build 6 error-status rows for a ticker whose AV fetch failed. Lets
- * the dashboard staleness badge distinguish "today attempted, all 6
- * failed" from "today not attempted" (blueprint §0.5 tenet 1 — loud
- * failure surface, not silence).
+ * Build 6 error-status rows for a ticker whose fetch failed across
+ * all attempted tiers. Lets the dashboard staleness badge distinguish
+ * "today attempted, all 6 failed" from "today not attempted"
+ * (blueprint §0.5 tenet 1 — loud failure surface, not silence).
  */
 function buildErrorTechnicalRows(
   entry: TickerRegistryEntry,
   today: string,
   error: string | undefined,
+  sourceName: DailyBarSeries["source_name"],
 ): TechnicalReadingInsert[] {
   const payload: Json = { error: error ?? "unknown" };
   return Object.values(INDICATOR_KEYS).map((indicator_key) => ({
@@ -502,7 +530,7 @@ function buildErrorTechnicalRows(
     value_normalized: null,
     score_0_100: null,
     observed_at: today,
-    source_name: "alpha_vantage",
+    source_name: sourceName,
     model_version: MODEL_VERSION,
     fetch_status: "error" as FetchStatus,
     raw_payload: payload,

@@ -21,11 +21,13 @@ import {
  */
 
 describe("TICKER_REGISTRY", () => {
-  it("contains exactly 12 Alpha Vantage tickers (blueprint §3.2)", () => {
-    // 7 US large-caps/ETFs + 3 region ETF + 2 macro-hedge ETF = 12.
-    // KR equities removed 2026-04-25: AV free tier doesn't serve KOSPI;
-    // see ticker-registry.ts header for Phase 3 ECOS / Yahoo plan.
-    expect(TICKER_REGISTRY).toHaveLength(12);
+  it("contains exactly 19 tickers (Phase 3.0: 12 US/global via AV-primary + 7 KR via Yahoo-primary)", () => {
+    // 7 US large-caps + 3 region ETF + 2 macro-hedge ETF + 5 KR
+    // large-caps + 2 KR ETFs = 19. Phase 3.0 (2026-04-26) reinstated
+    // the KR tickers under the daily-bar fallback chain (Yahoo
+    // primary for `.KS` / `.KQ`); AV / Twelve Data are still skipped
+    // for KR via `isKrTicker()` in `daily-bar-fetcher.ts`.
+    expect(TICKER_REGISTRY).toHaveLength(19);
   });
 
   it("has unique ticker strings (no accidental duplicates)", () => {
@@ -34,15 +36,39 @@ describe("TICKER_REGISTRY", () => {
     expect(unique.size).toBe(tickers.length);
   });
 
-  it("contains no .KS / .KQ tickers (KR equities removed at Phase 2)", () => {
-    // KR carve-out 2026-04-25 — see ticker-registry.ts file header.
-    // AV free tier returns `Invalid API call` for every KR symbol
-    // format. This guard prevents an accidental re-add that would
-    // burn the daily AV budget on errors.
+  it("contains exactly 7 KR equity tickers (Phase 3.0 reinstatement)", () => {
+    // Five KOSPI large-caps (Samsung 005930, SK Hynix 000660,
+    // LG Energy Solution 373220, Samsung Bio 207940, Hyundai 005380)
+    // + 069500 KODEX 200 (KOSPI proxy) + 229200 KODEX KOSDAQ150 (KOSDAQ
+    // proxy). All routed through Yahoo Finance via the Phase 3.0
+    // fallback chain.
+    const krEntries = TICKER_REGISTRY.filter(
+      (e) => e.asset_type === "kr_equity",
+    );
+    expect(krEntries).toHaveLength(7);
+
+    const krTickers = krEntries.map((e) => e.ticker).sort();
+    expect(krTickers).toEqual(
+      [
+        "000660.KS",
+        "005380.KS",
+        "005930.KS",
+        "069500.KS",
+        "207940.KS",
+        "229200.KQ",
+        "373220.KS",
+      ].sort(),
+    );
+  });
+
+  it("only KR tickers carry `.KS` / `.KQ` suffix (US/global stay symbol-only)", () => {
     for (const entry of TICKER_REGISTRY) {
-      expect(entry.ticker.endsWith(".KS")).toBe(false);
-      expect(entry.ticker.endsWith(".KQ")).toBe(false);
-      expect(entry.asset_type).not.toBe("kr_equity");
+      const isKr = /\.(KS|KQ)$/.test(entry.ticker);
+      if (isKr) {
+        expect(entry.asset_type).toBe("kr_equity");
+      } else {
+        expect(entry.asset_type).not.toBe("kr_equity");
+      }
     }
   });
 
@@ -83,10 +109,20 @@ describe("TICKER_REGISTRY", () => {
   });
 
   it("fits under the Vercel Fluid Compute 300s ceiling at 13s spacing", () => {
-    // Asserts the total serial walk duration fits the route's budget.
-    // 12 × 13_000 = 156_000ms + headroom for fetch latency.
-    const totalSleepMs = TICKER_REGISTRY.length * ALPHA_VANTAGE_SLEEP_MS;
-    expect(totalSleepMs).toBeLessThan(300_000);
+    // Phase 3.0: only the 12 AV-served tickers need 13s spacing for
+    // AV's 5/min ceiling. The 7 KR tickers go via Yahoo Finance with
+    // no per-minute throttle. Worst-case wallclock: 11 × 13s sleeps
+    // (between the 12 AV calls) + ~2s × 19 fetches ≈ 181s, comfortably
+    // inside the 300s `maxDuration` ceiling.
+    const avTickers = TICKER_REGISTRY.filter(
+      (e) => !/\.(KS|KQ)$/.test(e.ticker),
+    );
+    const avSleepMs = Math.max(0, avTickers.length - 1) * ALPHA_VANTAGE_SLEEP_MS;
+    expect(avSleepMs).toBeLessThan(300_000);
+    // Sanity: the un-paced KR additions don't push us over even with
+    // generous fetch latency.
+    const generousFetchLatencyMs = TICKER_REGISTRY.length * 5_000;
+    expect(avSleepMs + generousFetchLatencyMs).toBeLessThan(300_000);
   });
 });
 
