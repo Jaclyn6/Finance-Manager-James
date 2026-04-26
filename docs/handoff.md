@@ -37,7 +37,7 @@
 - **Phase 3.4.1 OOS**: signal-only backtest (would consume `backtest_snapshots.raw_inputs` JSONB now provisioned by migration 0012), multi-asset overlay, full email plumbing.
 - **DART/ECOS adapters** still scheduled for 3.2 / 3.1 respectively. DART_API_KEY already provisioned across .env.local + GH secrets + Vercel; ECOS pending §5.
 - **pg_graphql anon SELECT advisor warning** on all 16 public tables (RLS enforces row-level access; only schema names are visible). Pre-Phase-3.4 condition; not introduced by 0011/0012.
-- **Backlog — market-holiday calendar (option 3)**: weekend-skip is now in place (`ingest-technical` skips writes on Sat/Sun via `getUTCDay()`), but US/KR market holidays (~10 days/yr each) still write `fetch_status='error'` rows that null out the technical category. Future patch: integrate an external market-calendar API (e.g. NYSE/KRX via Polygon, Alpha Vantage, or hardcoded annual list) so holiday detection matches actual closures.
+- **Market-holiday calendar follow-up** to 0.1 weekend skip — see [`docs/backlog.md` "Market-holiday calendar integration"](backlog.md).
 
 ## 8. Environment State
 

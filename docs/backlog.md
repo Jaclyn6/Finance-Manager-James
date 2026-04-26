@@ -80,6 +80,49 @@ of time.
 | **ECOS** (한국은행 OpenAPI) | Phase 3.1 | Regime classification engine needs Korean macro inputs (BOK rate, KR 10Y, M2, KRW/USD) to define KR-specific market regimes. ECOS adapter ships alongside the regime engine. | Not yet provisioned. Will request when Phase 3.1 starts (free key, https://ecos.bok.or.kr/api/, 100k req/day). |
 | **DART** (전자공시 OpenAPI) | Phase 3.2 | Portfolio overlay needs P/E and P/B for held KR equities. DART exposes EPS / BPS via 정기보고서 endpoint; the adapter computes the ratios and feeds the KR `valuation` category, completing KR's 6/6 category coverage. | **Provisioned 2026-04-26**: `DART_API_KEY` in `.env.local`, GH secrets, Vercel Production env. Live smoke tested (Samsung 005930 임원공시 list returned 200). |
 
+## Data-pipeline reliability
+
+### Market-holiday calendar integration (option 3)
+
+**Where it lives now:** `src/app/api/cron/ingest-technical/route.ts`
+weekend short-circuit (commit `c19bd72`, Phase 3.0.1 hotfix).
+
+**The gap:** the current weekend skip uses
+`new Date().getUTCDay() === 0 || === 6` — covers Sat/Sun only.
+Market-specific holidays (NYSE: ~9-10 days/yr; KRX: ~10 days/yr,
+including Lunar New Year, Chuseok, etc.) still pass through and write
+`fetch_status='error'` rows that null out the technical category for
+those days exactly the same way weekends did before the hotfix.
+
+**Proposed treatment:** integrate a market-calendar source so
+holiday detection matches actual closures. Three candidate sources:
+
+1. **Polygon.io `/v1/marketstatus/upcoming`** — paid (free tier
+   has rate limits but probably enough for one daily call).
+2. **Alpha Vantage `/query?function=MARKET_STATUS`** — free, but
+   returns "open/closed now" not a forward calendar; would need
+   to be called at the moment of the cron each day.
+3. **Hardcoded annual list** — small JSON keyed by `(market, year,
+   date)` checked into the repo; manual update once a year.
+   Zero new dependency, zero quota.
+
+Recommendation: **option 3** (hardcoded annual list) for the same
+reasons the project chose Yahoo over KIS in Phase 3.0 — no broker
+account / no quota / no auth surface. The annual update is a
+calendar entry, not engineering.
+
+**Why deferred:** weekend skip already covers ~52 × 2 = 104 days/yr
+out of the ~120 total market-closed days. Holiday coverage adds the
+remaining ~16 days/yr — small marginal gain compared to a clean
+Phase 3.1 entry. Revisit after Phase 3.1.
+
+**Acceptance check when done:**
+- A backtest run that includes 2026-12-25 (Christmas Day) shows
+  a populated technical category (carrying forward 2026-12-24).
+- `ingest-technical` audit row on a US holiday says
+  `error_summary: "holiday_skip: NYSE closed, no write"` (same
+  shape as the current `weekend_skip` marker).
+
 ## Tech-debt nibbles (low priority)
 
 - `button.tsx` `icon-lg` (size-9) variant still exists; new

@@ -14,6 +14,24 @@ Handoffs are **manual-only**. There is no `UserPromptSubmit` / `/clear` hook. An
 
 Do not rely on memory files under `~/.claude/projects/...` for session continuity — those are durable high-level project facts, not live session state. `docs/handoff.md` is the live state; it is git-tracked and survives worktree switches and clones.
 
+## Backlog — single source of truth
+
+The project's backlog lives at `docs/backlog.md`. It is the durable, git-tracked list of deferred items, follow-ups, tech debt, and post-phase ideas. Treat it as the authoritative answer to "what's next" or "what did we leave for later."
+
+**Always write to `docs/backlog.md` (never to `docs/handoff.md` and never scattered across blueprint docs)** when:
+- The user says some variant of "백로그에 넣어줘", "나중에 하자", "이건 다음에", "보류", "defer this", "add to the backlog", or otherwise marks a discussion item as not-now.
+- A code review or implementation surfaces a follow-up that is out-of-scope for the current commit.
+- A phase closes with known carry-overs that the next phase will pick up.
+
+`docs/handoff.md` is live session state — it is rewritten on every `/handoff` and may not survive a session reset. Backlog items written there get lost. Backlog items written into a phase blueprint get buried. `docs/backlog.md` is the only place the user can grep across sessions to see "what did we say we'd do later."
+
+**Always read `docs/backlog.md`** when:
+- The user asks "다음에 뭐 할까", "후속 액션 뭐가 있어", "what's next", "what should we work on", or any variant of "what's pending."
+- A phase or sub-phase closes (e.g. just shipped Phase X) and the next-action recommendation needs to consider deferred work.
+- The user invokes `/handoff` — pull anything still open from `docs/backlog.md` into the handoff §7 "Open Issues to Watch" as pointer references (not duplicated content).
+
+When updating the backlog, follow the existing structure (`## UI / UX polish`, `## Phase 2 carry-overs`, `## Tech-debt nibbles`, etc.). Each entry includes WHERE it lives now (file path), THE GAP, A PROPOSED TREATMENT, and WHY IT'S DEFERRED. Don't write one-liners — future-you needs to act on the entry without this conversation's context.
+
 ## Code review workflow
 
 Run the `/code-review:code-review` skill — five parallel Sonnet reviewers covering (1) AGENTS.md + blueprint compliance, (2) shallow bug scan, (3) blueprint drift / historical context, (4) code-comments-vs-reality, (5) security — then score findings 0-100 with Haiku agents, filter out anything below 80 confidence, dedupe overlaps, and report.

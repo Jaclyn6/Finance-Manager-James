@@ -533,8 +533,21 @@ Phase 2 acceptance matrix의 PARTIAL 행 5건을 닫는 사전 sub-phase. 신규
 - **cron-onchain 분리** (매 4시간): BGeometrics 15/day 한도 내 운영.
 - **DART/ECOS는 본 sub-phase 범위 밖** — Phase 3.1 / 3.2에서 도입 (아래).
 
-#### Phase 3.1 — Regime Classification (예정)
-시장 국면(불황/회복/과열/침체) 분류 엔진 + 점수 해석을 국면 기준으로 재가중. **ECOS 어댑터 도입** — 한국은행 OpenAPI에서 BOK 정책금리, KR 10Y 국채, M2, KRW/USD 환율을 받아 KR equity의 macro 카테고리를 한국 매크로로 보강. KR-specific economic regime 분류 가능. ECOS API 키 등록 필요(무료, 100k req/day).
+#### Phase 3.1 — Regime Classification (예정, ECOS 키 provisioned 2026-04-27)
+**큰 범위 regime engine** — 단순히 ECOS 지표를 인풋으로 추가하는 것이 아니라, 시장 국면(risk-on / risk-off / 긴축 / 완화 등)을 명시적으로 분류해서 자산군별 카테고리 가중치를 동적으로 재구성한다. KR equity는 한국 시장만의 매크로 특수성을 반영한 별도 점수 체계를 갖는다.
+
+**ECOS 어댑터 라우팅 (A+C 병행)**:
+- (A) 기존 `regional_overlay` 카테고리 확장 — KR equity 입력에 ECOS 지표(BOK 정책금리, KR 10Y, M2, KRW/USD)를 추가. 가중치 구조 변경 없음.
+- (C) 기존 `macro` 카테고리에 한국 매크로 추가 — kr_equity 한정으로 글로벌 FRED 매크로 + ECOS 한국 매크로를 같은 카테고리에서 가중 평균. 다른 자산군의 macro는 그대로 글로벌 FRED만 사용.
+
+**Regime engine** (새 산출물):
+- 국면 분류기 — 매크로 + 기술 지표 조합으로 risk-on / risk-off 등 4-5개 국면 라벨 부여, `composite_snapshots`에 `regime_label` 컬럼 추가.
+- 자산군별 동적 가중치 — 국면에 따라 `WEIGHTS_REGISTRY`의 카테고리 가중치를 다르게 적용 (예: risk-off 국면에서 macro 가중치 ↑, technical 가중치 ↓).
+- KR-specific 점수 계산 — 한국 시장의 환율 민감도, 외국인 수급, 한미 금리차 등을 반영한 한국 전용 인풋 + 가중치 + 임계값.
+
+**MODEL_VERSION cutover**: v2.0.0-baseline → **v2.1.0** (regime + KR macro 통합). `WEIGHTS_REGISTRY`에 `v2.1.0-baseline` 신규 키 등록, 기존 `v2.0.0-baseline`은 백테스트 비교용으로 보존. cutover 후 7일 reliability watch 후 PRD §11.6 Phase 3.0 형식으로 검증.
+
+ECOS API 키(`ECOS_API_KEY`, 무료 100k req/day)는 `.env.local`에 provisioned, GH secrets / Vercel Production 동기화는 Phase 3.1 implementation 시작 시 진행.
 
 #### Phase 3.2 — Portfolio Overlay (예정)
 가족 3명 보유 종목 입력 → 합성 점수와 결합해 비중 조정 가이드. **DART 어댑터 도입** — 전자공시 시스템에서 EPS/BPS를 받아 KR equity P/E·P/B 산출, KR `valuation` 카테고리 활성화. 자산 상세 페이지에 펀더멘털 카드 추가. DART API 키 (`DART_API_KEY`, 무료, 1000 req/min) 이미 환경변수 등록됨(2026-04-26).
