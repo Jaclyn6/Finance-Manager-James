@@ -147,6 +147,9 @@ export type Database = {
           fetch_status: Database["public"]["Enums"]["fetch_status_enum"]
           id: string
           model_version: string
+          regime_confidence: number | null
+          regime_features: Json | null
+          regime_label: string | null
           score_0_100: number
           snapshot_date: string
         }
@@ -158,6 +161,9 @@ export type Database = {
           fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
           id?: string
           model_version: string
+          regime_confidence?: number | null
+          regime_features?: Json | null
+          regime_label?: string | null
           score_0_100: number
           snapshot_date: string
         }
@@ -169,8 +175,56 @@ export type Database = {
           fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
           id?: string
           model_version?: string
+          regime_confidence?: number | null
+          regime_features?: Json | null
+          regime_label?: string | null
           score_0_100?: number
           snapshot_date?: string
+        }
+        Relationships: []
+      }
+      ecos_readings: {
+        Row: {
+          fetch_status: Database["public"]["Enums"]["fetch_status_enum"]
+          id: string
+          ingested_at: string
+          item_code: string | null
+          model_version: string
+          observed_at: string
+          raw_payload: Json | null
+          score_0_100: number | null
+          series_code: string
+          source_name: string
+          value_normalized: number | null
+          value_raw: number | null
+        }
+        Insert: {
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          ingested_at?: string
+          item_code?: string | null
+          model_version: string
+          observed_at: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          series_code: string
+          source_name?: string
+          value_normalized?: number | null
+          value_raw?: number | null
+        }
+        Update: {
+          fetch_status?: Database["public"]["Enums"]["fetch_status_enum"]
+          id?: string
+          ingested_at?: string
+          item_code?: string | null
+          model_version?: string
+          observed_at?: string
+          raw_payload?: Json | null
+          score_0_100?: number | null
+          series_code?: string
+          source_name?: string
+          value_normalized?: number | null
+          value_raw?: number | null
         }
         Relationships: []
       }
