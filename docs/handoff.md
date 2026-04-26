@@ -37,13 +37,14 @@
 - **Phase 3.4.1 OOS**: signal-only backtest (would consume `backtest_snapshots.raw_inputs` JSONB now provisioned by migration 0012), multi-asset overlay, full email plumbing.
 - **DART/ECOS adapters** still scheduled for 3.2 / 3.1 respectively. DART_API_KEY already provisioned across .env.local + GH secrets + Vercel; ECOS pending §5.
 - **pg_graphql anon SELECT advisor warning** on all 16 public tables (RLS enforces row-level access; only schema names are visible). Pre-Phase-3.4 condition; not introduced by 0011/0012.
+- **Backlog — market-holiday calendar (option 3)**: weekend-skip is now in place (`ingest-technical` skips writes on Sat/Sun via `getUTCDay()`), but US/KR market holidays (~10 days/yr each) still write `fetch_status='error'` rows that null out the technical category. Future patch: integrate an external market-calendar API (e.g. NYSE/KRX via Polygon, Alpha Vantage, or hardcoded annual list) so holiday detection matches actual closures.
 
 ## 8. Environment State
 
 - **Stack**: Next.js 16.2.4 (Turbopack, cacheComponents:true), React 19.2.4, Tailwind v4, @supabase/ssr 0.10.2, TS 5 strict, Recharts 3.x, Vitest 4.1.4.
 - **Tests**: **577/577 green** across 39 files (Phase 3.0 closed at 532; Phase 3.4 base added 39: 12 weights-registry + 21 backtest engine + 6 hash; fix-up added 6: 4 hash collision + 2 canonical sha256 + null-routing reshape).
 - **MCP servers**: figma, supabase, context7, alphavantage, Claude-in-Chrome (jw.byun@toss.im authenticated).
-- **`.env.local` keys**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET, FINNHUB_API_KEY, VERCEL_OIDC_TOKEN, **TWELVEDATA_API_KEY** (Phase 3.0), **DART_API_KEY** (Phase 3.2 pre-provisioned). ECOS_API_KEY pending.
+- **`.env.local` keys**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET, FINNHUB_API_KEY, VERCEL_OIDC_TOKEN, **TWELVEDATA_API_KEY** (Phase 3.0), **DART_API_KEY** (Phase 3.2 pre-provisioned), **ECOS_API_KEY** (Phase 3.1 — provisioned 2026-04-27, pending GH/Vercel sync).
 - **Vercel prod**: `finance-manager-james.vercel.app` → auto-deploys `feaea46` on push.
 - **GitHub repo secrets**: CRON_SECRET, PRODUCTION_URL (`https://finance-manager-james.vercel.app`), FINNHUB_API_KEY, TWELVEDATA_API_KEY, DART_API_KEY.
 - **Supabase**: `hhohrclmfsvpkigbdpsb` (Seoul, Postgres 17.6.1.104). Migrations 0001–0012 applied. Phase 3.4 base = `0011`; fix-up = `0012`.

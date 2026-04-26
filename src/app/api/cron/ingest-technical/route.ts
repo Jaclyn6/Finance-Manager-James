@@ -119,6 +119,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const today = new Date().toISOString().slice(0, 10);
   const supabase = getSupabaseAdminClient();
 
+  // Weekend short-circuit (Phase 3.0.1 hotfix). On Sat/Sun the upstream
+  // markets are closed and AV/Twelve Data return empty bars by design.
+  // Writing `fetch_status='error'` rows on those days makes the
+  // aggregator pick a stale-but-newer null row over Friday's good
+  // data, surfacing as "데이터 부족" on the dashboard. Skip the write
+  // pipeline entirely so `loadSignalInputs` / category aggregators
+  // naturally fall back to Friday's row via their existing
+  // `ORDER BY observed_at DESC LIMIT 1` paths. The signal recompute
+  // step is also skipped — Friday's `signal_events` row remains
+  // authoritative through the weekend.
+  //
+  // Only weekday detection here; US/KR market-holiday calendar is
+  // tracked as a follow-up backlog item (would currently still write
+  // null rows on e.g. July 4 and silence the Friday data the same way).
+  const todayDow = new Date().getUTCDay(); // 0=Sun, 6=Sat
+  const isWeekend = todayDow === 0 || todayDow === 6;
+
   let tickersAttempted = 0;
   let tickersSuccess = 0;
   let tickersFailed = 0;
@@ -126,6 +143,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let priceRowsWritten = 0;
   let errorSummary: string | null = null;
   const perTickerErrors: string[] = [];
+
+  if (isWeekend) {
+    // Audit row still written so cron health monitoring sees the
+    // green tick, but the pipeline is a deliberate no-op.
+    const durationMs = Date.now() - startMs;
+    try {
+      await supabase.from("ingest_runs").insert({
+        model_version: MODEL_VERSION,
+        indicators_attempted: 0,
+        indicators_success: 0,
+        indicators_failed: 0,
+        snapshots_written: 0,
+        error_summary: "weekend_skip: markets closed, no write",
+        duration_ms: durationMs,
+      });
+    } catch (auditErr) {
+      console.error(
+        "[cron ingest-technical] weekend audit write failed:",
+        auditErr,
+      );
+    }
+    return NextResponse.json({
+      ok: true,
+      skipped: "weekend",
+      today,
+      duration_ms: durationMs,
+    });
+  }
 
   try {
     for (let i = 0; i < TICKER_REGISTRY.length; i++) {
