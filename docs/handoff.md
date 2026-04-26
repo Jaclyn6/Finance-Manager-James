@@ -2,7 +2,7 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-26 (UTC ~20:30 / KST 2026-04-26 05:30) — Phase 3.0 "Data Source Recovery" 구현 6 step 모두 로컬 커밋 완료, push 전 Trigger 2 5-agent review 대기 중. Twelve Data + DART API key 모두 환경 3곳(.env.local + GH secrets + Vercel) 등록 + 라이브 검증 완료. ECOS key는 Phase 3.1 진입 시 사용자 요청 예정.
+2026-04-26 (UTC ~20:50 / KST 2026-04-26 05:50) — **Phase 3.0 "Data Source Recovery" production deploy 완료** (`52601f8`). Trigger 2 5-agent review 4건 fix 적용 → push → vercel deploy → alias swap 모두 완료. 기다리는 단계: 다음 scheduled cron-technical fire (2026-04-25 22:00 UTC, 약 1시간 뒤)에서 새 fallback chain이 실제 데이터를 채워야 acceptance SQL 검증 가능. 시각 검증 결과: 페이지 렌더링 정상, 데이터는 어제 cron 결과 (변화 미반영 — 다음 cron fire가 진정한 검증).
 
 ## 2. Current Phase / Step
 
@@ -10,9 +10,9 @@
 
 다음 sub-phase 후보 (사용자 추천 순서대로): **Phase 3.4 백테스트 → 3.1 레짐 (ECOS adapter 포함) → 3.2 포트폴리오 (DART adapter 포함) → 3.3 개인화**.
 
-## 3. Last Commit (local, not yet pushed)
+## 3. Last Commit (pushed to origin/main)
 
-`54fed3a` — `feat(phase3.0): Step 5 — split cron-onchain to every 4h`. Phase 3.0 commits (5건, 96865e8 이후) 모두 로컬에만 존재. Push 전 Trigger 2 review 필요.
+`52601f8` — `fix(phase3.0): Trigger 2 review fixes (4 findings ≥80 confidence)`. Phase 3.0 모든 commits (96865e8..52601f8) push 완료. Production deployment `dpl_qn9lb996w` (READY), alias `finance-manager-james.vercel.app` 신규 배포로 갱신 완료.
 
 ## 4. Active Thread
 
