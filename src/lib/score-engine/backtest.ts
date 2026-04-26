@@ -196,8 +196,13 @@ function reweightSnapshot(
   }
 
   if (present.length === 0) {
+    // No applicable categories had data — orchestrator routes this to
+    // `daysMissingInputs` via the `score === null` guard. The live
+    // dashboard returns 50 here (composite-v2.ts) for UX reasons; the
+    // backtest must NOT, because a fabricated 50 would inflate
+    // daysWithReplay and produce spurious deltas.
     return {
-      score: 50,
+      score: null,
       contributing: {},
       missingCategories: missing,
     };
@@ -206,7 +211,7 @@ function reweightSnapshot(
   const rawSum = present.reduce((acc, { rawWeight }) => acc + rawWeight, 0);
   if (!Number.isFinite(rawSum) || rawSum <= 0) {
     return {
-      score: 50,
+      score: null,
       contributing: {},
       missingCategories: missing,
     };

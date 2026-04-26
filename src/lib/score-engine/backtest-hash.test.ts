@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BacktestRequest } from "./backtest";
-import { hashBacktestRequest } from "./backtest-hash";
+import { canonicalSha256Hex, hashBacktestRequest } from "./backtest-hash";
 
 const baseRequest: BacktestRequest = {
   weightsVersion: "v2.0.0-baseline",
@@ -56,5 +56,57 @@ describe("hashBacktestRequest", () => {
       weightsVersion: "v2.1.0-baseline",
     });
     expect(a).not.toBe(b);
+  });
+
+  it("differentiates by inline customWeightsPayload (collision-resistant)", () => {
+    // Two requests share the same `weightsVersion` stamp (the engine
+    // would normally produce different stamps for different payloads,
+    // but the lossy 8-char suffix can collide). The hash MUST still
+    // differentiate them — that is the whole point of including
+    // customWeightsPayload in the canonical input.
+    const stamped = { ...baseRequest, weightsVersion: "custom-deadbeef" };
+    const hashA = hashBacktestRequest(stamped, {
+      customWeightsPayload: { us_equity: { macro: 50, technical: 50 } },
+    });
+    const hashB = hashBacktestRequest(stamped, {
+      customWeightsPayload: { us_equity: { macro: 30, technical: 70 } },
+    });
+    expect(hashA).not.toBe(hashB);
+  });
+
+  it("treats missing/null customWeightsPayload as the no-extra case", () => {
+    expect(hashBacktestRequest(baseRequest)).toBe(
+      hashBacktestRequest(baseRequest, { customWeightsPayload: null }),
+    );
+    expect(hashBacktestRequest(baseRequest)).toBe(
+      hashBacktestRequest(baseRequest, { customWeightsPayload: undefined }),
+    );
+  });
+
+  it("hash is independent of customWeightsPayload key order", () => {
+    const stamped = { ...baseRequest, weightsVersion: "custom-canonical" };
+    const a = hashBacktestRequest(stamped, {
+      customWeightsPayload: { us_equity: { macro: 50, technical: 50 } },
+    });
+    const b = hashBacktestRequest(stamped, {
+      customWeightsPayload: { us_equity: { technical: 50, macro: 50 } },
+    });
+    expect(a).toBe(b);
+  });
+});
+
+describe("canonicalSha256Hex", () => {
+  it("returns a 64-char hex digest", () => {
+    expect(canonicalSha256Hex({ a: 1 })).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("is key-order independent", () => {
+    expect(canonicalSha256Hex({ a: 1, b: 2 })).toBe(
+      canonicalSha256Hex({ b: 2, a: 1 }),
+    );
+  });
+
+  it("differentiates by value", () => {
+    expect(canonicalSha256Hex({ a: 1 })).not.toBe(canonicalSha256Hex({ a: 2 }));
   });
 });

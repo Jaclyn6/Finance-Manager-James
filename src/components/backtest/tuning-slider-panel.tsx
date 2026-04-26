@@ -38,12 +38,8 @@ const CATEGORY_LABELS_KO: Record<string, string> = {
  * - "초기화" reverts to baseline + clears the override.
  * - "적용 후 재실행" callback hands the panel's local state to the
  *   parent, which fires a fresh POST.
- *
- * Custom-weights persistence (saving with a name) is a stretch path
- * inside this same component — a small text input + "이름 붙여 저장"
- * button that POSTs to a separate user_weights endpoint.
- * Persistence endpoint will land alongside the panel; for the base
- * panel commit we expose the slider + apply path only.
+ * - "이름 붙여 저장" (SaveWeightsButton) POSTs the draft to
+ *   `/api/backtest/save-weights` — does not auto-apply.
  */
 export function TuningSliderPanel({
   assetType,

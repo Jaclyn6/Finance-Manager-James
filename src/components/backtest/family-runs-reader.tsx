@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 interface FamilyRunRow {
   id: string;
   user_id: string | null;
-  user_email: string | null; // resolved family-side via auth metadata
+  user_email: string | null; // UUID prefix placeholder; full auth-metadata resolution is Phase 3.4.1 OOS
   asset_type: string;
   date_from: string;
   date_to: string;

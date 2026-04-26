@@ -3,7 +3,10 @@
 import { useState, useTransition } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { CATEGORY_WEIGHTS } from "@/lib/score-engine/weights";
+import {
+  CURRENT_WEIGHTS_VERSION,
+  WEIGHTS_REGISTRY,
+} from "@/lib/score-engine/weights-registry";
 import type { AssetType } from "@/lib/score-engine/types";
 import { cn } from "@/lib/utils";
 
@@ -224,7 +227,9 @@ export function BacktestPanel({
       {/* ---- Tuning slider (Step 7) ---- */}
       <TuningSliderPanel
         assetType={assetType}
-        baselineWeights={CATEGORY_WEIGHTS[assetType]}
+        baselineWeights={
+          WEIGHTS_REGISTRY[CURRENT_WEIGHTS_VERSION].categoryWeights[assetType]
+        }
         onApply={(custom) => {
           setCustomCategoryWeights(custom);
         }}

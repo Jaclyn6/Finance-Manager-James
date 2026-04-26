@@ -35,8 +35,38 @@ function canonicalize(value: unknown): unknown {
 /**
  * Returns a sha256 hex digest of the canonical-JSON form of the
  * request. Idempotent: same request → same hash byte-for-byte.
+ *
+ * `extras` carries data NOT stored on the BacktestRequest type but that
+ * MUST disambiguate the memo key. Specifically, an inline custom-weights
+ * payload from the tuning slider — two payloads that produce the same
+ * lossy stamp suffix on `request.weightsVersion` would otherwise collide.
+ * Resolved-from-id paths can pass `customWeightsPayload` for the same
+ * reason.
  */
-export function hashBacktestRequest(request: BacktestRequest): string {
-  const canonical = JSON.stringify(canonicalize(request));
+export function hashBacktestRequest(
+  request: BacktestRequest,
+  extras?: {
+    customWeightsPayload?:
+      | Record<string, Record<string, number>>
+      | null
+      | undefined;
+  },
+): string {
+  const input =
+    extras?.customWeightsPayload != null
+      ? { request, customWeightsPayload: extras.customWeightsPayload }
+      : request;
+  const canonical = JSON.stringify(canonicalize(input));
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+/** Canonical sha256 hex of an arbitrary plain-JSON value. Used to stamp
+ * the `weights_version` audit suffix in a key-order-independent,
+ * collision-resistant way. Exported so the API route can stamp without
+ * duplicating the canonicalization logic.
+ */
+export function canonicalSha256Hex(value: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(value)))
+    .digest("hex");
 }

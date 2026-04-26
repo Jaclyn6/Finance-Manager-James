@@ -90,18 +90,24 @@ async function FamilyRunsReaderServer() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  // Exclude the current user's own runs server-side. If the user has
+  // run many backtests recently, a naive 20-row LIMIT followed by a
+  // client-side filter would leave nothing for the "다른 가족" panel
+  // even when other family rows exist. The page is proxy-protected so
+  // `user` is non-null in normal flow; the bail is defense-in-depth.
+  if (!user) {
+    return <FamilyRunsReader initialRows={[]} currentUserId={null} />;
+  }
   const { data: rows } = await supabase
     .from("backtest_runs")
     .select(
       "id, user_id, asset_type, date_from, date_to, weights_version, avg_abs_delta, days_above_5pp, created_at",
     )
+    .neq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
 
-  // Resolve user_id → email best-effort. RLS lets us read the
-  // backtest row but auth.users is not directly readable; we use a
-  // placeholder until a future iteration plumbs user metadata
-  // through a dedicated reader.
   const initial = (rows ?? []).map((r) => ({
     ...r,
     avg_abs_delta:
@@ -113,9 +119,7 @@ async function FamilyRunsReaderServer() {
     user_email: r.user_id ? r.user_id.slice(0, 8) : null,
   }));
 
-  return (
-    <FamilyRunsReader initialRows={initial} currentUserId={user?.id ?? null} />
-  );
+  return <FamilyRunsReader initialRows={initial} currentUserId={user.id} />;
 }
 
 function Eyebrow() {

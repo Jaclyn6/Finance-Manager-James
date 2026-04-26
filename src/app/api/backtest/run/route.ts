@@ -12,7 +12,10 @@ import {
   type BacktestRequest,
   type BacktestResult,
 } from "@/lib/score-engine/backtest";
-import { hashBacktestRequest } from "@/lib/score-engine/backtest-hash";
+import {
+  canonicalSha256Hex,
+  hashBacktestRequest,
+} from "@/lib/score-engine/backtest-hash";
 import {
   CURRENT_WEIGHTS_VERSION,
   WEIGHTS_REGISTRY,
@@ -120,7 +123,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { request: backtestRequest, customWeightsId } = validation;
 
   // ---- 3. Memoization lookup ----
-  const requestHash = hashBacktestRequest(backtestRequest);
+  // Hash key must include the actual customWeights payload so two
+  // different weight maps that share the same lossy 8-char stamp on
+  // `request.weightsVersion` don't collide in the cache.
+  const requestHash = hashBacktestRequest(backtestRequest, {
+    customWeightsPayload: validation.inlineCustomWeights,
+  });
   const admin = getSupabaseAdminClient();
 
   const cached = await loadCachedRun(admin, requestHash, user.id);
@@ -149,10 +157,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       categoryWeights: overlaidCategoryWeights,
     };
   } else if (customWeightsId) {
+    // Restrict the lookup to rows the requesting user owns. RLS on
+    // user_weights allows family-shared READS, but using another
+    // family member's saved weights without their participation is an
+    // authz gap — if user A wants to replay user B's weights, user A
+    // first reads the row (allowed by RLS) and resubmits the payload
+    // inline as `customWeights`.
     const customRow = await admin
       .from("user_weights")
       .select("id, payload, user_id")
       .eq("id", customWeightsId)
+      .eq("user_id", user.id)
       .maybeSingle();
     if (customRow.error) {
       return NextResponse.json(
@@ -162,7 +177,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     if (!customRow.data) {
       return NextResponse.json(
-        { error: `user_weights row not found: ${customWeightsId}` },
+        { error: `user_weights row not found or not owned: ${customWeightsId}` },
         { status: 400 },
       );
     }
@@ -211,14 +226,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const durationMs = Date.now() - startMs;
 
   // ---- 8. Persist parent + children ----
-  await persistRun(
-    admin,
-    user.id,
-    requestHash,
-    result,
-    durationMs,
-    resolvedUserWeightsId,
-  );
+  // Surface DB errors to the client as structured JSON so the panel's
+  // `JSON.parse(text)` fallback can read `{ error: string }`. An
+  // unhandled async throw here would yield an opaque 500 with no body.
+  try {
+    await persistRun(
+      admin,
+      user.id,
+      requestHash,
+      result,
+      durationMs,
+      resolvedUserWeightsId,
+    );
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 
   // ---- 9. Return ----
   return NextResponse.json(result, { status: 200 });
@@ -279,10 +304,20 @@ function validateRequest(
 
   // Inline custom weights validation — must be a plain object of
   // assetType → categoryName → number-in-[0,200].
+  // Size caps reject hostile or accidentally-bloated payloads before
+  // the per-key loop does O(n) work.
+  const MAX_ASSET_KEYS = ASSET_TYPES.length; // ≤ 5
+  const MAX_CATEGORY_KEYS = 20; // categoryName union has 6 today; 20 leaves headroom
   const inlineCustomWeights = body.customWeights ?? null;
   if (inlineCustomWeights) {
     if (typeof inlineCustomWeights !== "object" || Array.isArray(inlineCustomWeights)) {
       return { error: "customWeights must be an object" };
+    }
+    const assetKeys = Object.keys(inlineCustomWeights);
+    if (assetKeys.length > MAX_ASSET_KEYS) {
+      return {
+        error: `customWeights has too many assetType keys (max ${MAX_ASSET_KEYS})`,
+      };
     }
     for (const [aType, weightMap] of Object.entries(inlineCustomWeights)) {
       if (!ASSET_TYPES.includes(aType as never)) {
@@ -290,6 +325,12 @@ function validateRequest(
       }
       if (!weightMap || typeof weightMap !== "object" || Array.isArray(weightMap)) {
         return { error: `customWeights[${aType}] must be an object` };
+      }
+      const catKeys = Object.keys(weightMap);
+      if (catKeys.length > MAX_CATEGORY_KEYS) {
+        return {
+          error: `customWeights[${aType}] has too many categories (max ${MAX_CATEGORY_KEYS})`,
+        };
       }
       for (const [cat, w] of Object.entries(weightMap)) {
         if (typeof w !== "number" || !Number.isFinite(w) || w < 0 || w > 200) {
@@ -305,19 +346,18 @@ function validateRequest(
   const modelVersion = body.modelVersion ?? MODEL_VERSION;
 
   // Stamp weights_version for audit. Inline-custom > stored-custom
-  // (UUID-keyed) > registry version.
+  // (UUID-keyed) > registry version. The stamp uses a canonical
+  // sha256 prefix so the same payload always produces the same suffix
+  // regardless of key order. Memoization correctness comes from the
+  // full request_hash (which includes the canonical payload), not
+  // from this audit stamp — but the stamp being canonical avoids
+  // confusing audit rows that look "different" for identical inputs.
   let stampedWeightsVersion = weightsVersion;
   if (inlineCustomWeights) {
-    // Tiny non-crypto hash for the audit suffix only — collisions
-    // are non-fatal (memoization keys off the full request_hash).
-    const sig = JSON.stringify(inlineCustomWeights);
-    let h = 0;
-    for (let i = 0; i < sig.length; i++) {
-      h = (h * 31 + sig.charCodeAt(i)) | 0;
-    }
-    stampedWeightsVersion = `custom-${(h >>> 0).toString(16).slice(0, 8)}`;
+    stampedWeightsVersion = `custom-${canonicalSha256Hex(inlineCustomWeights).slice(0, 16)}`;
   } else if (customWeightsId) {
-    stampedWeightsVersion = `custom-${customWeightsId.slice(0, 8)}`;
+    // Use the full UUID so two saved rows can never collide.
+    stampedWeightsVersion = `custom-${customWeightsId}`;
   }
 
   return {

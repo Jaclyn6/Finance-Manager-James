@@ -154,7 +154,7 @@ describe("runBacktest — null-category propagation", () => {
     expect(snap.replayScore).toBeCloseTo(51.11, 1);
   });
 
-  it("returns neutral 50 when ALL applicable categories are null", () => {
+  it("returns null replay score (and routes to daysMissingInputs) when ALL applicable categories are null", () => {
     const date = "2026-04-22";
     const original: OriginalSnapshot = {
       date,
@@ -177,9 +177,14 @@ describe("runBacktest — null-category propagation", () => {
       new Map([[date, original]]),
       [date],
     );
-    expect(result.snapshots[0]!.replayScore).toBe(50);
-    // 4 applicable us_equity categories all reported missing.
+    // The live dashboard substitutes 50 here for UX; backtest must NOT —
+    // a fabricated score would inflate daysWithReplay and produce a
+    // spurious 50-vs-original delta entry.
+    expect(result.snapshots[0]!.replayScore).toBeNull();
+    expect(result.snapshots[0]!.delta).toBeNull();
     expect(result.snapshots[0]!.gaps.length).toBeGreaterThan(0);
+    expect(result.summary.daysMissingInputs).toBe(1);
+    expect(result.summary.daysWithReplay).toBe(0);
   });
 });
 

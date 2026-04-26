@@ -67,7 +67,9 @@ export async function proxy(request: NextRequest) {
   const isProtected =
     path.startsWith("/dashboard") ||
     path.startsWith("/asset") ||
-    path.startsWith("/changelog");
+    path.startsWith("/changelog") ||
+    path.startsWith("/backtest") ||
+    path.startsWith("/indicators");
 
   if (isProtected && !claims) {
     const redirectUrl = request.nextUrl.clone();

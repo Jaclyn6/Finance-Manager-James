@@ -31,7 +31,7 @@ export type Database = {
           request_hash: string
           request_json: Json
           total_days: number
-          user_id: string | null
+          user_id: string
           user_weights_id: string | null
           weights_version: string
         }
@@ -51,7 +51,7 @@ export type Database = {
           request_hash: string
           request_json: Json
           total_days: number
-          user_id?: string | null
+          user_id: string
           user_weights_id?: string | null
           weights_version: string
         }
@@ -71,7 +71,7 @@ export type Database = {
           request_hash?: string
           request_json?: Json
           total_days?: number
-          user_id?: string | null
+          user_id?: string
           user_weights_id?: string | null
           weights_version?: string
         }
@@ -93,6 +93,7 @@ export type Database = {
           id: string
           original_model_version: string | null
           original_score: number | null
+          raw_inputs: Json | null
           replay_band: string | null
           replay_score: number | null
           run_id: string
@@ -106,6 +107,7 @@ export type Database = {
           id?: string
           original_model_version?: string | null
           original_score?: number | null
+          raw_inputs?: Json | null
           replay_band?: string | null
           replay_score?: number | null
           run_id: string
@@ -119,6 +121,7 @@ export type Database = {
           id?: string
           original_model_version?: string | null
           original_score?: number | null
+          raw_inputs?: Json | null
           replay_band?: string | null
           replay_score?: number | null
           run_id?: string
