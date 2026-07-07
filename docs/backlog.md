@@ -80,6 +80,96 @@ of time.
 | **ECOS** (한국은행 OpenAPI) | Phase 3.1 | Regime classification engine needs Korean macro inputs (BOK rate, KR 10Y, M2, KRW/USD) to define KR-specific market regimes. ECOS adapter ships alongside the regime engine. | Not yet provisioned. Will request when Phase 3.1 starts (free key, https://ecos.bok.or.kr/api/, 100k req/day). |
 | **DART** (전자공시 OpenAPI) | Phase 3.2 | Portfolio overlay needs P/E and P/B for held KR equities. DART exposes EPS / BPS via 정기보고서 endpoint; the adapter computes the ratios and feeds the KR `valuation` category, completing KR's 6/6 category coverage. | **Provisioned 2026-04-26**: `DART_API_KEY` in `.env.local`, GH secrets, Vercel Production env. Live smoke tested (Samsung 005930 임원공시 list returned 200). |
 
+## Advisor pivot follow-ups (2026-07-08, see docs/advisor_pivot_blueprint.md §6)
+
+### Video strategies #3/#4 unconfirmed
+
+**Where it lives now:** `docs/advisor_pivot_blueprint.md` §0 documents
+the 2 confirmed rules (F&G, HY-spread 꺾임) from
+https://www.youtube.com/watch?v=TJ3uAYxPY5k.
+
+**The gap:** the video names 4 strategies; transcript scraping was
+blocked (YouTube page shell only, transcript services 403) and the
+Chrome-session read needs a browser selection the autonomous session
+couldn't make.
+
+**Proposed treatment:** ask the user which 2 remain (likely candidates
+already covered: VIX, 금리차, MDD ladder), or read the transcript in an
+interactive session; map any uncovered rule onto a pillar.
+
+**Why deferred:** advisor already implements a superset of common
+discount indicators; the marginal rule is additive, not structural.
+
+### F&G 7-day delta on the weather strip
+
+**Where it lives now:**
+`src/components/advisor/market-weather-strip.tsx` shows ▲/▼ deltas
+only for VIX / HY spread (`getWeatherDeltas` reads
+`indicator_readings`).
+
+**The gap:** CNN_FG / CRYPTO_FG live in `onchain_readings` (hourly /
+4h cadence), so their series need a separate windowed reader; the F&G
+chips render level-only.
+
+**Proposed treatment:** `getOnchainSeries(keys, endDate, days)` mirror
+of `getIndicatorSeries`, then pass F&G deltas through the same
+`deltas` prop.
+
+**Why deferred:** F&G direction is weaker signal than its level band;
+kept the shipped diff minimal.
+
+### 5y percentile context chips
+
+**Where it lives now:** nothing — enabled by the `ingest-macro` §4.1
+FRED full-window backfill shipped 2026-07-08.
+
+**The gap:** "VIX 24.5" means little to non-experts; "지난 5년 상위
+12% 수준" anchors it.
+
+**Proposed treatment:** percentile helper over `getIndicatorSeries`
+(1825d window) + a sub-line on weather chips and pillar reasons.
+Blocked until the backfill has run once in production (verify with
+`select count(*) from indicator_readings where indicator_key='VIXCLS'`
+≫ 100).
+
+**Why deferred:** needs the production backfill to land first.
+
+### Verdict history persistence
+
+**Where it lives now:** verdicts are computed on-read
+(`src/lib/data/advisor.ts`), never stored.
+
+**The gap:** no "판정이 언제 할인→전환으로 바뀌었나" timeline, no
+hit-rate tracking ("할인 판정 후 3개월 수익률"), no notification hook.
+
+**Proposed treatment:** daily `advisor_verdicts` table written by a
+cron tail (asset_type, date, label, net_score, confidence, evidence
+JSONB), plus a timeline strip on `/asset/[slug]` and eventual
+verdict-flip alerting.
+
+**Why deferred:** schema + cron surface; deserves its own reviewed
+feature-unit after the pivot ships.
+
+### GH Actions 60-day auto-disable keepalive
+
+**Where it lives now:** manual `gh workflow enable` fix (2026-07-08)
+after all three cron workflows silently stopped on 2026-06-25 (60
+days after the 2026-04-27 last-commit).
+
+**The gap:** if the repo goes quiet ≥60 days again, collection dies
+silently again — the exact failure mode the user reported.
+
+**Proposed treatment (pick one):**
+1. Monthly scheduled workflow that pushes an empty keepalive commit
+   (resets the inactivity clock; ironic but standard).
+2. Move all crons to an external scheduler (cron-job.org / Vercel
+   paid) — no inactivity rule.
+3. Ops-side: the improvement loop / a monthly reminder checks
+   `gh run list` freshness.
+
+**Why deferred:** commit activity resumed today resets the clock;
+needs a considered choice, not a rushed one.
+
 ## Data-pipeline reliability
 
 ### Market-holiday calendar integration (option 3)
