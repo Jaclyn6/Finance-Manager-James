@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from "next/cache";
 
+import type { IndicatorSeriesPoint } from "@/lib/advisor/series";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -357,6 +358,77 @@ export async function getLatestIndicatorReadings(): Promise<
     if (row.fetch_status !== "success") continue;
     if (out[row.indicator_key] !== undefined) continue;
     out[row.indicator_key] = row.value_raw;
+  }
+  return out;
+}
+
+/**
+ * Raw value series per indicator key over a trailing calendar window —
+ * the advisor's direction inputs (HY-spread "꺾임", VIX cooling) and
+ * the Market Weather strip's 7-day deltas read from this.
+ *
+ * Depth caveat: `ingest-macro` historically persisted ONLY the latest
+ * FRED observation per run, so rows accrue one-per-day from
+ * 2026-03-20 onward; the same cron now also upserts the full fetched
+ * FRED window (raw-only rows), so after one post-deploy run the series
+ * is ~5y deep and self-heals. Callers must treat a thin series as
+ * "direction unknown" (null), not as flat.
+ *
+ * `endDate` is part of the cache key so the value rolls with the
+ * calendar day — same convention as `getPriceHistoryForTicker`.
+ */
+export async function getIndicatorSeries(
+  keys: string[],
+  endDate: string,
+  windowDays: number,
+): Promise<Record<string, IndicatorSeriesPoint[]>> {
+  "use cache";
+  cacheTag(CACHE_TAGS.macroSnapshot);
+  cacheLife("days");
+
+  const safeDays =
+    Number.isFinite(windowDays) && windowDays > 0 ? Math.floor(windowDays) : 30;
+  const endMs = Date.parse(`${endDate}T00:00:00Z`);
+  const startDate = Number.isFinite(endMs)
+    ? new Date(endMs - safeDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10)
+    : endDate;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("indicator_readings")
+    .select("indicator_key, observed_at, value_raw, fetch_status")
+    .in("indicator_key", keys)
+    .gte("observed_at", startDate)
+    .lte("observed_at", `${endDate}T23:59:59Z`)
+    .order("observed_at", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `getIndicatorSeries(${keys.join(",")}, ${endDate}, ${windowDays}) failed: ${error.message} (${error.code ?? "no code"})`,
+    );
+  }
+
+  const out: Record<string, IndicatorSeriesPoint[]> = {};
+  for (const key of keys) out[key] = [];
+  for (const row of data ?? []) {
+    if (row.fetch_status !== "success") continue;
+    const value = Number(row.value_raw);
+    if (!Number.isFinite(value)) continue;
+    // observed_at may come back as a date or a full timestamp
+    // depending on column rendering — normalize to YYYY-MM-DD. Rows
+    // are unique per (key, observed_at, model_version); when a raw-only
+    // backfill row and a scored row share a date the values are the
+    // same FRED observation, so last-write-wins dedupe is safe.
+    const date = String(row.observed_at).slice(0, 10);
+    const bucket = out[row.indicator_key];
+    if (!bucket) continue;
+    if (bucket.length > 0 && bucket[bucket.length - 1].date === date) {
+      bucket[bucket.length - 1] = { date, value };
+    } else {
+      bucket.push({ date, value });
+    }
   }
   return out;
 }

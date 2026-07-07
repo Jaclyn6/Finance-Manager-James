@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
+import { AdvisorEvidence } from "@/components/advisor/advisor-evidence";
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
 import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { ContributingIndicators } from "@/components/asset/contributing-indicators";
 import { ScorePriceOverlay } from "@/components/asset/score-price-overlay";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
+import { getAdvisorViewForAsset } from "@/lib/data/advisor";
 import {
   getClosestEarlierSnapshotDate,
   getCompositeSnapshotsForAssetRange,
@@ -74,6 +76,10 @@ export async function AssetContent({
   // cache-life. Price reader lives behind the `prices` tag
   // (blueprint §7.4 visualization-only) and is invalidated by
   // ingest-prices + ingest-technical.
+  // The advisor evidence view is LATEST-ONLY (same rule as the
+  // dashboard verdict cards): the verdict is computed from today's
+  // readings + price series, so rendering it under a historical
+  // `?date=` would pair a past composite with today's judgment.
   const [
     snapshots,
     trendSeries,
@@ -81,6 +87,7 @@ export async function AssetContent({
     cutoverDate,
     signalEvent,
     latestRawValues,
+    advisorView,
   ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
@@ -109,6 +116,9 @@ export async function AssetContent({
     // value is informational context). Phase C scoring-transparency
     // §5 Option B (no schema change to contributing_indicators JSONB).
     getLatestIndicatorReadings(),
+    selectedDate === null
+      ? getAdvisorViewForAsset(assetType, today)
+      : Promise.resolve(null),
   ]);
 
   const snapshot = snapshots.find((s) => s.asset_type === assetType) ?? null;
@@ -158,6 +168,8 @@ export async function AssetContent({
           {TREND_WINDOW_DAYS}일 추이입니다.
         </p>
       </div>
+
+      {advisorView !== null && <AdvisorEvidence view={advisorView} />}
 
       {/*
         Signal alignment sits ABOVE the composite per plan §0.5 tenet 4

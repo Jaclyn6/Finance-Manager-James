@@ -1,15 +1,19 @@
 import { connection } from "next/server";
 
+import { MarketWeatherStrip } from "@/components/advisor/market-weather-strip";
+import { VerdictCard } from "@/components/advisor/verdict-card";
 import { AssetCard } from "@/components/dashboard/asset-card";
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
 import { RecentChanges } from "@/components/dashboard/recent-changes";
 import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
+import { getAdvisorViews, getWeatherDeltas } from "@/lib/data/advisor";
 import { getChangelogAroundDate } from "@/lib/data/changelog";
 import {
   getClosestEarlierSnapshotDate,
   getCompositeSnapshotsForDate,
   getLatestCompositeSnapshots,
+  getLatestIndicatorReadings,
 } from "@/lib/data/indicators";
 import { getLatestSignalEvent } from "@/lib/data/signals";
 import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
@@ -69,12 +73,29 @@ export async function DashboardContent({
   // recent row ≤ anchorDate or `null` when no row has been computed
   // yet (first day of Phase 2); the SignalAlignmentCard renders its
   // own empty state in that case, so a null here is non-fatal.
-  const [snapshots, changelog, signalEvent] = await Promise.all([
+  // The advisor verdict + weather strip are LATEST-ONLY surfaces: the
+  // verdict is computed from today's readings and price series, so
+  // rendering it under a historical `?date=` would pair yesterday's
+  // composite with today's judgment — misleading. Historical mode
+  // keeps the pre-pivot composite view.
+  const [
+    snapshots,
+    changelog,
+    signalEvent,
+    advisorViews,
+    weatherReadings,
+    weatherDeltas,
+  ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
       : getCompositeSnapshotsForDate(selectedDate),
     getChangelogAroundDate(anchorDate, 14),
     getLatestSignalEvent(selectedDate ?? undefined),
+    selectedDate === null ? getAdvisorViews(today) : Promise.resolve(null),
+    selectedDate === null
+      ? getLatestIndicatorReadings()
+      : Promise.resolve(null),
+    selectedDate === null ? getWeatherDeltas(today) : Promise.resolve(null),
   ]);
 
   // Empty selected-date → offer a quick jump to the closest earlier
@@ -113,6 +134,42 @@ export async function DashboardContent({
 
   return (
     <div className="space-y-6 md:space-y-8">
+      {/*
+        Advisor verdict section leads the page (PRD pivot 2026-07-08):
+        the product's core question is "지금 이 하락이 할인인가,
+        추세전환인가" — everything below (signals, composite score) is
+        supporting evidence. Latest-mode only; see fetch block above.
+      */}
+      {advisorViews !== null && (
+        <section className="space-y-3 md:space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight md:text-xl">
+              지금이 할인 구간인가?
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              낙폭·추세·심리·변동성·매크로 근거로 조정(할인)과 추세전환을
+              판별합니다
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {advisorViews.map((view) => (
+              <VerdictCard
+                key={view.assetType}
+                view={view}
+                currentDate={selectedDate}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {weatherReadings !== null && (
+        <MarketWeatherStrip
+          readings={weatherReadings}
+          deltas={weatherDeltas ?? undefined}
+        />
+      )}
+
       {/*
         Signal alignment sits ABOVE the composite per plan §0.5 tenet 4:
         "actionable over aggregate" — users care first about whether the
