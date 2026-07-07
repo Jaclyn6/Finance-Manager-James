@@ -31,7 +31,10 @@ import {
 } from "@/lib/score-engine/category-aggregators";
 import { computeComposite } from "@/lib/score-engine/composite";
 import { computeCompositeV2 } from "@/lib/score-engine/composite-v2";
-import { fetchFredSeries } from "@/lib/score-engine/indicators/fred";
+import {
+  fetchFredSeries,
+  type FredFetchResult,
+} from "@/lib/score-engine/indicators/fred";
 import { computeZScore, zScoreTo0100 } from "@/lib/score-engine/normalize";
 import { computeSignals } from "@/lib/score-engine/signals";
 import { computeTopMovers } from "@/lib/score-engine/top-movers";
@@ -116,6 +119,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let successCount = 0;
   let failCount = 0;
   let snapshotsWritten = 0;
+  let historyRowsWritten = 0;
   let errorSummary: string | null = null;
 
   try {
@@ -325,6 +329,90 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // ---- 4. Write readings (single round-trip, upsert on dedup idx) ----
     await writeIndicatorReadings(readings);
+
+    // ---- 4.1. Backfill the full fetched FRED window (raw-only) ----
+    //
+    // Every fetch above already carries its complete observation
+    // window (5y for daily series) in memory — historically we
+    // persisted only `result.latest` and discarded the rest, so
+    // `indicator_readings` accrued exactly one row per day from
+    // 2026-03-20. The advisor's direction reads (HY-spread "꺾임",
+    // VIX cooling — `getIndicatorSeries` / `computeWowDelta`) and any
+    // future percentile context need the actual series, so we now
+    // upsert the whole window as RAW-ONLY rows: `score_0_100` and
+    // `value_normalized` stay null (same contract as the signal-only
+    // ICSA/WDTGAL rows — a historical z-score computed against
+    // today's window would be look-ahead-biased, and §4.5 tenet 1
+    // forbids synthesizing scores outside the composite path).
+    //
+    // Idempotent on (indicator_key, observed_at, model_version), so
+    // each run is a self-healing backfill: FRED revisions overwrite,
+    // missed cron days repair themselves, and the first post-deploy
+    // run seeds ~5y of depth in one pass. The latest observation is
+    // EXCLUDED — its scored row was just written above and a raw-only
+    // row in this batch would clobber it.
+    //
+    // Soft-failure: history is enrichment. If this block throws, the
+    // scored pipeline above has already landed — log, append to
+    // errorSummary, continue (same policy as the signals tail).
+    try {
+      const historyRows: TablesInsert<"indicator_readings">[] = [];
+      const collectHistory = (
+        key: string,
+        result: FredFetchResult,
+        config: {
+          sourceName: string;
+          sourceUrl: string;
+          frequency: string;
+          windowYears: number;
+        },
+      ): void => {
+        if (result.fetch_status !== "success" || !result.latest) return;
+        const latestDate = result.latest.date;
+        for (const obs of result.observations) {
+          if (obs.value === null || obs.date === latestDate) continue;
+          historyRows.push({
+            indicator_key: key,
+            model_version: MODEL_VERSION,
+            observed_at: obs.date,
+            source_name: config.sourceName,
+            source_url: config.sourceUrl,
+            frequency: config.frequency,
+            window_used: `${config.windowYears}y`,
+            fetch_status: "success",
+            value_raw: obs.value,
+            value_normalized: null,
+            score_0_100: null,
+          });
+        }
+      };
+
+      for (const { key, result } of fetches) {
+        collectHistory(key, result, INDICATOR_CONFIG[key]);
+      }
+      for (const { key, result } of signalFetches) {
+        collectHistory(key, result, PHASE2_FRED_SIGNAL_INPUTS[key]);
+      }
+      for (const { key, result } of overlayFetches) {
+        collectHistory(key, result, PHASE2_FRED_REGIONAL_OVERLAY[key]);
+      }
+
+      // ~12k rows on a full 5y window across 11 series. Chunked so a
+      // mid-write failure loses at most one chunk (earlier chunks stay
+      // committed; the next run repairs the rest — upsert idempotency).
+      const HISTORY_UPSERT_CHUNK = 1000;
+      for (let i = 0; i < historyRows.length; i += HISTORY_UPSERT_CHUNK) {
+        const chunk = historyRows.slice(i, i + HISTORY_UPSERT_CHUNK);
+        await writeIndicatorReadings(chunk);
+        historyRowsWritten += chunk.length;
+      }
+    } catch (histErr) {
+      const msg = histErr instanceof Error ? histErr.message : String(histErr);
+      console.error("[cron ingest-macro] history backfill failed:", msg);
+      errorSummary = errorSummary
+        ? `${errorSummary}; history_backfill: ${msg}`
+        : `history_backfill: ${msg}`;
+    }
 
     // ---- 4.5. Read Phase 2 category inputs for composite-v2 ----
     //
@@ -717,6 +805,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       indicators_success: successCount,
       indicators_failed: failCount,
       snapshots_written: snapshotsWritten,
+      history_rows_written: historyRowsWritten,
       duration_ms: durationMs,
       error_summary: errorSummary,
     },

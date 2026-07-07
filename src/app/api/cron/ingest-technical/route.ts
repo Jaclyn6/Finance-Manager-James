@@ -53,10 +53,13 @@ type PriceReadingInsert = TablesInsert<"price_readings">;
  *         Bollinger(20,2), Disparity and map each to a 0-100 score
  *         via the blueprint §4.3 normalizers.
  *      d. Write one row per indicator into `technical_readings`.
- *      e. Upsert the most recent bar into `price_readings` — shared
- *         fetch, two writes (blueprint §3.3 + §7.4 comment: price
- *         history is visualization-only, but we piggyback on the
- *         AV fetch to avoid burning a second ~12-call quota).
+ *      e. Upsert the FULL fetched bar window into `price_readings` —
+ *         shared fetch, two writes (blueprint §3.3). Full-window (not
+ *         latest-bar-only, changed 2026-07-08) because the advisor's
+ *         52-week drawdown/MDD math needs deep close history; the
+ *         idempotent (ticker, price_date) upsert makes every run a
+ *         self-healing backfill. `price_rows_written` in the response
+ *         therefore counts BARS (~100-500/ticker), not tickers.
  *      f. sleep(13_000ms) — Alpha Vantage free tier is 5/min.
  *   3. Write `ingest_runs` audit row (always, even on partial failure).
  *   4. `revalidateTag(CACHE_TAGS.technical, { expire: 0 })` and
@@ -219,7 +222,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       // ----- 2b. Derive closes + indicator computations -----
-      const { technicalRows, priceRow } = computeTickerRows(
+      const { technicalRows, priceRows } = computeTickerRows(
         entry,
         fetchResult.bars,
         fetchResult.source_name,
@@ -229,11 +232,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       await upsertTechnicalRows(supabase, technicalRows);
       technicalRowsWritten += technicalRows.length;
 
-      // ----- 2e. Upsert price_readings for the latest bar -----
-      // Visualization-only (blueprint §7.4). Shared fetch, two writes.
-      if (priceRow) {
-        await upsertPriceRow(supabase, priceRow);
-        priceRowsWritten++;
+      // ----- 2e. Upsert price_readings for the full bar window -----
+      // Shared fetch, two writes (§3.3). Full-window upsert = advisor
+      // drawdown history + self-healing backfill; see computeTickerRows.
+      if (priceRows.length > 0) {
+        await upsertPriceRows(supabase, priceRows);
+        priceRowsWritten += priceRows.length;
       }
 
       tickersSuccess++;
@@ -348,7 +352,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 interface ComputedRows {
   technicalRows: TechnicalReadingInsert[];
-  priceRow: PriceReadingInsert | null;
+  priceRows: PriceReadingInsert[];
 }
 
 function computeTickerRows(
@@ -512,23 +516,29 @@ function computeTickerRows(
     }),
   );
 
-  // ---- Price readings row for the latest bar ----
-  // Visualization-only (blueprint §7.4). Source matches whichever tier
-  // of the fallback chain served the bars, so a future audit-trail
-  // query can attribute price coverage by tier.
-  const priceRow: PriceReadingInsert = {
+  // ---- Price readings rows for the FULL fetched window ----
+  // Visualization + advisor drawdown input (§7.4 keeps this out of the
+  // score engine; the advisor module is a separate legitimate consumer).
+  // Writing every bar of the window — not just the latest — matters:
+  // the advisor's 52-week peak / MDD math needs deep history, and the
+  // idempotent (ticker, price_date) upsert makes each cron run a
+  // self-healing backfill (AV compact 100 bars / Twelve Data 300 /
+  // Yahoo ~2y land in one pass, and any gap from a missed cron day is
+  // repaired the next day). Source matches whichever tier of the
+  // fallback chain served the bars.
+  const priceRows: PriceReadingInsert[] = ordered.map((bar) => ({
     ticker: entry.ticker,
     asset_type: entry.asset_type,
-    price_date: observedAt,
-    open: latest.open,
-    high: latest.high,
-    low: latest.low,
-    close: latest.close,
-    volume: latest.volume,
+    price_date: bar.date,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
     source_name: sourceName,
-  };
+  }));
 
-  return { technicalRows, priceRow };
+  return { technicalRows, priceRows };
 }
 
 // ---------------------------------------------------------------------------
@@ -608,17 +618,28 @@ async function upsertTechnicalRows(
   }
 }
 
-async function upsertPriceRow(
+/**
+ * Chunk size for bulk price upserts. Yahoo's 2y window is ~504 bars;
+ * PostgREST handles that in one call fine, but chunking keeps each
+ * request payload small and bounds the damage of a mid-write failure
+ * (earlier chunks stay committed — upsert is idempotent on retry).
+ */
+const PRICE_UPSERT_CHUNK = 500;
+
+async function upsertPriceRows(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
-  row: PriceReadingInsert,
+  rows: PriceReadingInsert[],
 ): Promise<void> {
-  const { error } = await supabase
-    .from("price_readings")
-    .upsert(row, { onConflict: "ticker,price_date" });
-  if (error) {
-    throw new Error(
-      `price_readings upsert failed: ${error.message} (${error.code ?? "no code"})`,
-    );
+  for (let i = 0; i < rows.length; i += PRICE_UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + PRICE_UPSERT_CHUNK);
+    const { error } = await supabase
+      .from("price_readings")
+      .upsert(chunk, { onConflict: "ticker,price_date" });
+    if (error) {
+      throw new Error(
+        `price_readings upsert failed (chunk ${i / PRICE_UPSERT_CHUNK + 1}): ${error.message} (${error.code ?? "no code"})`,
+      );
+    }
   }
 }
 
