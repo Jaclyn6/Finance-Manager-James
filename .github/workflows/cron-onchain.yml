@@ -32,10 +32,11 @@ name: Onchain cron (BGeometrics MVRV + SOPR + ETF flow + crypto F&G, every 4h)
 
 on:
   schedule:
-    # Every 4 hours UTC, on the hour. 6 fires/day = 12 BGeometrics calls.
-    # Drift up to ~10 min under GHA load is fine — staleness threshold
-    # for onchain is 4h (Phase 3.0 §2.3 cadence change).
-    - cron: "0 */4 * * *"
+    # Every 4 hours at :43 UTC — off the :00 mark, where GHA silently
+    # skips scheduled runs under load (see cron-hourly.yml note,
+    # 2026-07-08). 6 fires/day = 12 BGeometrics calls; staleness
+    # threshold for onchain is 4h (Phase 3.0 §2.3 cadence change).
+    - cron: "43 */4 * * *"
   workflow_dispatch:
 
 # Never overlap two runs of this workflow. Cancel an in-flight run when

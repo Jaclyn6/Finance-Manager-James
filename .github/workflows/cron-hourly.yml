@@ -36,10 +36,13 @@ name: Hourly cron (cnn-fg / news)
 
 on:
   schedule:
-    # Every hour, on the hour, UTC. GHA scheduled workflows have a
-    # documented ~10-minute drift under load, which is fine — our
-    # staleness threshold is 2h per blueprint §3.1.
-    - cron: "0 * * * *"
+    # Every hour at :17 UTC — deliberately OFF the :00 mark. GHA does
+    # not just drift on the top-of-hour slot, it silently SKIPS runs
+    # when the shared schedulers saturate (observed 2026-07-08: 4+
+    # consecutive hourly fires dropped while off-peak fires ran fine).
+    # Off-minute scheduling is the standard mitigation; our staleness
+    # threshold is 2h per blueprint §3.1, so :17 vs :00 is immaterial.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 jobs:

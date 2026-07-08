@@ -45,8 +45,11 @@ name: Technical & Prices Cron (daily)
 
 on:
   schedule:
-    # 22:00 UTC = 07:00 KST next day. US market closed ~1h earlier.
-    - cron: "0 22 * * *"
+    # 22:07 UTC = 07:07 KST next day. US market closed ~2h earlier.
+    # :07 not :00 — GHA silently skips top-of-hour scheduled runs
+    # under load (see cron-hourly.yml note, 2026-07-08; this workflow's
+    # 22:00 schedule was already firing ~23:00 from the same crush).
+    - cron: "7 22 * * *"
   # Manual-dispatch button in the Actions UI for Step 7 acceptance
   # testing (blueprint §9 Step 7 acceptance: "A single GHA workflow
   # manual-dispatch from the Actions UI succeeds end-to-end on a
