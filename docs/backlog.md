@@ -9,7 +9,19 @@ picks them up.
 
 ## UI / UX polish
 
-### Distinguish 일시 vs 영구 "데이터 부족" on signal tiles
+### ~~Distinguish 일시 vs 영구 "데이터 부족" on signal tiles~~ — OBSOLETE 2026-07-08
+
+Premise dissolved: the "permanent until Phase 3 budget decision"
+category no longer exists. Phase 3.0's fallback chain + the
+2026-07-08 full-window price backfill give every ticker ≥200 bars, so
+MA_200 / DISPARITY / MACD are 26/26 success for July (verified in
+prod), DISLOCATION has its inputs, and MOMENTUM_TURN left "unknown"
+(2026-07-08 signal_events shows it ACTIVE — 3-signal alignment with
+ECONOMY_INTACT + CAPITULATION). Remaining 데이터 부족 states are all
+transient-by-construction; a two-kind pill would render one kind.
+Original text kept below for context.
+
+### (original) Distinguish 일시 vs 영구 "데이터 부족" on signal tiles
 
 **Where it lives now:** `src/components/dashboard/signal-alignment-card.tsx`
 + `src/lib/utils/signal-labels.ts::describeSignalSituation`. Both
