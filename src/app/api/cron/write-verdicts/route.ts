@@ -34,8 +34,12 @@ import type { TablesInsert } from "@/types/database";
  *      (asset_type, verdict_date, engine_version) — same-day reruns
  *      overwrite with the latest computation, matching every other
  *      idempotent writer in the pipeline.
- *   4. `ingest_runs` audit row (always, even on failure).
- *   5. `revalidateTag(advisorVerdicts, { expire: 0 })` on success.
+ *   4. Persist today's STOCK_FG_PROXY as a raw-only provenance row
+ *      (`proxyToOnchainRow`) — soft-failure enrichment: a proxy
+ *      hiccup surfaces in `error_summary` but never flips the
+ *      response to error/500 (the verdicts are this route's job).
+ *   5. `ingest_runs` audit row (always, even on failure).
+ *   6. `revalidateTag(advisorVerdicts, { expire: 0 })` on success.
  *
  * Scale: 5 asset types × 1 row/day. Trivial.
  */
@@ -127,7 +131,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     revalidateTag(CACHE_TAGS.advisorVerdicts, { expire: 0 });
   }
 
-  const status: "success" | "error" = errorSummary ? "error" : "success";
+  // Error status/500 ONLY when the verdicts themselves failed — a
+  // soft-failure proxy persist must not hard-fail the GH Actions step
+  // (`curl -sSf` treats non-2xx as fatal); same status philosophy as
+  // ingest-macro's `errorSummary && snapshotsWritten === 0` gate
+  // (Trigger 2 review, 2026-07-08).
+  const status: "success" | "error" =
+    errorSummary && rowsWritten === 0 ? "error" : "success";
   return NextResponse.json(
     {
       status,

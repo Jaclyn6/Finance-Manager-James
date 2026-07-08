@@ -40,6 +40,19 @@ describe("proxyToOnchainRow", () => {
     expect(payload.missing).toEqual([]);
   });
 
+  it("a value from 3/4 components → partial, not success (convention: any missing = partial)", () => {
+    const threeOfFour: StockFgProxyResult = {
+      value: 41.7,
+      components: FULL.components.map((c) =>
+        c.key === "safeHaven" ? { ...c, score: null } : c,
+      ),
+      missing: ["safeHaven"],
+    };
+    const row = proxyToOnchainRow(threeOfFour, "2026-07-08");
+    expect(row.fetch_status).toBe("partial");
+    expect(row.value_raw).toBe(41.7);
+  });
+
   it("null value → partial row, never a fabricated number", () => {
     const dark: StockFgProxyResult = {
       value: null,

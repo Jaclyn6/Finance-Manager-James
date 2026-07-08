@@ -19,9 +19,13 @@ import { ADVISOR_ENGINE_VERSION } from "./verdict";
  * provenance: this number came from the advisor's rule-set, not the
  * composite engine's.
  *
- * A null proxy value (all four components uncomputable) writes a
- * `partial` row with the component detail in raw_payload — a dark
- * day should be visible in the history, not a silent gap.
+ * `fetch_status` follows the table-wide convention (ingest-macro's
+ * compositeStatus, ingest-onchain's ETF-flow row): `success` ONLY
+ * when every component computed; `partial` the moment ANY component
+ * is missing — a 1-of-4 value must not masquerade as a full reading.
+ * A null value (all four missing) is also `partial`, with the
+ * component detail in raw_payload — a dark day should be visible in
+ * the history, not a silent gap.
  */
 export function proxyToOnchainRow(
   proxy: StockFgProxyResult,
@@ -33,7 +37,10 @@ export function proxyToOnchainRow(
     observed_at: observedAt,
     model_version: ADVISOR_ENGINE_VERSION,
     source_name: "in_house_proxy",
-    fetch_status: proxy.value === null ? "partial" : "success",
+    fetch_status:
+      proxy.value === null || proxy.missing.length > 0
+        ? "partial"
+        : "success",
     value_raw: proxy.value,
     value_normalized: null,
     score_0_100: null,

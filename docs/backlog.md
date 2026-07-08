@@ -119,9 +119,12 @@ fallback in `getAdvisorViews` (sentiment pillar labels 자체 산출),
 weather-strip 자체 프록시 tag (delta arrow suppressed on the proxy
 path — stale CNN trend must not sit next to a proxy value).
 `ingest-cnn-fg` keeps running so the system self-heals if CNN
-unblocks. NOT persisted to a table (computed on read); persist as an
-`onchain_readings` STOCK_FG_PROXY row only if a future consumer needs
-history of the proxy itself.
+unblocks. Since loop iteration 11 the proxy IS persisted daily: the
+write-verdicts cron upserts a raw-only `onchain_readings`
+STOCK_FG_PROXY row (score null per §4.5, model_version =
+ADVISOR_ENGINE_VERSION, partial when any component missing) so the
+proxy accrues its own auditable history. Composite-sentiment wiring
+remains the deferred product decision below.
 
 **Known remaining gap (deliberate):** the COMPOSITE engine's
 sentiment category (`aggregateSentiment` reading CNN_FG rows in
