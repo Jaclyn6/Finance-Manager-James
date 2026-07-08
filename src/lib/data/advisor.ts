@@ -323,10 +323,13 @@ export async function getWeatherDeltas(
 }
 
 /**
- * 5-year percentile rank of each direction gauge's CURRENT value,
- * for the weather strip's "5년 상위 X%" context line. The rank is
- * computed against the same series the current value is the last
- * point of, so chip and history can't disagree. Null (hidden chip
+ * 5-year percentile rank of each direction gauge's value, for the
+ * weather strip's "5년 상위 X%" context line. The rank is computed
+ * against the series' own LAST point — internally consistent, though
+ * it can lag the chip's headline value by a publication day (the
+ * chip reads getLatestIndicatorReadings, which may surface a newer
+ * row than the daily-collapsed window). A one-day skew moves the
+ * rank by well under a percent of the 5y window. Null (hidden chip
  * line) until the FRED backfill has seeded ≥250 observations.
  */
 export async function getWeatherPercentiles(
