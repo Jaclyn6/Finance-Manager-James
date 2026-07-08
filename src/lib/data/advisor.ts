@@ -16,6 +16,11 @@ import {
 } from "@/lib/utils/asset-labels";
 
 import { computeWowDelta, percentileRank } from "@/lib/advisor/series";
+import type { IndicatorSeriesPoint } from "@/lib/advisor/series";
+import {
+  computeStockFgProxy,
+  type StockFgProxyResult,
+} from "@/lib/advisor/stock-fg-proxy";
 
 import {
   getIndicatorSeries,
@@ -58,7 +63,10 @@ import { CACHE_TAGS } from "./tags";
  *                   itself when ≥50/≥200 closes exist (essential for
  *                   BTC, which has price rows but no technical rows)
  *   sentiment.fg    CNN_FG (equity/ETF) or CRYPTO_FG (crypto) — both
- *                   stored raw 0-100, low = fear
+ *                   stored raw 0-100, low = fear; when CNN_FG has no
+ *                   fresh success row (2026-06-24 outage), equity
+ *                   falls back to computeStockFgProxy with isProxy
+ *                   labeling
  *   volatility.vix  VIXCLS
  *   volatility.vixWow    computeWowDelta over VIXCLS 21d series
  *   macro.macroScore  latest composite snapshot for the SAME asset —
@@ -98,6 +106,13 @@ export const SENTIMENT_DIRECTION_KEYS = ["CNN_FG", "CRYPTO_FG"] as const;
  * hidden until the backfilled depth actually exists.
  */
 export const PERCENTILE_WINDOW_DAYS = 1825;
+
+/**
+ * Calendar window for the STOCK_FG_PROXY ingredients: 125 trading
+ * days (momentum MA) needs ~185 calendar days; 400 gives holiday/gap
+ * headroom and doubles as the HY-spread percentile reference window.
+ */
+export const FG_PROXY_WINDOW_DAYS = 400;
 
 const MA_KEYS = ["MA_50", "MA_200"] as const;
 
@@ -207,13 +222,14 @@ export async function getAdvisorViews(
 
   // Two Promise.all groups (not one spread array) so TypeScript keeps
   // the tuple types of the fixed group instead of collapsing to a union.
-  const [[readings, snapshots, maByTicker, directionSeries], histories] =
+  const [[readings, snapshots, maByTicker, directionSeries, fgProxy], histories] =
     await Promise.all([
       Promise.all([
         getLatestIndicatorReadings(),
         getLatestCompositeSnapshots(),
         getLatestMaByTicker(tickers),
         getIndicatorSeries([...DIRECTION_KEYS], endDate, DIRECTION_WINDOW_DAYS),
+        getStockFgProxy(endDate),
       ]),
       Promise.all(
         tickers.map((t) =>
@@ -224,6 +240,16 @@ export async function getAdvisorViews(
 
   const vixWow = computeWowDelta(directionSeries["VIXCLS"] ?? []);
   const hySpreadWow = computeWowDelta(directionSeries["BAMLH0A0HYM2"] ?? []);
+
+  // Stock F&G source order: CNN when its latest row is a success
+  // (it may recover — self-healing), else the in-house proxy with the
+  // isProxy flag so every consumer labels it 자체 산출. Crypto F&G
+  // (alternative.me) is unaffected by the CNN outage.
+  const cnnFg = readings["CNN_FG"] ?? null;
+  const equitySentiment =
+    cnnFg !== null
+      ? { fearGreed: cnnFg, isProxy: false }
+      : { fearGreed: fgProxy.value, isProxy: fgProxy.value !== null };
 
   const macroScoreByAsset = new Map<AssetType, number | null>();
   for (const snapshot of snapshots) {
@@ -251,12 +277,10 @@ export async function getAdvisorViews(
         ma50: ma?.ma50 ?? smaFromSeries(series, 50),
         ma200: ma?.ma200 ?? smaFromSeries(series, 200),
       },
-      sentiment: {
-        fearGreed:
-          assetClass === "crypto"
-            ? (readings["CRYPTO_FG"] ?? null)
-            : (readings["CNN_FG"] ?? null),
-      },
+      sentiment:
+        assetClass === "crypto"
+          ? { fearGreed: readings["CRYPTO_FG"] ?? null, isProxy: false }
+          : equitySentiment,
       volatility: { vix: readings["VIXCLS"] ?? null, vixWow },
       macro: {
         macroScore: macroScoreByAsset.get(assetType) ?? null,
@@ -294,6 +318,38 @@ export async function getAdvisorViewForAsset(
 ): Promise<AdvisorAssetView | null> {
   const views = await getAdvisorViews(endDate);
   return views.find((v) => v.assetType === assetType) ?? null;
+}
+
+/**
+ * In-house stock F&G proxy assembled from already-collected series —
+ * the CNN-outage fallback (docs/backlog.md "Stock F&G outage",
+ * blueprint §0). Inner readers are all cached per calendar day, so
+ * this is cheap after the dashboard's first render.
+ */
+export async function getStockFgProxy(
+  endDate: string,
+): Promise<StockFgProxyResult> {
+  const toPoints = (
+    rows: Array<{ price_date: string; close: number }>,
+  ): IndicatorSeriesPoint[] =>
+    rows.map((r) => ({ date: r.price_date, value: r.close }));
+
+  const [spy, tlt, fredSeries] = await Promise.all([
+    getPriceHistoryForTicker("SPY", endDate, FG_PROXY_WINDOW_DAYS),
+    getPriceHistoryForTicker("TLT", endDate, FG_PROXY_WINDOW_DAYS),
+    getIndicatorSeries(
+      [...DIRECTION_KEYS],
+      endDate,
+      FG_PROXY_WINDOW_DAYS,
+    ),
+  ]);
+
+  return computeStockFgProxy({
+    spyCloses: toPoints(spy),
+    tltCloses: toPoints(tlt),
+    vixSeries: fredSeries["VIXCLS"] ?? [],
+    hySeries: fredSeries["BAMLH0A0HYM2"] ?? [],
+  });
 }
 
 /**

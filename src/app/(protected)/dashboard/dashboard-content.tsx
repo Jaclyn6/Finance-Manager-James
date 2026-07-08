@@ -9,6 +9,7 @@ import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-car
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
 import {
   getAdvisorViews,
+  getStockFgProxy,
   getWeatherDeltas,
   getWeatherPercentiles,
 } from "@/lib/data/advisor";
@@ -90,6 +91,7 @@ export async function DashboardContent({
     weatherReadings,
     weatherDeltas,
     weatherPercentiles,
+    fgProxy,
   ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
@@ -104,6 +106,7 @@ export async function DashboardContent({
     selectedDate === null
       ? getWeatherPercentiles(today)
       : Promise.resolve(null),
+    selectedDate === null ? getStockFgProxy(today) : Promise.resolve(null),
   ]);
 
   // Empty selected-date → offer a quick jump to the closest earlier
@@ -176,6 +179,7 @@ export async function DashboardContent({
           readings={weatherReadings}
           deltas={weatherDeltas ?? undefined}
           percentiles={weatherPercentiles ?? undefined}
+          stockFgProxy={fgProxy?.value ?? null}
         />
       )}
 

@@ -55,35 +55,44 @@ describe("evaluateTrendPillar", () => {
 
 describe("evaluateSentimentPillar", () => {
   it("extreme fear (F&G 5) → strong discount signal", () => {
-    const result = evaluateSentimentPillar({ fearGreed: 5 });
+    const result = evaluateSentimentPillar({ fearGreed: 5, isProxy: false });
     expect(result.stance).toBe("discount");
     expect(result.score).toBeCloseTo(0.8, 5);
     expect(result.reasonKo).toMatch(/극단적 공포/);
   });
 
   it("boundary F&G 25 → score 0, neutral", () => {
-    const result = evaluateSentimentPillar({ fearGreed: 25 });
+    const result = evaluateSentimentPillar({ fearGreed: 25, isProxy: false });
     expect(result.score).toBe(0);
     expect(result.stance).toBe("neutral");
   });
 
   it("mid-band F&G 50 → neutral, zero score", () => {
-    const result = evaluateSentimentPillar({ fearGreed: 50 });
+    const result = evaluateSentimentPillar({ fearGreed: 50, isProxy: false });
     expect(result.score).toBe(0);
     expect(result.stance).toBe("neutral");
   });
 
   it("extreme greed (F&G 95) → mild reversal signal", () => {
-    const result = evaluateSentimentPillar({ fearGreed: 95 });
+    const result = evaluateSentimentPillar({ fearGreed: 95, isProxy: false });
     expect(result.score).toBeLessThan(0);
     expect(result.score).toBeGreaterThanOrEqual(-0.5);
     expect(result.stance).toBe("reversal");
   });
 
   it("null F&G → strength 0, loud", () => {
-    const result = evaluateSentimentPillar({ fearGreed: null });
+    const result = evaluateSentimentPillar({ fearGreed: null, isProxy: false });
     expect(result.strength).toBe(0);
     expect(result.reasonKo).toMatch(/입력 누락/);
+  });
+
+  it("proxy source is labeled 자체 산출, never passed off as the published index", () => {
+    const proxy = evaluateSentimentPillar({ fearGreed: 18, isProxy: true });
+    expect(proxy.reasonKo).toMatch(/프록시\(자체 산출\)/);
+    const cnn = evaluateSentimentPillar({ fearGreed: 18, isProxy: false });
+    expect(cnn.reasonKo).not.toMatch(/프록시/);
+    // Same number → same score; only the label differs.
+    expect(proxy.score).toBeCloseTo(cnn.score, 10);
   });
 });
 
@@ -348,8 +357,8 @@ describe("pillar score invariants", () => {
   it("every pillar clamps score to [-1, 1] on extreme inputs", () => {
     const results = [
       evaluateTrendPillar({ close: 1e9, ma50: 1e9, ma200: 0.001 }),
-      evaluateSentimentPillar({ fearGreed: -1e6 }),
-      evaluateSentimentPillar({ fearGreed: 1e6 }),
+      evaluateSentimentPillar({ fearGreed: -1e6, isProxy: false }),
+      evaluateSentimentPillar({ fearGreed: 1e6, isProxy: true }),
       evaluateVolatilityPillar({ vix: 1e6, vixWow: 1e6, drawdownPct: 1 }),
       evaluateVolatilityPillar({ vix: 1e6, vixWow: -1e6, drawdownPct: 1 }),
       evaluateMacroPillar({

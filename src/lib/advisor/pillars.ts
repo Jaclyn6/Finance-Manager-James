@@ -118,14 +118,19 @@ export function evaluateSentimentPillar(
     return missingEvaluation("sentiment", ["fearGreed"]);
 
   const fg = inputs.fearGreed;
+  // Honest labeling: the proxy is our own 4-component substitute for
+  // the blocked CNN feed — the evidence line must not read as CNN.
+  const gaugeName = inputs.isProxy
+    ? "공포·탐욕 프록시(자체 산출)"
+    : "공포·탐욕지수";
   let score = 0;
-  let reasonKo = `공포·탐욕지수 ${fg.toFixed(0)} — 중립 구간`;
+  let reasonKo = `${gaugeName} ${fg.toFixed(0)} — 중립 구간`;
   if (fg <= 25) {
     score = clamp01((25 - fg) / 25);
-    reasonKo = `공포·탐욕지수 ${fg.toFixed(0)} — 극단적 공포(과매도), 역발상 매수 신호`;
+    reasonKo = `${gaugeName} ${fg.toFixed(0)} — 극단적 공포(과매도), 역발상 매수 신호`;
   } else if (fg >= 75) {
     score = -clamp01((fg - 75) / 25) * 0.5;
-    reasonKo = `공포·탐욕지수 ${fg.toFixed(0)} — 과열(탐욕) 구간, 조정 여지`;
+    reasonKo = `${gaugeName} ${fg.toFixed(0)} — 과열(탐욕) 구간, 조정 여지`;
   }
 
   return {

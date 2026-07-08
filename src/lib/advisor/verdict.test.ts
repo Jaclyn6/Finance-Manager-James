@@ -21,7 +21,7 @@ function inputs(partial: Partial<AdvisorInputs>): AdvisorInputs {
     assetClass: "equity",
     series: seriesWithDrawdown(0.15),
     trend: { close: null, ma50: null, ma200: null },
-    sentiment: { fearGreed: null },
+    sentiment: { fearGreed: null, isProxy: false },
     volatility: { vix: null, vixWow: null },
     macro: {
       macroScore: null,
@@ -37,7 +37,7 @@ function inputs(partial: Partial<AdvisorInputs>): AdvisorInputs {
 
 const DISCOUNT_CONTEXT: Partial<AdvisorInputs> = {
   trend: { close: 170, ma50: 168, ma200: 160 }, // above MA200, golden cross
-  sentiment: { fearGreed: 12 }, // extreme fear
+  sentiment: { fearGreed: 12, isProxy: false }, // extreme fear
   volatility: { vix: 34, vixWow: null }, // panic spike
   macro: {
     macroScore: 68,
@@ -50,7 +50,7 @@ const DISCOUNT_CONTEXT: Partial<AdvisorInputs> = {
 
 const REVERSAL_CONTEXT: Partial<AdvisorInputs> = {
   trend: { close: 150, ma50: 165, ma200: 180 }, // below MA200, death cross
-  sentiment: { fearGreed: 55 }, // no capitulation
+  sentiment: { fearGreed: 55, isProxy: false }, // no capitulation
   volatility: { vix: 16, vixWow: null }, // calm slow bleed
   macro: {
     macroScore: 28,
@@ -210,7 +210,7 @@ describe("PILLAR_WEIGHTS invariants", () => {
     const verdict = computeAdvisorVerdict(
       inputs({
         trend: { close: 1e9, ma50: 1e9, ma200: 1 },
-        sentiment: { fearGreed: 0 },
+        sentiment: { fearGreed: 0, isProxy: false },
         volatility: { vix: 1e6, vixWow: -1e6 },
         macro: {
           macroScore: 100,

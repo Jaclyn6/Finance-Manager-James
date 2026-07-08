@@ -112,8 +112,13 @@ recover), else proxy; weather strip chip shows "프록시" tag when the
 fallback is active. Keep `ingest-cnn-fg` running — self-heals if CNN
 unblocks.
 
-**Why deferred (one iteration):** pure module + tests first, then
-data-layer wiring + cron write, then UI tag — 2-3 loop iterations.
+**Status:** SHIPPED 2026-07-08 (loop iterations 5-6) — pure module
+(`stock-fg-proxy.ts`), `getStockFgProxy` data assembly, CNN-first
+fallback in `getAdvisorViews` (sentiment pillar labels 자체 산출),
+weather-strip 자체 프록시 tag. `ingest-cnn-fg` keeps running so the
+system self-heals if CNN unblocks. NOT persisted to a table (computed
+on read); persist as an `onchain_readings` STOCK_FG_PROXY row only if
+a future consumer needs history of the proxy itself.
 
 ### Video strategies #3/#4 unconfirmed
 

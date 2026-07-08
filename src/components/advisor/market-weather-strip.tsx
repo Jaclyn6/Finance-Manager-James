@@ -33,6 +33,12 @@ export interface MarketWeatherStripProps {
    * line (series not deep enough yet).
    */
   percentiles?: Record<string, number | null>;
+  /**
+   * `getStockFgProxy().value` — shown on the 공포·탐욕(미국) chip
+   * ONLY when CNN_FG itself has no fresh reading, with an explicit
+   * "자체 프록시" tag (never passed off as CNN).
+   */
+  stockFgProxy?: number | null;
 }
 
 type Tone = "emerald" | "amber" | "red" | "muted";
@@ -148,6 +154,7 @@ export function MarketWeatherStrip({
   readings,
   deltas = {},
   percentiles = {},
+  stockFgProxy = null,
 }: MarketWeatherStripProps) {
   return (
     <Card size="sm" className="p-4 md:p-5">
@@ -155,7 +162,15 @@ export function MarketWeatherStrip({
         <p className="text-xs font-medium text-muted-foreground">시장 날씨</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {GAUGES.map((gauge) => {
-            const value = readings[gauge.key] ?? null;
+            // CNN outage fallback: the 미국 F&G chip shows the in-house
+            // proxy when CNN has no fresh reading — tagged, never silent.
+            const viaProxy =
+              gauge.key === "CNN_FG" &&
+              (readings[gauge.key] ?? null) === null &&
+              stockFgProxy !== null;
+            const value = viaProxy
+              ? stockFgProxy
+              : (readings[gauge.key] ?? null);
             const delta = deltas[gauge.key] ?? null;
             const percentile = gauge.showPercentile
               ? (percentiles[gauge.key] ?? null)
@@ -199,6 +214,11 @@ export function MarketWeatherStrip({
                         )}
                       />
                       {gauge.note(value, delta)}
+                      {viaProxy && (
+                        <span className="rounded bg-muted px-1 text-[9px] font-medium text-muted-foreground">
+                          자체 프록시
+                        </span>
+                      )}
                     </p>
                     {percentile !== null && (
                       <p className="mt-0.5 text-[10px] text-muted-foreground/70">

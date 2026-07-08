@@ -119,6 +119,12 @@ export interface TrendInputs {
 export interface SentimentInputs {
   /** Fear & Greed 0-100 RAW scale (low = fear). CNN for equities, alternative.me for crypto. */
   fearGreed: number | null;
+  /**
+   * True when `fearGreed` is the in-house STOCK_FG_PROXY (CNN outage
+   * fallback) rather than a published index — the evidence sentence
+   * must say so (자체 산출 프록시), never pass a proxy off as CNN.
+   */
+  isProxy: boolean;
 }
 
 export interface VolatilityInputs {
