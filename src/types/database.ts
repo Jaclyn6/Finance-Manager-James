@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      advisor_verdicts: {
+        Row: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          confidence: number
+          created_at: string
+          drawdown_pct: number | null
+          engine_version: string
+          evidence: Json
+          id: string
+          label: string
+          net_score: number | null
+          peak_date: string | null
+          verdict_date: string
+        }
+        Insert: {
+          asset_type: Database["public"]["Enums"]["asset_type_enum"]
+          confidence: number
+          created_at?: string
+          drawdown_pct?: number | null
+          engine_version: string
+          evidence: Json
+          id?: string
+          label: string
+          net_score?: number | null
+          peak_date?: string | null
+          verdict_date: string
+        }
+        Update: {
+          asset_type?: Database["public"]["Enums"]["asset_type_enum"]
+          confidence?: number
+          created_at?: string
+          drawdown_pct?: number | null
+          engine_version?: string
+          evidence?: Json
+          id?: string
+          label?: string
+          net_score?: number | null
+          peak_date?: string | null
+          verdict_date?: string
+        }
+        Relationships: []
+      }
       backtest_runs: {
         Row: {
           asset_type: Database["public"]["Enums"]["asset_type_enum"]

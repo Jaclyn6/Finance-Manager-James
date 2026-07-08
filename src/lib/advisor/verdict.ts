@@ -42,6 +42,19 @@ import type {
  * consistent with the rule-table philosophy in regime/rules.ts.
  */
 
+/**
+ * Advisor rule-set version, stamped into `advisor_verdicts.engine_version`
+ * (same discipline as MODEL_VERSION on the reading tables): verdicts
+ * from different rule-sets never collide in the dedup index, and
+ * readers tiebreak newest-version-wins. Bump when any pillar rule,
+ * threshold, weight, or verdict band changes meaning.
+ *
+ * adv-1.1.0 = initial engine (1.0.0) + direction-aware pillars
+ * (HY 꺾임 / VIX cooling) + crypto pillar-set alignment + F&G proxy
+ * fallback (2026-07-08).
+ */
+export const ADVISOR_ENGINE_VERSION = "adv-1.1.0";
+
 export const PILLAR_WEIGHTS: Record<
   AdvisorInputs["assetClass"],
   ReadonlyArray<{ pillar: PillarId; weight: number }>
