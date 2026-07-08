@@ -158,8 +158,8 @@ export async function DashboardContent({
               지금이 할인 구간인가?
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              낙폭·추세·심리·변동성·매크로 근거로 조정(할인)과 추세전환을
-              판별합니다
+              낙폭·추세·심리·매크로에 변동성(주식)/온체인(크립토) 근거를
+              더해 조정(할인)과 추세전환을 판별합니다
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

@@ -4,8 +4,9 @@ import { revalidateTag } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { verifyCronSecret } from "@/lib/auth/cron-secret";
+import { proxyToOnchainRow } from "@/lib/advisor/proxy-row";
 import { verdictToRow } from "@/lib/advisor/verdict-row";
-import { getAdvisorViews } from "@/lib/data/advisor";
+import { getAdvisorViews, getStockFgProxy } from "@/lib/data/advisor";
 import { writeIngestRun } from "@/lib/data/snapshot";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import { ADVISOR_ENGINE_VERSION } from "@/lib/advisor/verdict";
@@ -74,6 +75,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
     rowsWritten = rows.length;
+
+    // Persist today's STOCK_FG_PROXY alongside the verdicts (raw-only
+    // provenance row — see proxyToOnchainRow). Soft-failure: proxy
+    // history is enrichment; the verdict rows above already landed.
+    try {
+      const proxy = await getStockFgProxy(today);
+      const { error: proxyError } = await supabase
+        .from("onchain_readings")
+        .upsert(proxyToOnchainRow(proxy, today), {
+          onConflict: "indicator_key,observed_at,model_version",
+        });
+      if (proxyError) {
+        throw new Error(
+          `STOCK_FG_PROXY upsert failed: ${proxyError.message} (${proxyError.code ?? "no code"})`,
+        );
+      }
+    } catch (proxyErr) {
+      const msg =
+        proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
+      console.error("[cron write-verdicts] proxy persist failed:", msg);
+      errorSummary = errorSummary
+        ? `${errorSummary}; proxy_persist: ${msg}`
+        : `proxy_persist: ${msg}`;
+    }
   } catch (err) {
     errorSummary = err instanceof Error ? err.message : String(err);
     console.error("[cron write-verdicts] failed:", errorSummary);
