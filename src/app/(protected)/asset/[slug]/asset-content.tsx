@@ -2,12 +2,16 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 
 import { AdvisorEvidence } from "@/components/advisor/advisor-evidence";
+import { VerdictTimeline } from "@/components/advisor/verdict-timeline";
 import { CompositeStateCard } from "@/components/dashboard/composite-state-card";
 import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { ContributingIndicators } from "@/components/asset/contributing-indicators";
 import { ScorePriceOverlay } from "@/components/asset/score-price-overlay";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
-import { getAdvisorViewForAsset } from "@/lib/data/advisor";
+import {
+  getAdvisorViewForAsset,
+  getVerdictHistory,
+} from "@/lib/data/advisor";
 import {
   getClosestEarlierSnapshotDate,
   getCompositeSnapshotsForAssetRange,
@@ -88,6 +92,7 @@ export async function AssetContent({
     signalEvent,
     latestRawValues,
     advisorView,
+    verdictHistory,
   ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
@@ -118,6 +123,13 @@ export async function AssetContent({
     getLatestIndicatorReadings(),
     selectedDate === null
       ? getAdvisorViewForAsset(assetType, today)
+      : Promise.resolve(null),
+    // Verdict timeline is latest-only like the evidence view: it ends
+    // at TODAY by definition (rows accumulate daily from migration
+    // 0015 onward), so a historical ?date= would show a strip whose
+    // right edge disagrees with the page's anchor date.
+    selectedDate === null
+      ? getVerdictHistory(assetType, today, 30)
       : Promise.resolve(null),
   ]);
 
@@ -170,6 +182,10 @@ export async function AssetContent({
       </div>
 
       {advisorView !== null && <AdvisorEvidence view={advisorView} />}
+
+      {verdictHistory !== null && verdictHistory.length > 0 && (
+        <VerdictTimeline entries={verdictHistory} />
+      )}
 
       {/*
         Signal alignment sits ABOVE the composite per plan §0.5 tenet 4

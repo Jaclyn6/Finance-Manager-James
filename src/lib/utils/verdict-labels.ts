@@ -39,6 +39,20 @@ export const VERDICT_BADGE_CLASS: Record<AdvisorVerdictLabel, string> = {
     "bg-red-500/10 text-red-700 dark:bg-red-400/10 dark:text-red-300",
 };
 
+/**
+ * Solid dot/square palette for the verdict timeline strip — same
+ * semantic mapping as VERDICT_BADGE_CLASS, saturated for 8-12px
+ * swatches where a /10 tint would be illegible.
+ */
+export const VERDICT_DOT_CLASS: Record<AdvisorVerdictLabel, string> = {
+  insufficient_data: "bg-muted-foreground/30",
+  no_drawdown: "bg-muted-foreground/60",
+  healthy_pullback: "bg-sky-500",
+  discount_zone: "bg-emerald-500",
+  mixed_signals: "bg-amber-500",
+  reversal_risk: "bg-red-500",
+};
+
 export const PILLAR_LABEL_KO: Record<PillarId, string> = {
   trend: "추세",
   sentiment: "심리",

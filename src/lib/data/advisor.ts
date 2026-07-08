@@ -21,6 +21,7 @@ import {
   computeStockFgProxy,
   type StockFgProxyResult,
 } from "@/lib/advisor/stock-fg-proxy";
+import type { AdvisorVerdictLabel } from "@/lib/advisor/types";
 
 import {
   getIndicatorSeries,
@@ -318,6 +319,94 @@ export async function getAdvisorViewForAsset(
 ): Promise<AdvisorAssetView | null> {
   const views = await getAdvisorViews(endDate);
   return views.find((v) => v.assetType === assetType) ?? null;
+}
+
+/** One day of persisted verdict history (timeline strip input). */
+export interface VerdictHistoryEntry {
+  verdictDate: string;
+  label: AdvisorVerdictLabel;
+  netScore: number | null;
+  confidence: number;
+  drawdownPct: number | null;
+}
+
+const VERDICT_LABELS: ReadonlyArray<AdvisorVerdictLabel> = [
+  "insufficient_data",
+  "no_drawdown",
+  "healthy_pullback",
+  "discount_zone",
+  "mixed_signals",
+  "reversal_risk",
+];
+
+function isVerdictLabel(value: string): value is AdvisorVerdictLabel {
+  return (VERDICT_LABELS as readonly string[]).includes(value);
+}
+
+/**
+ * Persisted verdict history for one asset over a trailing window —
+ * the `/asset/[slug]` timeline strip's data. Rows are written daily
+ * by `/api/cron/write-verdicts` (migration 0015); one row per
+ * (verdict_date, engine_version), so on a cutover day the collapse
+ * keeps the NEWEST engine_version (ascending sort + last-wins, same
+ * rule as the series readers — 90ff598 lesson). Unknown labels (a
+ * future engine writing a label this build doesn't know) are dropped
+ * loudly via console.warn rather than rendered as a broken swatch.
+ */
+export async function getVerdictHistory(
+  assetType: AssetType,
+  endDate: string,
+  windowDays = 30,
+): Promise<VerdictHistoryEntry[]> {
+  "use cache";
+  cacheTag(CACHE_TAGS.advisorVerdicts);
+  cacheLife("days");
+
+  const endMs = Date.parse(`${endDate}T00:00:00Z`);
+  const startDate = Number.isFinite(endMs)
+    ? new Date(endMs - windowDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10)
+    : endDate;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("advisor_verdicts")
+    .select("verdict_date, engine_version, label, net_score, confidence, drawdown_pct")
+    .eq("asset_type", assetType)
+    .gte("verdict_date", startDate)
+    .lte("verdict_date", endDate)
+    .order("verdict_date", { ascending: true })
+    .order("engine_version", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `getVerdictHistory(${assetType}, ${endDate}, ${windowDays}) failed: ${error.message} (${error.code ?? "no code"})`,
+    );
+  }
+
+  const out: VerdictHistoryEntry[] = [];
+  for (const row of data ?? []) {
+    if (!isVerdictLabel(row.label)) {
+      console.warn(
+        `[getVerdictHistory] unknown verdict label "${row.label}" (${assetType} ${row.verdict_date}) — skipped`,
+      );
+      continue;
+    }
+    const entry: VerdictHistoryEntry = {
+      verdictDate: row.verdict_date,
+      label: row.label,
+      netScore: row.net_score,
+      confidence: row.confidence,
+      drawdownPct: row.drawdown_pct,
+    };
+    if (out.length > 0 && out[out.length - 1].verdictDate === entry.verdictDate) {
+      out[out.length - 1] = entry; // newest engine_version wins
+    } else {
+      out.push(entry);
+    }
+  }
+  return out;
 }
 
 /**
