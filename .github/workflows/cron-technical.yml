@@ -96,3 +96,17 @@ jobs:
           curl -sSf \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${PRODUCTION_URL}/api/cron/ingest-prices"
+
+      # Verdict persistence runs LAST, as its own request: both bar
+      # writers above have invalidated their cache tags by now, so the
+      # advisor's cached readers recompute fresh and the persisted
+      # verdict matches what the dashboard will render for the day
+      # (advisor pivot — verdict history part 2/3, migration 0015).
+      - name: Trigger /api/cron/write-verdicts
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sSf \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/write-verdicts"

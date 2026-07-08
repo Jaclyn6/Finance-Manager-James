@@ -108,6 +108,17 @@ export const CACHE_TAGS = {
    * price_readings is visualization-only (§8.5) and has no signal input.
    */
   signals: "signals",
+  /**
+   * All `advisor_verdicts` reads (verdict history timeline).
+   *
+   * Invalidated by `/api/cron/write-verdicts` — the third step of the
+   * daily cron-technical workflow, running AFTER ingest-technical +
+   * ingest-prices so the persisted verdict reflects the day's final
+   * bars (a fresh request also means the advisor's cached readers
+   * recompute post-invalidation). Readers: `getVerdictHistory` in
+   * src/lib/data/advisor.ts.
+   */
+  advisorVerdicts: "advisor-verdicts",
 } as const;
 
 export type CacheTag = (typeof CACHE_TAGS)[keyof typeof CACHE_TAGS];
