@@ -171,7 +171,12 @@ export function MarketWeatherStrip({
             const value = viaProxy
               ? stockFgProxy
               : (readings[gauge.key] ?? null);
-            const delta = deltas[gauge.key] ?? null;
+            // No delta arrow on the proxy path: deltas[CNN_FG] is
+            // computed from CNN's own (stale, pre-outage) series and
+            // has no relation to the proxy figure shown as the value —
+            // pairing them would break the "arrow and evidence can't
+            // diverge" invariant (Trigger 2 review, 2026-07-08).
+            const delta = viaProxy ? null : (deltas[gauge.key] ?? null);
             const percentile = gauge.showPercentile
               ? (percentiles[gauge.key] ?? null)
               : null;

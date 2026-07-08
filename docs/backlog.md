@@ -104,7 +104,8 @@ components, same null philosophy as composite-v2):
 1. Momentum — SPY close vs 125-day MA (price_readings, 300 bars).
 2. Volatility — VIX vs its 50-day MA, inverted (indicator_readings,
    5y backfilled).
-3. Junk-bond demand — HY spread vs its 60-day percentile, inverted.
+3. Junk-bond demand — HY spread percentile within the proxy's ~400d
+   ingredient window (60-sample floor), inverted.
 4. Safe-haven demand — 20-day SPY return minus TLT return.
 Label honestly as `STOCK_FG_PROXY` (자체 산출), never as CNN. Advisor
 sentiment pillar input order: CNN_FG if fresh success (it may
@@ -115,10 +116,21 @@ unblocks.
 **Status:** SHIPPED 2026-07-08 (loop iterations 5-6) — pure module
 (`stock-fg-proxy.ts`), `getStockFgProxy` data assembly, CNN-first
 fallback in `getAdvisorViews` (sentiment pillar labels 자체 산출),
-weather-strip 자체 프록시 tag. `ingest-cnn-fg` keeps running so the
-system self-heals if CNN unblocks. NOT persisted to a table (computed
-on read); persist as an `onchain_readings` STOCK_FG_PROXY row only if
-a future consumer needs history of the proxy itself.
+weather-strip 자체 프록시 tag (delta arrow suppressed on the proxy
+path — stale CNN trend must not sit next to a proxy value).
+`ingest-cnn-fg` keeps running so the system self-heals if CNN
+unblocks. NOT persisted to a table (computed on read); persist as an
+`onchain_readings` STOCK_FG_PROXY row only if a future consumer needs
+history of the proxy itself.
+
+**Known remaining gap (deliberate):** the COMPOSITE engine's
+sentiment category (`aggregateSentiment` reading CNN_FG rows in
+`ingest-macro`) still goes dark during the CNN outage — only the
+advisor got the proxy. Wiring the proxy into the composite means
+writing STOCK_FG_PROXY rows at ingest time and a §4.1-blueprint
+weight decision; that is score-engine surface, its own reviewed
+feature-unit. Until then the composite's sentiment category shows
+its normal null-propagation behavior.
 
 ### Video strategies #3/#4 unconfirmed
 
