@@ -85,8 +85,9 @@ export const DIRECTION_KEYS = ["VIXCLS", "BAMLH0A0HYM2"] as const;
 
 /**
  * Sentiment gauges whose 7-day direction the weather strip shows.
- * Stored in `onchain_readings` (hourly CNN_FG / 4h CRYPTO_FG), so
- * they read through {@link getOnchainSeries}, not the FRED reader.
+ * Stored in `onchain_readings` (one row per day, refreshed hourly /
+ * 4h by their crons), so they read through {@link getOnchainSeries},
+ * not the FRED reader.
  */
 export const SENTIMENT_DIRECTION_KEYS = ["CNN_FG", "CRYPTO_FG"] as const;
 

@@ -17,10 +17,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
  * Collapses a chronological series to one point per calendar date,
- * last-write-wins. Sub-daily sources (hourly CNN_FG, 4h CRYPTO_FG)
- * produce many rows per day; direction math wants the day's final
- * reading. Also the dedupe step for FRED series where a raw-only
- * backfill row and a scored row share a date.
+ * last-write-wins. Same-date duplicates arise when one date holds a
+ * row per model_version (cutover days) — callers order so the row
+ * that should win sorts last — and would also arise from any future
+ * sub-daily writer. Direction math wants exactly one closing reading
+ * per day.
  */
 export function collapseToDaily(
   series: ReadonlyArray<IndicatorSeriesPoint>,

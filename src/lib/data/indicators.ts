@@ -399,13 +399,20 @@ export async function getIndicatorSeries(
     : endDate;
 
   const supabase = getSupabaseAdminClient();
+  // Secondary sort on model_version ASCENDING: on a MODEL_VERSION
+  // cutover day the same (key, date) can hold one row per version,
+  // and this reader's collapse is last-wins — ascending puts the
+  // NEWEST version last so it wins. Same newest-version-wins rule as
+  // the composite reader's tiebreak (34df3e6), adapted to this
+  // reader's ascending/last-wins shape.
   const { data, error } = await supabase
     .from("indicator_readings")
     .select("indicator_key, observed_at, value_raw, fetch_status")
     .in("indicator_key", keys)
     .gte("observed_at", startDate)
     .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true });
+    .order("observed_at", { ascending: true })
+    .order("model_version", { ascending: true });
 
   if (error) {
     throw new Error(
@@ -436,10 +443,13 @@ export async function getIndicatorSeries(
 
 /**
  * Same shape as {@link getIndicatorSeries} but over `onchain_readings`
- * — the home of the sub-daily sentiment gauges (hourly CNN_FG, 4h
- * CRYPTO_FG) plus MVRV_Z / SOPR / BTC_ETF_NETFLOW. Multiple intraday
- * rows collapse to the day's LAST reading, so week-over-week deltas
- * compare closing states, not arbitrary intraday snapshots.
+ * — the home of the sentiment gauges (CNN_FG, CRYPTO_FG) plus
+ * MVRV_Z / SOPR / BTC_ETF_NETFLOW. Although the writers run sub-daily
+ * (hourly cnn-fg, 4h onchain), `observed_at` is a calendar date and
+ * each rerun UPSERTS the same daily row — so the table holds one row
+ * per (key, date, model_version). The collapse step therefore guards
+ * the model_version-cutover duplicate case (and any future sub-daily
+ * writer), not routine intraday rows.
  *
  * Tagged `sentiment` + `onchain`: both cron paths that write this
  * table invalidate one of those two tags.
@@ -464,13 +474,16 @@ export async function getOnchainSeries(
     : endDate;
 
   const supabase = getSupabaseAdminClient();
+  // model_version ASC tiebreak: newest version sorts last → wins the
+  // last-wins collapse on cutover days. See getIndicatorSeries.
   const { data, error } = await supabase
     .from("onchain_readings")
     .select("indicator_key, observed_at, value_raw, fetch_status")
     .in("indicator_key", keys)
     .gte("observed_at", startDate)
     .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true });
+    .order("observed_at", { ascending: true })
+    .order("model_version", { ascending: true });
 
   if (error) {
     throw new Error(
