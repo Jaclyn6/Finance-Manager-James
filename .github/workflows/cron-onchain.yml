@@ -60,3 +60,32 @@ jobs:
           curl -sS -f \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${PRODUCTION_URL}/api/cron/ingest-onchain"
+
+      # ---- Sentiment safety net (2026-07-08) -------------------------
+      # GitHub has been skipping cron-hourly.yml's schedule wholesale —
+      # even after the off-:00 move (observed: 00-05Z fired once, ~1h
+      # late) — while THIS 4-hourly workflow fires reliably. Running the
+      # two hourly endpoints here as well guarantees a 4h freshness
+      # floor for CNN F&G / news sentiment regardless of the hourly
+      # schedule's mood. Both routes upsert idempotently, so the double
+      # run in hours where cron-hourly DID fire is harmless. Remove if
+      # GH's hourly scheduling becomes trustworthy again.
+      - name: ingest-cnn-fg (safety net)
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-cnn-fg"
+
+      - name: ingest-news (safety net)
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
+        run: |
+          curl -sS -f \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${PRODUCTION_URL}/api/cron/ingest-news"

@@ -219,6 +219,16 @@ fired at ~23:00). Fixed by moving all three schedules off the :00
 mark (`9f50067`: :17 hourly / 22:07 technical / :43 onchain). If gaps
 persist after this, escalate to an external scheduler (option 2).
 
+**Escalation (iteration 14):** the off-minute move did NOT fix the
+hourly schedule (05:17Z fired nothing with 15min margin, while the
+4-hourly onchain schedule fires reliably). Safety net shipped: cron-
+onchain.yml now also curls ingest-cnn-fg + ingest-news
+(continue-on-error, idempotent) → 4h freshness floor for sentiment
+regardless of the hourly schedule. Watch: if the hourly stays dead
+for days AND 4h news freshness proves insufficient, the remaining
+option is an external scheduler (CRON_SECRET on a third party —
+user decision required).
+
 ## Data-pipeline reliability
 
 ### Market-holiday calendar integration (option 3)
