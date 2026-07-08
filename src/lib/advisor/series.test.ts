@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { computeWowDelta, type IndicatorSeriesPoint } from "./series";
+import {
+  collapseToDaily,
+  computeWowDelta,
+  type IndicatorSeriesPoint,
+} from "./series";
 
 function dailySeries(values: number[], startDay = 1): IndicatorSeriesPoint[] {
   return values.map((value, i) => ({
@@ -49,5 +53,30 @@ describe("computeWowDelta", () => {
       { date: "also-bad", value: 2 },
     ];
     expect(computeWowDelta(series)).toBeNull();
+  });
+});
+
+describe("collapseToDaily", () => {
+  it("keeps the LAST point of each calendar date (hourly → daily)", () => {
+    const series: IndicatorSeriesPoint[] = [
+      { date: "2026-07-01", value: 40 },
+      { date: "2026-07-01", value: 44 },
+      { date: "2026-07-01", value: 42 },
+      { date: "2026-07-02", value: 50 },
+      { date: "2026-07-02", value: 55 },
+    ];
+    expect(collapseToDaily(series)).toEqual([
+      { date: "2026-07-01", value: 42 },
+      { date: "2026-07-02", value: 55 },
+    ]);
+  });
+
+  it("passes an already-daily series through unchanged", () => {
+    const series = dailySeries([1, 2, 3]);
+    expect(collapseToDaily(series)).toEqual(series);
+  });
+
+  it("handles empty input", () => {
+    expect(collapseToDaily([])).toEqual([]);
   });
 });

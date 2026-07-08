@@ -61,11 +61,16 @@ const GAUGES: GaugeSpec[] = [
     risingIsBad: true,
   },
   {
+    // F&G delta semantics are contrarian like the level: RISING F&G =
+    // drifting toward greed = a worsening entry for the discount
+    // hunter (red ▲); falling toward fear = opportunity building.
     key: "CNN_FG",
     label: "공포·탐욕(미국)",
     format: (v) => v.toFixed(0),
     tone: (v) => (v <= 25 ? "emerald" : v >= 75 ? "red" : "muted"),
     note: (v) => (v <= 25 ? "극단적 공포" : v >= 75 ? "과열" : "중립"),
+    formatDelta: (d) => `${d >= 0 ? "+" : ""}${d.toFixed(0)}`,
+    risingIsBad: true,
   },
   {
     key: "CRYPTO_FG",
@@ -73,6 +78,8 @@ const GAUGES: GaugeSpec[] = [
     format: (v) => v.toFixed(0),
     tone: (v) => (v <= 25 ? "emerald" : v >= 75 ? "red" : "muted"),
     note: (v) => (v <= 25 ? "극단적 공포" : v >= 75 ? "과열" : "중립"),
+    formatDelta: (d) => `${d >= 0 ? "+" : ""}${d.toFixed(0)}`,
+    risingIsBad: true,
   },
   {
     key: "SAHMCURRENT",

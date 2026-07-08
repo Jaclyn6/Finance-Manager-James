@@ -100,23 +100,12 @@ interactive session; map any uncovered rule onto a pillar.
 **Why deferred:** advisor already implements a superset of common
 discount indicators; the marginal rule is additive, not structural.
 
-### F&G 7-day delta on the weather strip
+### ~~F&G 7-day delta on the weather strip~~ — DONE 2026-07-08 (loop iteration 1)
 
-**Where it lives now:**
-`src/components/advisor/market-weather-strip.tsx` shows ▲/▼ deltas
-only for VIX / HY spread (`getWeatherDeltas` reads
-`indicator_readings`).
-
-**The gap:** CNN_FG / CRYPTO_FG live in `onchain_readings` (hourly /
-4h cadence), so their series need a separate windowed reader; the F&G
-chips render level-only.
-
-**Proposed treatment:** `getOnchainSeries(keys, endDate, days)` mirror
-of `getIndicatorSeries`, then pass F&G deltas through the same
-`deltas` prop.
-
-**Why deferred:** F&G direction is weaker signal than its level band;
-kept the shipped diff minimal.
+Shipped: `getOnchainSeries` reader (intraday rows collapse to the
+day's last reading via `collapseToDaily`), F&G deltas wired through
+`getWeatherDeltas` into the same `deltas` prop, contrarian arrow
+colors (rising toward greed = red).
 
 ### 5y percentile context chips
 

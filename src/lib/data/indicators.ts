@@ -1,6 +1,9 @@
 import { cacheLife, cacheTag } from "next/cache";
 
-import type { IndicatorSeriesPoint } from "@/lib/advisor/series";
+import {
+  collapseToDaily,
+  type IndicatorSeriesPoint,
+} from "@/lib/advisor/series";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -410,8 +413,8 @@ export async function getIndicatorSeries(
     );
   }
 
-  const out: Record<string, IndicatorSeriesPoint[]> = {};
-  for (const key of keys) out[key] = [];
+  const raw: Record<string, IndicatorSeriesPoint[]> = {};
+  for (const key of keys) raw[key] = [];
   for (const row of data ?? []) {
     if (row.fetch_status !== "success") continue;
     const value = Number(row.value_raw);
@@ -420,16 +423,74 @@ export async function getIndicatorSeries(
     // depending on column rendering — normalize to YYYY-MM-DD. Rows
     // are unique per (key, observed_at, model_version); when a raw-only
     // backfill row and a scored row share a date the values are the
-    // same FRED observation, so last-write-wins dedupe is safe.
-    const date = String(row.observed_at).slice(0, 10);
-    const bucket = out[row.indicator_key];
-    if (!bucket) continue;
-    if (bucket.length > 0 && bucket[bucket.length - 1].date === date) {
-      bucket[bucket.length - 1] = { date, value };
-    } else {
-      bucket.push({ date, value });
-    }
+    // same FRED observation, so last-write-wins collapse is safe.
+    raw[row.indicator_key]?.push({
+      date: String(row.observed_at).slice(0, 10),
+      value,
+    });
   }
+  const out: Record<string, IndicatorSeriesPoint[]> = {};
+  for (const key of keys) out[key] = collapseToDaily(raw[key] ?? []);
+  return out;
+}
+
+/**
+ * Same shape as {@link getIndicatorSeries} but over `onchain_readings`
+ * — the home of the sub-daily sentiment gauges (hourly CNN_FG, 4h
+ * CRYPTO_FG) plus MVRV_Z / SOPR / BTC_ETF_NETFLOW. Multiple intraday
+ * rows collapse to the day's LAST reading, so week-over-week deltas
+ * compare closing states, not arbitrary intraday snapshots.
+ *
+ * Tagged `sentiment` + `onchain`: both cron paths that write this
+ * table invalidate one of those two tags.
+ */
+export async function getOnchainSeries(
+  keys: string[],
+  endDate: string,
+  windowDays: number,
+): Promise<Record<string, IndicatorSeriesPoint[]>> {
+  "use cache";
+  cacheTag(CACHE_TAGS.sentiment);
+  cacheTag(CACHE_TAGS.onchain);
+  cacheLife("days");
+
+  const safeDays =
+    Number.isFinite(windowDays) && windowDays > 0 ? Math.floor(windowDays) : 30;
+  const endMs = Date.parse(`${endDate}T00:00:00Z`);
+  const startDate = Number.isFinite(endMs)
+    ? new Date(endMs - safeDays * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .slice(0, 10)
+    : endDate;
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("onchain_readings")
+    .select("indicator_key, observed_at, value_raw, fetch_status")
+    .in("indicator_key", keys)
+    .gte("observed_at", startDate)
+    .lte("observed_at", `${endDate}T23:59:59Z`)
+    .order("observed_at", { ascending: true });
+
+  if (error) {
+    throw new Error(
+      `getOnchainSeries(${keys.join(",")}, ${endDate}, ${windowDays}) failed: ${error.message} (${error.code ?? "no code"})`,
+    );
+  }
+
+  const raw: Record<string, IndicatorSeriesPoint[]> = {};
+  for (const key of keys) raw[key] = [];
+  for (const row of data ?? []) {
+    if (row.fetch_status !== "success") continue;
+    const value = Number(row.value_raw);
+    if (!Number.isFinite(value)) continue;
+    raw[row.indicator_key]?.push({
+      date: String(row.observed_at).slice(0, 10),
+      value,
+    });
+  }
+  const out: Record<string, IndicatorSeriesPoint[]> = {};
+  for (const key of keys) out[key] = collapseToDaily(raw[key] ?? []);
   return out;
 }
 

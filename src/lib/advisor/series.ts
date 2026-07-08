@@ -16,6 +16,27 @@ export interface IndicatorSeriesPoint {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
+ * Collapses a chronological series to one point per calendar date,
+ * last-write-wins. Sub-daily sources (hourly CNN_FG, 4h CRYPTO_FG)
+ * produce many rows per day; direction math wants the day's final
+ * reading. Also the dedupe step for FRED series where a raw-only
+ * backfill row and a scored row share a date.
+ */
+export function collapseToDaily(
+  series: ReadonlyArray<IndicatorSeriesPoint>,
+): IndicatorSeriesPoint[] {
+  const out: IndicatorSeriesPoint[] = [];
+  for (const point of series) {
+    if (out.length > 0 && out[out.length - 1].date === point.date) {
+      out[out.length - 1] = { ...point };
+    } else {
+      out.push({ ...point });
+    }
+  }
+  return out;
+}
+
+/**
  * Week-over-week change of a series: latest value minus the value at
  * the most recent observation at least `lookbackDays` calendar days
  * older than the latest. Null when the series is too thin to cover

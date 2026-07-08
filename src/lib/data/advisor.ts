@@ -21,6 +21,7 @@ import {
   getIndicatorSeries,
   getLatestCompositeSnapshots,
   getLatestIndicatorReadings,
+  getOnchainSeries,
 } from "./indicators";
 import { getPriceHistoryForTicker } from "./prices";
 import { CACHE_TAGS } from "./tags";
@@ -81,6 +82,13 @@ export const DIRECTION_WINDOW_DAYS = 21;
 
 /** Indicator keys the advisor reads direction (not just level) from. */
 export const DIRECTION_KEYS = ["VIXCLS", "BAMLH0A0HYM2"] as const;
+
+/**
+ * Sentiment gauges whose 7-day direction the weather strip shows.
+ * Stored in `onchain_readings` (hourly CNN_FG / 4h CRYPTO_FG), so
+ * they read through {@link getOnchainSeries}, not the FRED reader.
+ */
+export const SENTIMENT_DIRECTION_KEYS = ["CNN_FG", "CRYPTO_FG"] as const;
 
 const MA_KEYS = ["MA_50", "MA_200"] as const;
 
@@ -287,14 +295,20 @@ export async function getAdvisorViewForAsset(
 export async function getWeatherDeltas(
   endDate: string,
 ): Promise<Record<string, number | null>> {
-  const series = await getIndicatorSeries(
-    [...DIRECTION_KEYS],
-    endDate,
-    DIRECTION_WINDOW_DAYS,
-  );
+  const [series, sentimentSeries] = await Promise.all([
+    getIndicatorSeries([...DIRECTION_KEYS], endDate, DIRECTION_WINDOW_DAYS),
+    getOnchainSeries(
+      [...SENTIMENT_DIRECTION_KEYS],
+      endDate,
+      DIRECTION_WINDOW_DAYS,
+    ),
+  ]);
   const out: Record<string, number | null> = {};
   for (const key of DIRECTION_KEYS) {
     out[key] = computeWowDelta(series[key] ?? []);
+  }
+  for (const key of SENTIMENT_DIRECTION_KEYS) {
+    out[key] = computeWowDelta(sentimentSeries[key] ?? []);
   }
   return out;
 }
