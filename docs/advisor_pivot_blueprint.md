@@ -46,7 +46,7 @@ src/components/advisor/   ← VerdictCard, MarketWeatherStrip,
 |---|---|---|---|
 | trend | close, MA50, MA200 | above MA200, 정배열 | below MA200, 역배열 |
 | sentiment | CNN_FG / CRYPTO_FG | ≤25 극단적 공포 (contrarian) | ≥75 과열 (mild) |
-| volatility | VIX, vixWow, drawdownPct | ≥30 패닉 (+0.15 more if wow ≤ −2 "정점 통과") | calm VIX + ≥10% dd "slow bleed"; ≥30 & wow ≥ +2 tempered |
+| volatility (equity only) | VIX, vixWow, drawdownPct | ≥30 패닉 (+0.15 more if wow ≤ −2 "정점 통과") | calm VIX + ≥10% dd "slow bleed"; ≥30 & wow ≥ +2 tempered |
 | macro | macroScore, Sahm, T10Y2Y, hySpread, hySpreadWow | Sahm<0.5, curve normal, HY<3 안정, **HY≥4 & wow≤−0.1 = 꺾임 매수 신호(+0.7)** | Sahm≥0.5 (−1), inversion, HY≥4 rising |
 | onchain (crypto) | MVRV-Z, SOPR | Z≤0 저평가, SOPR<1 항복 | Z≥4 사이클 고점 |
 

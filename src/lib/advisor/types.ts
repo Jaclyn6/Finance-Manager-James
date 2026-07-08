@@ -97,7 +97,7 @@ export interface AdvisorVerdict {
    * could vote.
    */
   netScore: number | null;
-  /** 0-1 — input coverage × decisiveness. */
+  /** 0-1 — coverage × (0.4 + 0.6 × decisiveness); see verdict.ts. */
   confidence: number;
   pillars: PillarEvaluation[];
   /** One-sentence Korean verdict headline. */

@@ -339,18 +339,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // 2026-03-20. The advisor's direction reads (HY-spread "꺾임",
     // VIX cooling — `getIndicatorSeries` / `computeWowDelta`) and any
     // future percentile context need the actual series, so we now
-    // upsert the whole window as RAW-ONLY rows: `score_0_100` and
-    // `value_normalized` stay null (same contract as the signal-only
-    // ICSA/WDTGAL rows — a historical z-score computed against
-    // today's window would be look-ahead-biased, and §4.5 tenet 1
-    // forbids synthesizing scores outside the composite path).
+    // upsert the whole window as RAW-ONLY rows. New rows land with
+    // `score_0_100` / `value_normalized` at their column default
+    // (null) — same contract as the signal-only ICSA/WDTGAL rows: a
+    // historical z-score computed against today's window would be
+    // look-ahead-biased, and §4.5 tenet 1 forbids synthesizing scores
+    // outside the composite path.
     //
-    // Idempotent on (indicator_key, observed_at, model_version), so
-    // each run is a self-healing backfill: FRED revisions overwrite,
-    // missed cron days repair themselves, and the first post-deploy
-    // run seeds ~5y of depth in one pass. The latest observation is
-    // EXCLUDED — its scored row was just written above and a raw-only
-    // row in this batch would clobber it.
+    // CRITICAL: the score fields are OMITTED from the payload, not
+    // set to null. PostgREST upsert (merge-duplicates) only SETs the
+    // columns present in the request, and the payload is uniform, so
+    // on conflict an existing row keeps its stored `score_0_100` /
+    // `value_normalized`. This is what protects every PREVIOUS day's
+    // scored row: yesterday's date is no longer `latestDate` today,
+    // so it appears in this history sweep — with the fields omitted
+    // it merely refreshes `value_raw` (FRED revision healing) instead
+    // of nulling the score that day's own run computed (Trigger 2
+    // review finding, 2026-07-08). The latest observation is still
+    // EXCLUDED: its scored row was written by the main path THIS run,
+    // and this sweep must not touch same-run state at all.
+    //
+    // Idempotent on (indicator_key, observed_at, model_version):
+    // FRED revisions overwrite raw values, missed cron days repair
+    // themselves, and the first post-deploy run seeds ~5y of depth.
     //
     // Soft-failure: history is enrichment. If this block throws, the
     // scored pipeline above has already landed — log, append to
@@ -381,8 +392,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             window_used: `${config.windowYears}y`,
             fetch_status: "success",
             value_raw: obs.value,
-            value_normalized: null,
-            score_0_100: null,
+            // score_0_100 / value_normalized deliberately OMITTED —
+            // see the block comment above before adding them back.
           });
         }
       };

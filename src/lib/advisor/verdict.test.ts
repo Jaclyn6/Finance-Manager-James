@@ -129,7 +129,7 @@ describe("computeAdvisorVerdict — pillar wiring", () => {
     ]);
   });
 
-  it("crypto verdict includes the onchain pillar", () => {
+  it("crypto verdict swaps volatility out for onchain (mirrors PILLAR_WEIGHTS)", () => {
     const verdict = computeAdvisorVerdict(
       inputs({
         assetClass: "crypto",
@@ -137,7 +137,12 @@ describe("computeAdvisorVerdict — pillar wiring", () => {
         onchain: { mvrvZ: -0.2, sopr: 0.97 },
       }),
     );
-    expect(verdict.pillars.map((p) => p.pillar)).toContain("onchain");
+    expect(verdict.pillars.map((p) => p.pillar).sort()).toEqual([
+      "macro",
+      "onchain",
+      "sentiment",
+      "trend",
+    ]);
   });
 
   it("volatility pillar receives the computed drawdownPct (slow-bleed path)", () => {

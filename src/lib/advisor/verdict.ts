@@ -31,9 +31,12 @@ import type {
  *    crypto). Pillars with strength 0 (missing inputs) drop out and
  *    their weight renormalizes across the rest — same null-propagation
  *    philosophy as composite-v2.
- * 3. Confidence = input coverage × decisiveness. A verdict from 2 of 4
- *    pillars, or a net score near 0, reports low confidence rather
- *    than hiding the uncertainty.
+ * 3. Confidence = coverage × (0.4 + 0.6 × decisiveness): coverage is
+ *    the present-pillar weight sum, decisiveness scales |netScore|,
+ *    and the 0.4 floor keeps a fully-informed-but-neutral verdict
+ *    from reading as "no information". A verdict from 2 of 4 pillars,
+ *    or a net score near 0, reports low confidence rather than hiding
+ *    the uncertainty.
  *
  * Verdict bands on netScore (±0.2) are provisional round numbers,
  * consistent with the rule-table philosophy in regime/rules.ts.
@@ -69,15 +72,24 @@ export const EARLY_REVERSAL_FLOOR = -0.35;
 export function computeAdvisorVerdict(inputs: AdvisorInputs): AdvisorVerdict {
   const drawdown = computeDrawdownState(inputs.series);
 
+  // Pillar set mirrors PILLAR_WEIGHTS exactly: crypto swaps the
+  // volatility pillar OUT for onchain (VIX is a US-equity fear gauge;
+  // the weights table gives it zero weight for crypto, and a rendered
+  // pillar that cannot move the verdict would be misleading evidence
+  // — Trigger 2 review finding, 2026-07-08).
   const pillars: PillarEvaluation[] = [
     evaluateTrendPillar(inputs.trend),
     evaluateSentimentPillar(inputs.sentiment),
-    evaluateVolatilityPillar({
-      ...inputs.volatility,
-      drawdownPct: drawdown?.drawdownPct ?? null,
-    }),
-    evaluateMacroPillar(inputs.macro),
   ];
+  if (inputs.assetClass === "equity") {
+    pillars.push(
+      evaluateVolatilityPillar({
+        ...inputs.volatility,
+        drawdownPct: drawdown?.drawdownPct ?? null,
+      }),
+    );
+  }
+  pillars.push(evaluateMacroPillar(inputs.macro));
   if (inputs.assetClass === "crypto") {
     pillars.push(evaluateOnchainPillar(inputs.onchain));
   }
