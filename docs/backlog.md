@@ -151,6 +151,13 @@ silently again — the exact failure mode the user reported.
 **Why deferred:** commit activity resumed today resets the clock;
 needs a considered choice, not a rushed one.
 
+**Related discovery (2026-07-08, loop iteration 3):** GHA also
+silently SKIPS top-of-hour scheduled runs under shared-scheduler load
+(hourly cron dropped 00:00-03:00Z fires entirely; technical's 22:00
+fired at ~23:00). Fixed by moving all three schedules off the :00
+mark (`9f50067`: :17 hourly / 22:07 technical / :43 onchain). If gaps
+persist after this, escalate to an external scheduler (option 2).
+
 ## Data-pipeline reliability
 
 ### Market-holiday calendar integration (option 3)
