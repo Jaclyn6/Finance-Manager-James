@@ -82,6 +82,39 @@ of time.
 
 ## Advisor pivot follow-ups (2026-07-08, see docs/advisor_pivot_blueprint.md §6)
 
+### Stock F&G outage → in-house 4-component proxy (HIGH — advisor input dark)
+
+**Where it lives now:** `src/lib/score-engine/sources/cnn-fear-greed.ts`
++ `ingest-cnn-fg` route. CNN_FG rows have been `partial`/`error` with
+`value_raw: null` since at least 2026-06-24 (verified in prod
+2026-07-08): locally CNN's edge returns 418 "You're a bot" to every
+UA; from GH runners the endpoint returns a body that parses to
+partial-without-current. Effect: dashboard F&G(미국) chip shows "—"
+and the advisor's sentiment pillar is 입력 누락 for every equity
+asset. Signals still work (blueprint §4.5 defines the VIX-only
+EXTREME_FEAR fallback).
+
+**The gap:** no reliable stock Fear & Greed value. Bot-detection
+bypass is off the table (policy + fragility).
+
+**Proposed treatment:** compute an in-house proxy from ingredients we
+already collect legitimately, mirroring 4 of CNN's 7 components, each
+scored 0-100 then averaged (weights renormalize over available
+components, same null philosophy as composite-v2):
+1. Momentum — SPY close vs 125-day MA (price_readings, 300 bars).
+2. Volatility — VIX vs its 50-day MA, inverted (indicator_readings,
+   5y backfilled).
+3. Junk-bond demand — HY spread vs its 60-day percentile, inverted.
+4. Safe-haven demand — 20-day SPY return minus TLT return.
+Label honestly as `STOCK_FG_PROXY` (자체 산출), never as CNN. Advisor
+sentiment pillar input order: CNN_FG if fresh success (it may
+recover), else proxy; weather strip chip shows "프록시" tag when the
+fallback is active. Keep `ingest-cnn-fg` running — self-heals if CNN
+unblocks.
+
+**Why deferred (one iteration):** pure module + tests first, then
+data-layer wiring + cron write, then UI tag — 2-3 loop iterations.
+
 ### Video strategies #3/#4 unconfirmed
 
 **Where it lives now:** `docs/advisor_pivot_blueprint.md` §0 documents
