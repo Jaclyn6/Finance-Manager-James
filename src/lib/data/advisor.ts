@@ -22,6 +22,7 @@ import {
   type StockFgProxyResult,
 } from "@/lib/advisor/stock-fg-proxy";
 import type { AdvisorVerdictLabel } from "@/lib/advisor/types";
+import { compareVersionsNumeric } from "@/lib/utils/version-compare";
 
 import {
   getIndicatorSeries,
@@ -376,8 +377,7 @@ export async function getVerdictHistory(
     .eq("asset_type", assetType)
     .gte("verdict_date", startDate)
     .lte("verdict_date", endDate)
-    .order("verdict_date", { ascending: true })
-    .order("engine_version", { ascending: true });
+    .order("verdict_date", { ascending: true });
 
   if (error) {
     throw new Error(
@@ -385,7 +385,12 @@ export async function getVerdictHistory(
     );
   }
 
+  // Cutover-day collapse: keep the NEWEST engine_version per date,
+  // compared NUMERICALLY — a byte-wise sort would put adv-1.1.10
+  // before adv-1.1.9 and keep the stale row (Trigger 2 review
+  // 2026-07-08; same class as 34df3e6/90ff598).
   const out: VerdictHistoryEntry[] = [];
+  let lastVersion = "";
   for (const row of data ?? []) {
     if (!isVerdictLabel(row.label)) {
       console.warn(
@@ -401,9 +406,13 @@ export async function getVerdictHistory(
       drawdownPct: row.drawdown_pct,
     };
     if (out.length > 0 && out[out.length - 1].verdictDate === entry.verdictDate) {
-      out[out.length - 1] = entry; // newest engine_version wins
+      if (compareVersionsNumeric(row.engine_version, lastVersion) > 0) {
+        out[out.length - 1] = entry;
+        lastVersion = row.engine_version;
+      }
     } else {
       out.push(entry);
+      lastVersion = row.engine_version;
     }
   }
   return out;

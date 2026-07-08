@@ -15,6 +15,7 @@
  *     - src/app/api/cron/ingest-prices/route.ts (prices tag ONLY — the
  *       price_readings table is visualization-only per blueprint §7.4 and
  *       has no signal input, so ingest-prices never invalidates `signals`).
+ *     - src/app/api/cron/write-verdicts/route.ts (advisorVerdicts tag).
  *
  * A typo here silently breaks cache invalidation — the cron succeeds,
  * the DB updates, but stale cached snapshots linger until `cacheLife`

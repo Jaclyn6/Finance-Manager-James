@@ -10,14 +10,16 @@ import {
  * Verdict timeline strip — "판정이 언제 바뀌었나" at a glance for
  * `/asset/[slug]` (verdict history part 3/3).
  *
- * One colored square per persisted day (label → VERDICT_DOT_CLASS,
- * same semantics as the verdict pill), plus a text note for the most
- * recent label flip. History only started accumulating on 2026-07-08
- * (migration 0015), so the strip declares how many days it holds
- * instead of faking depth — loud absence over fabricated history.
+ * The strip is CALENDAR-shaped: one cell per day from the window's
+ * first persisted row to its last. Days with a verdict render the
+ * label color (VERDICT_DOT_CLASS, same semantics as the pill); days
+ * WITHOUT one (cron outage) render an outlined gap cell — a missing
+ * day must look missing, not silently compress into a contiguous-
+ * looking strip (loud absence over fabricated history; caption dates
+ * derive from the data, never hardcoded).
  *
- * Server component, pure CSS. Each square carries a `title` tooltip
- * with the day's label + net score for hover forensics.
+ * Server component, pure CSS. Each cell carries a `title` tooltip
+ * with the day's label + net score (or 기록 없음) for hover forensics.
  */
 export function VerdictTimeline({
   entries,
@@ -28,6 +30,9 @@ export function VerdictTimeline({
 
   const lastFlip = findLastFlip(entries);
   const latest = entries[entries.length - 1];
+  const first = entries[0];
+  const days = calendarDays(first.verdictDate, latest.verdictDate);
+  const byDate = new Map(entries.map((e) => [e.verdictDate, e]));
 
   return (
     <Card size="sm" className="p-5 md:p-6">
@@ -37,27 +42,39 @@ export function VerdictTimeline({
             판정 타임라인
           </p>
           <p className="text-[11px] text-muted-foreground">
-            {entries.length}일 기록 (2026-07-08 수집 시작)
+            {first.verdictDate} ~ {latest.verdictDate} · 기록 {entries.length}일
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-1">
-          {entries.map((entry) => (
-            <span
-              key={entry.verdictDate}
-              title={`${entry.verdictDate} — ${VERDICT_LABEL_KO[entry.label]}${
-                entry.netScore !== null
-                  ? ` (근거 균형 ${entry.netScore >= 0 ? "+" : ""}${entry.netScore.toFixed(2)})`
-                  : ""
-              }`}
-              className={cn(
-                "size-3 rounded-[3px]",
-                VERDICT_DOT_CLASS[entry.label],
-                entry.verdictDate === latest.verdictDate &&
-                  "ring-2 ring-ring ring-offset-1 ring-offset-card",
-              )}
-            />
-          ))}
+          {days.map((date) => {
+            const entry = byDate.get(date);
+            if (!entry) {
+              return (
+                <span
+                  key={date}
+                  title={`${date} — 기록 없음`}
+                  className="size-3 rounded-[3px] border border-dashed border-muted-foreground/40"
+                />
+              );
+            }
+            return (
+              <span
+                key={date}
+                title={`${date} — ${VERDICT_LABEL_KO[entry.label]}${
+                  entry.netScore !== null
+                    ? ` (근거 균형 ${entry.netScore >= 0 ? "+" : ""}${entry.netScore.toFixed(2)})`
+                    : ""
+                }`}
+                className={cn(
+                  "size-3 rounded-[3px]",
+                  VERDICT_DOT_CLASS[entry.label],
+                  date === latest.verdictDate &&
+                    "ring-2 ring-ring ring-offset-1 ring-offset-card",
+                )}
+              />
+            );
+          })}
         </div>
 
         <p className="text-xs text-muted-foreground">
@@ -68,6 +85,24 @@ export function VerdictTimeline({
       </CardContent>
     </Card>
   );
+}
+
+/** Inclusive YYYY-MM-DD day list; hard-capped defensively at 95 cells. */
+function calendarDays(first: string, last: string): string[] {
+  const out: string[] = [];
+  const startMs = Date.parse(`${first}T00:00:00Z`);
+  const endMs = Date.parse(`${last}T00:00:00Z`);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+    return [first, last].filter((d, i, a) => a.indexOf(d) === i);
+  }
+  for (
+    let ms = startMs;
+    ms <= endMs && out.length < 95;
+    ms += 24 * 60 * 60 * 1000
+  ) {
+    out.push(new Date(ms).toISOString().slice(0, 10));
+  }
+  return out;
 }
 
 function findLastFlip(

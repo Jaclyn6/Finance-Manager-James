@@ -4,6 +4,7 @@ import {
   collapseToDaily,
   type IndicatorSeriesPoint,
 } from "@/lib/advisor/series";
+import { compareVersionsNumeric } from "@/lib/utils/version-compare";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -399,20 +400,13 @@ export async function getIndicatorSeries(
     : endDate;
 
   const supabase = getSupabaseAdminClient();
-  // Secondary sort on model_version ASCENDING: on a MODEL_VERSION
-  // cutover day the same (key, date) can hold one row per version,
-  // and this reader's collapse is last-wins — ascending puts the
-  // NEWEST version last so it wins. Same newest-version-wins rule as
-  // the composite reader's tiebreak (34df3e6), adapted to this
-  // reader's ascending/last-wins shape.
   const { data, error } = await supabase
     .from("indicator_readings")
-    .select("indicator_key, observed_at, value_raw, fetch_status")
+    .select("indicator_key, observed_at, value_raw, fetch_status, model_version")
     .in("indicator_key", keys)
     .gte("observed_at", startDate)
     .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true })
-    .order("model_version", { ascending: true });
+    .order("observed_at", { ascending: true });
 
   if (error) {
     throw new Error(
@@ -420,21 +414,46 @@ export async function getIndicatorSeries(
     );
   }
 
+  return collapseRowsToSeries(keys, data ?? []);
+}
+
+/**
+ * Shared row→series shaping for the two series readers: success-only,
+ * finite values, normalized YYYY-MM-DD dates, then a per-date
+ * last-wins collapse ordered by NUMERIC version comparison so the
+ * newest model_version wins cutover days. Numeric — not byte-wise —
+ * because "v2.10.0" sorts before "v2.9.0" as a string, which would
+ * keep the STALE row on exactly the days the tiebreak exists for
+ * (Trigger 2 review 2026-07-08; same class as 34df3e6/90ff598).
+ */
+function collapseRowsToSeries(
+  keys: string[],
+  rows: Array<{
+    indicator_key: string;
+    observed_at: string;
+    value_raw: number | null;
+    fetch_status: string;
+    model_version: string;
+  }>,
+): Record<string, IndicatorSeriesPoint[]> {
+  const usable = rows
+    .filter((r) => r.fetch_status === "success")
+    .map((r) => ({
+      key: r.indicator_key,
+      date: String(r.observed_at).slice(0, 10),
+      value: Number(r.value_raw),
+      version: r.model_version,
+    }))
+    .filter((r) => Number.isFinite(r.value))
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+      return compareVersionsNumeric(a.version, b.version);
+    });
+
   const raw: Record<string, IndicatorSeriesPoint[]> = {};
   for (const key of keys) raw[key] = [];
-  for (const row of data ?? []) {
-    if (row.fetch_status !== "success") continue;
-    const value = Number(row.value_raw);
-    if (!Number.isFinite(value)) continue;
-    // observed_at may come back as a date or a full timestamp
-    // depending on column rendering — normalize to YYYY-MM-DD. Rows
-    // are unique per (key, observed_at, model_version); when a raw-only
-    // backfill row and a scored row share a date the values are the
-    // same FRED observation, so last-write-wins collapse is safe.
-    raw[row.indicator_key]?.push({
-      date: String(row.observed_at).slice(0, 10),
-      value,
-    });
+  for (const row of usable) {
+    raw[row.key]?.push({ date: row.date, value: row.value });
   }
   const out: Record<string, IndicatorSeriesPoint[]> = {};
   for (const key of keys) out[key] = collapseToDaily(raw[key] ?? []);
@@ -474,16 +493,13 @@ export async function getOnchainSeries(
     : endDate;
 
   const supabase = getSupabaseAdminClient();
-  // model_version ASC tiebreak: newest version sorts last → wins the
-  // last-wins collapse on cutover days. See getIndicatorSeries.
   const { data, error } = await supabase
     .from("onchain_readings")
-    .select("indicator_key, observed_at, value_raw, fetch_status")
+    .select("indicator_key, observed_at, value_raw, fetch_status, model_version")
     .in("indicator_key", keys)
     .gte("observed_at", startDate)
     .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true })
-    .order("model_version", { ascending: true });
+    .order("observed_at", { ascending: true });
 
   if (error) {
     throw new Error(
@@ -491,20 +507,7 @@ export async function getOnchainSeries(
     );
   }
 
-  const raw: Record<string, IndicatorSeriesPoint[]> = {};
-  for (const key of keys) raw[key] = [];
-  for (const row of data ?? []) {
-    if (row.fetch_status !== "success") continue;
-    const value = Number(row.value_raw);
-    if (!Number.isFinite(value)) continue;
-    raw[row.indicator_key]?.push({
-      date: String(row.observed_at).slice(0, 10),
-      value,
-    });
-  }
-  const out: Record<string, IndicatorSeriesPoint[]> = {};
-  for (const key of keys) out[key] = collapseToDaily(raw[key] ?? []);
-  return out;
+  return collapseRowsToSeries(keys, data ?? []);
 }
 
 /**

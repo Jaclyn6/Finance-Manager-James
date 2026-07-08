@@ -165,21 +165,17 @@ sub-line on the VIX / HY-spread chips. Backfill verified in prod
 (VIXCLS 1,306 rows) before shipping. Follow-up idea (not scheduled):
 percentile mention inside pillar reason sentences.
 
-### Verdict history persistence
+### ~~Verdict history persistence~~ — DONE 2026-07-08 (loop iterations 7-9)
 
-**Where it lives now:** verdicts are computed on-read
-(`src/lib/data/advisor.ts`), never stored.
-
-**The gap:** no "판정이 언제 할인→전환으로 바뀌었나" timeline, no
-hit-rate tracking ("할인 판정 후 3개월 수익률"), no notification hook.
-
-**Proposed treatment:** daily `advisor_verdicts` table written by a
-cron tail (asset_type, date, label, net_score, confidence, evidence
-JSONB), plus a timeline strip on `/asset/[slug]` and eventual
-verdict-flip alerting.
-
-**Why deferred:** schema + cron surface; deserves its own reviewed
-feature-unit after the pivot ships.
+Shipped: migration 0015 `advisor_verdicts` (applied to prod),
+`/api/cron/write-verdicts` as cron-technical step 3 (fresh-request
+cache semantics), `verdictToRow` serializer, `getVerdictHistory`
+reader (numeric version tiebreak via `compareVersionsNumeric`),
+`VerdictTimeline` calendar strip on `/asset/[slug]` (gap days render
+as outlined cells). Remaining follow-on (unscheduled):
+**verdict-flip alerting** (notify family when a label changes — needs
+a delivery channel decision) and **hit-rate report** (할인 판정 후
+1/3/6개월 수익률 — needs months of history first; revisit ~2026-10).
 
 ### GH Actions 60-day auto-disable keepalive
 

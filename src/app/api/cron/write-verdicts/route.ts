@@ -10,6 +10,7 @@ import { writeIngestRun } from "@/lib/data/snapshot";
 import { CACHE_TAGS } from "@/lib/data/tags";
 import { ADVISOR_ENGINE_VERSION } from "@/lib/advisor/verdict";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
+import { DASHBOARD_ASSET_ORDER } from "@/lib/utils/asset-labels";
 import type { TablesInsert } from "@/types/database";
 
 /**
@@ -48,7 +49,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const today = new Date().toISOString().slice(0, 10);
 
   let rowsWritten = 0;
-  let attempted = 0;
+  // Intended scope, not observed scope: if getAdvisorViews throws, the
+  // audit row must still say how many verdicts SHOULD have been
+  // written — a 0/0 row would hide the failure's scale (Trigger 2
+  // review note, 2026-07-08).
+  let attempted = DASHBOARD_ASSET_ORDER.length;
   let errorSummary: string | null = null;
 
   try {
