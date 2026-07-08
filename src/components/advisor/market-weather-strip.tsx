@@ -27,6 +27,12 @@ export interface MarketWeatherStripProps {
   readings: Record<string, number | null>;
   /** `getWeatherDeltas()` output — 7-day change per indicator_key. */
   deltas?: Record<string, number | null>;
+  /**
+   * `getWeatherPercentiles()` output — 5y percentile rank (0-1) of
+   * the current value per indicator_key. Null/absent = no context
+   * line (series not deep enough yet).
+   */
+  percentiles?: Record<string, number | null>;
 }
 
 type Tone = "emerald" | "amber" | "red" | "muted";
@@ -41,6 +47,8 @@ interface GaugeSpec {
   formatDelta?: (d: number) => string;
   /** Semantic direction: is a RISING value good or bad for buyers? */
   risingIsBad?: boolean;
+  /** Show the "5년 상위 X%" context line when a percentile exists. */
+  showPercentile?: boolean;
 }
 
 /** Mirrors HY_DANGER_FLOOR / HY_TURN_EPS in `src/lib/advisor/pillars.ts`. */
@@ -59,6 +67,7 @@ const GAUGES: GaugeSpec[] = [
     },
     formatDelta: (d) => `${d >= 0 ? "+" : ""}${d.toFixed(1)}`,
     risingIsBad: true,
+    showPercentile: true,
   },
   {
     // F&G delta semantics are contrarian like the level: RISING F&G =
@@ -113,8 +122,20 @@ const GAUGES: GaugeSpec[] = [
     },
     formatDelta: (d) => `${d >= 0 ? "+" : ""}${d.toFixed(2)}%p`,
     risingIsBad: true,
+    showPercentile: true,
   },
 ];
+
+/**
+ * "5년 상위 X%" line. percentile is the SHARE OF HISTORY AT OR BELOW
+ * the current value (0.88 → higher than 88% of the window → 상위
+ * 12%). Only rendered for gauges where "elevated vs own history" is
+ * the natural read (VIX, HY spread — both risingIsBad).
+ */
+function formatPercentileKo(percentile: number): string {
+  const topPct = Math.max(0, Math.min(100, (1 - percentile) * 100));
+  return `5년 상위 ${topPct.toFixed(0)}%`;
+}
 
 const TONE_DOT_CLASS: Record<Tone, string> = {
   emerald: "bg-emerald-500",
@@ -126,6 +147,7 @@ const TONE_DOT_CLASS: Record<Tone, string> = {
 export function MarketWeatherStrip({
   readings,
   deltas = {},
+  percentiles = {},
 }: MarketWeatherStripProps) {
   return (
     <Card size="sm" className="p-4 md:p-5">
@@ -135,6 +157,9 @@ export function MarketWeatherStrip({
           {GAUGES.map((gauge) => {
             const value = readings[gauge.key] ?? null;
             const delta = deltas[gauge.key] ?? null;
+            const percentile = gauge.showPercentile
+              ? (percentiles[gauge.key] ?? null)
+              : null;
             return (
               <div key={gauge.key} className="min-w-0">
                 <p className="truncate text-[11px] text-muted-foreground">
@@ -175,6 +200,11 @@ export function MarketWeatherStrip({
                       />
                       {gauge.note(value, delta)}
                     </p>
+                    {percentile !== null && (
+                      <p className="mt-0.5 text-[10px] text-muted-foreground/70">
+                        {formatPercentileKo(percentile)}
+                      </p>
+                    )}
                   </>
                 )}
               </div>

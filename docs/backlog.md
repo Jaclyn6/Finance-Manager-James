@@ -107,21 +107,13 @@ day's last reading via `collapseToDaily`), F&G deltas wired through
 `getWeatherDeltas` into the same `deltas` prop, contrarian arrow
 colors (rising toward greed = red).
 
-### 5y percentile context chips
+### ~~5y percentile context chips~~ — DONE 2026-07-08 (loop iteration 2)
 
-**Where it lives now:** nothing — enabled by the `ingest-macro` §4.1
-FRED full-window backfill shipped 2026-07-08.
-
-**The gap:** "VIX 24.5" means little to non-experts; "지난 5년 상위
-12% 수준" anchors it.
-
-**Proposed treatment:** percentile helper over `getIndicatorSeries`
-(1825d window) + a sub-line on weather chips and pillar reasons.
-Blocked until the backfill has run once in production (verify with
-`select count(*) from indicator_readings where indicator_key='VIXCLS'`
-≫ 100).
-
-**Why deferred:** needs the production backfill to land first.
+Shipped: `percentileRank` (250-sample floor → null until depth
+exists), `getWeatherPercentiles` over the 1825d window, "5년 상위 X%"
+sub-line on the VIX / HY-spread chips. Backfill verified in prod
+(VIXCLS 1,306 rows) before shipping. Follow-up idea (not scheduled):
+percentile mention inside pillar reason sentences.
 
 ### Verdict history persistence
 

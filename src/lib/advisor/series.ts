@@ -38,6 +38,38 @@ export function collapseToDaily(
 }
 
 /**
+ * Minimum observations before a percentile rank is meaningful. ~1
+ * trading year: below this, "5년 상위 X%" would be computed from a
+ * few weeks of history and mislead — return null instead (loud-
+ * failure tenet: absent context should look absent).
+ */
+export const PERCENTILE_MIN_SAMPLES = 250;
+
+/**
+ * Percentile rank of `value` within the series' historical values:
+ * the fraction of observations ≤ value, in [0, 1]. 0.88 means the
+ * current reading is higher than 88% of the window — the weather
+ * strip renders that as "5년 상위 12%". Null when the series is
+ * thinner than `minSamples` or the value is not finite.
+ */
+export function percentileRank(
+  series: ReadonlyArray<IndicatorSeriesPoint>,
+  value: number,
+  minSamples = PERCENTILE_MIN_SAMPLES,
+): number | null {
+  if (!Number.isFinite(value)) return null;
+  const values = series
+    .map((p) => p.value)
+    .filter((v) => Number.isFinite(v));
+  if (values.length < minSamples) return null;
+  let atOrBelow = 0;
+  for (const v of values) {
+    if (v <= value) atOrBelow++;
+  }
+  return atOrBelow / values.length;
+}
+
+/**
  * Week-over-week change of a series: latest value minus the value at
  * the most recent observation at least `lookbackDays` calendar days
  * older than the latest. Null when the series is too thin to cover

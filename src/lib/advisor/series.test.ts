@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collapseToDaily,
   computeWowDelta,
+  percentileRank,
   type IndicatorSeriesPoint,
 } from "./series";
 
@@ -53,6 +54,39 @@ describe("computeWowDelta", () => {
       { date: "also-bad", value: 2 },
     ];
     expect(computeWowDelta(series)).toBeNull();
+  });
+});
+
+describe("percentileRank", () => {
+  const flat300 = (v: number): IndicatorSeriesPoint[] =>
+    Array.from({ length: 300 }, (_, i) => ({
+      date: `d${i}`,
+      value: v,
+    }));
+
+  it("ranks the current value against the window", () => {
+    // 300 points: values 1..300; value 270 sits at rank 270/300 = 0.9
+    const series: IndicatorSeriesPoint[] = Array.from(
+      { length: 300 },
+      (_, i) => ({ date: `d${i}`, value: i + 1 }),
+    );
+    expect(percentileRank(series, 270)).toBeCloseTo(0.9, 10);
+    expect(percentileRank(series, 300)).toBe(1);
+    expect(percentileRank(series, 0.5)).toBe(0);
+  });
+
+  it("returns null below the minimum sample floor", () => {
+    const thin: IndicatorSeriesPoint[] = Array.from(
+      { length: 100 },
+      (_, i) => ({ date: `d${i}`, value: i }),
+    );
+    expect(percentileRank(thin, 50)).toBeNull();
+    expect(percentileRank(thin, 50, 100)).not.toBeNull();
+  });
+
+  it("returns null for non-finite values, never guesses", () => {
+    expect(percentileRank(flat300(10), Number.NaN)).toBeNull();
+    expect(percentileRank(flat300(10), Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
 

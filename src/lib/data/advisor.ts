@@ -15,7 +15,7 @@ import {
   pickRepresentativeTicker,
 } from "@/lib/utils/asset-labels";
 
-import { computeWowDelta } from "@/lib/advisor/series";
+import { computeWowDelta, percentileRank } from "@/lib/advisor/series";
 
 import {
   getIndicatorSeries,
@@ -90,6 +90,14 @@ export const DIRECTION_KEYS = ["VIXCLS", "BAMLH0A0HYM2"] as const;
  * not the FRED reader.
  */
 export const SENTIMENT_DIRECTION_KEYS = ["CNN_FG", "CRYPTO_FG"] as const;
+
+/**
+ * Calendar window for the 5-year percentile context ("VIX가 지난
+ * 5년 중 상위 X%"). Matches the FRED fetch window the §4.1 backfill
+ * persists; `percentileRank`'s 250-sample floor keeps the chip
+ * hidden until the backfilled depth actually exists.
+ */
+export const PERCENTILE_WINDOW_DAYS = 1825;
 
 const MA_KEYS = ["MA_50", "MA_200"] as const;
 
@@ -310,6 +318,30 @@ export async function getWeatherDeltas(
   }
   for (const key of SENTIMENT_DIRECTION_KEYS) {
     out[key] = computeWowDelta(sentimentSeries[key] ?? []);
+  }
+  return out;
+}
+
+/**
+ * 5-year percentile rank of each direction gauge's CURRENT value,
+ * for the weather strip's "5년 상위 X%" context line. The rank is
+ * computed against the same series the current value is the last
+ * point of, so chip and history can't disagree. Null (hidden chip
+ * line) until the FRED backfill has seeded ≥250 observations.
+ */
+export async function getWeatherPercentiles(
+  endDate: string,
+): Promise<Record<string, number | null>> {
+  const series = await getIndicatorSeries(
+    [...DIRECTION_KEYS],
+    endDate,
+    PERCENTILE_WINDOW_DAYS,
+  );
+  const out: Record<string, number | null> = {};
+  for (const key of DIRECTION_KEYS) {
+    const points = series[key] ?? [];
+    const latest = points.length > 0 ? points[points.length - 1] : null;
+    out[key] = latest === null ? null : percentileRank(points, latest.value);
   }
   return out;
 }

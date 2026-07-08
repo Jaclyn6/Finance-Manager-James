@@ -7,7 +7,11 @@ import { CompositeStateCard } from "@/components/dashboard/composite-state-card"
 import { RecentChanges } from "@/components/dashboard/recent-changes";
 import { SignalAlignmentCard } from "@/components/dashboard/signal-alignment-card";
 import { NoSnapshotNotice } from "@/components/shared/no-snapshot-notice";
-import { getAdvisorViews, getWeatherDeltas } from "@/lib/data/advisor";
+import {
+  getAdvisorViews,
+  getWeatherDeltas,
+  getWeatherPercentiles,
+} from "@/lib/data/advisor";
 import { getChangelogAroundDate } from "@/lib/data/changelog";
 import {
   getClosestEarlierSnapshotDate,
@@ -85,6 +89,7 @@ export async function DashboardContent({
     advisorViews,
     weatherReadings,
     weatherDeltas,
+    weatherPercentiles,
   ] = await Promise.all([
     selectedDate === null
       ? getLatestCompositeSnapshots()
@@ -96,6 +101,9 @@ export async function DashboardContent({
       ? getLatestIndicatorReadings()
       : Promise.resolve(null),
     selectedDate === null ? getWeatherDeltas(today) : Promise.resolve(null),
+    selectedDate === null
+      ? getWeatherPercentiles(today)
+      : Promise.resolve(null),
   ]);
 
   // Empty selected-date → offer a quick jump to the closest earlier
@@ -167,6 +175,7 @@ export async function DashboardContent({
         <MarketWeatherStrip
           readings={weatherReadings}
           deltas={weatherDeltas ?? undefined}
+          percentiles={weatherPercentiles ?? undefined}
         />
       )}
 
