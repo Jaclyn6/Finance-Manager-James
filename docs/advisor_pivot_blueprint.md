@@ -107,9 +107,22 @@ every ingest route that writes an input invalidates the verdict.
 
 - Video strategies #3/#4 not yet extracted (transcript unavailable via
   scraping; needs user confirmation or a browser-session read).
-- F&G 7-day delta (CNN_FG lives in `onchain_readings`; the weather
-  strip currently shows deltas only for FRED-sourced VIX/HY).
-- 5y percentile context chips ("현재 VIX는 5년 상위 X%") — unblocked
-  once the FRED backfill has run in production.
-- Verdict history persistence (daily advisor_verdicts table) for
-  "판정이 언제 바뀌었나" timeline + hit-rate tracking.
+- Composite engine's sentiment category still reads raw CNN_FG (goes
+  dark during the outage) — wiring STOCK_FG_PROXY into the composite
+  is its own score-engine feature-unit (see backlog).
+- Verdict-flip alerting + hit-rate report (needs months of persisted
+  history; revisit ~2026-10).
+
+## 7. Shipped increments (improvement loop, 2026-07-08)
+
+All reviewed under CLAUDE.md Trigger 2 (5-agent, ≥80 fixed) before
+push; engine rule-set = `ADVISOR_ENGINE_VERSION adv-1.1.0`.
+
+| Increment | Where | Loop iter. |
+|---|---|---|
+| F&G 7-day deltas on weather strip (`getOnchainSeries`, `collapseToDaily`) | 63b93da, 90ff598 | 1 |
+| model_version numeric-safe tiebreaks in series readers | 90ff598, 3125da4 | 1, 9 |
+| 5y percentile chips ("5년 상위 X%", 250-sample floor) | 606626c | 2 |
+| Cron off-:00 schedules (GHA saturated-slot skip mitigation) | 9f50067 | 3 |
+| STOCK_FG_PROXY — 4-component CNN-outage fallback, 자체 산출 labeling, delta arrow suppressed on proxy path | 92cedb2, fe7bb50, a263ced | 4-6 |
+| Verdict history — migration 0015, `/api/cron/write-verdicts` (cron-technical step 3), `VerdictTimeline` calendar strip with gap cells | 1f009cb, e7d3060, 1240989, 3125da4 | 7-9 |
