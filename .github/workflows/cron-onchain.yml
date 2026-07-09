@@ -80,12 +80,12 @@ jobs:
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${PRODUCTION_URL}/api/cron/ingest-cnn-fg"
 
-      - name: ingest-news (safety net)
-        continue-on-error: true
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          PRODUCTION_URL: ${{ secrets.PRODUCTION_URL }}
-        run: |
-          curl -sS -f \
-            -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${PRODUCTION_URL}/api/cron/ingest-news"
+      # NOTE (2026-07-09): ingest-news was REMOVED from this safety
+      # net after one day. Each news run costs 5 Alpha Vantage calls
+      # against the shared 25/day key; the 4-hourly duplicates burned
+      # quota the 22:07Z technical cron's Tier-1 needs, and the
+      # 04:47Z run logged all-5-tickers rate-limited. cnn-fg stays —
+      # CNN F&G does not touch Alpha Vantage. News keeps its hourly
+      # workflow slot (succeeds while quota lasts, loud in ingest_runs
+      # after); the deeper hourly-news-vs-25/day budget mismatch is a
+      # backlog item, not a safety-net concern.

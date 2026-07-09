@@ -231,6 +231,30 @@ user decision required).
 
 ## Data-pipeline reliability
 
+### News sentiment vs Alpha Vantage 25/day budget (pre-existing, surfaced 2026-07-09)
+
+**Where it lives now:** `ingest-news` runs in cron-hourly.yml (every
+hour, 5 tickers = 5 AV calls per run) against the shared 25/day AV
+key that also serves ingest-technical's Tier-1 (12 calls at 22:07Z).
+
+**The gap:** hourly × 5 tickers ≈ 40+ intended calls/day vs 25/day
+cap — news succeeds only for the first few runs after the 00:00 UTC
+quota reset, then rate-limits all day (verified 2026-07-09 04:47Z
+audit row: all 5 tickers "25 requests per day" error). The technical
+cron survives via its TwelveData/Yahoo fallback, but its AV Tier-1 is
+starved. The 4h safety net's news step made this worse and was
+removed same-day.
+
+**Proposed treatment (pick one):** (a) drop news to 1×/day scheduled
+BEFORE 22:07Z technical with a 5-call budget (fits 5+12=17/25); (b)
+ticker rotation (1 ticker/hour, 24 calls/day); (c) separate AV key
+for news. (a) is simplest and matches the original 17/25 budget
+comment in ingest-prices.
+
+**Why deferred:** sentiment category has other inputs and news
+staleness is bounded to a day; needs a small workflow+budget decision
+rather than a rushed edit.
+
 ### Market-holiday calendar integration (option 3)
 
 **Where it lives now:** `src/app/api/cron/ingest-technical/route.ts`
