@@ -32,8 +32,9 @@ import { UserDisplay } from "./user-display";
  *    mount — so the component tree must sit inside a Suspense
  *    boundary. Without one, the static shell can't be prerendered.
  *
- * One boundary covers both. The fallback matches the final footprint
- * (icon button + user pill) so hydration doesn't shift the layout.
+ * One boundary covers both. The fallback approximates the final
+ * footprint per breakpoint (see HeaderRightSkeleton's measurements)
+ * so resolving the boundary shifts the layout by at most a few px.
  *
  * MobileNav itself is a Client Component (it uses `usePathname` +
  * `useState`) but base-ui's dialog root doesn't trigger the same
@@ -97,12 +98,14 @@ function HeaderRightSkeleton() {
       {/* DatePicker placeholder — rough width for the date button. */}
       <Skeleton className="h-11 w-28 rounded-md" />
       <Skeleton className="size-11 rounded-md" />
-      {/* UserDisplay placeholder — MUST track the responsive footprint
-          of the real content (email hidden <md, persona badge hidden
-          <sm): a fixed w-56 fallback overflowed the 375px viewport and
-          produced horizontal scroll during every mobile load (UX 실사
-          2026-08-03). */}
-      <Skeleton className="h-11 w-16 rounded-md sm:w-28 md:w-56" />
+      {/* UserDisplay placeholder — approximates the real content's
+          footprint per breakpoint (measured: sign-out button alone
+          ≈79px below md; email + persona pill + sign-out ≈249px at
+          md+ → w-20/md:w-64 land within ~8px). A fixed w-56 fallback
+          overflowed the 375px viewport and produced horizontal scroll
+          during every mobile load (UX 실사 2026-08-03). Single `md`
+          breakpoint per blueprint §6.2. */}
+      <Skeleton className="h-11 w-20 rounded-md md:w-64" />
     </div>
   );
 }

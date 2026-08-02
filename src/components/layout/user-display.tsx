@@ -55,11 +55,13 @@ export async function UserDisplay() {
       <div className="hidden text-right md:block">
         <p className="text-xs text-muted-foreground">{email}</p>
       </div>
-      {/* Persona pill hidden on the narrowest viewports: at 375px the
-          date picker + theme toggle + sign-out already fill the row,
-          and the pill pushed the cluster past the viewport edge (UX
-          실사 2026-08-03). It returns at `sm:` where the row has room. */}
-      <Badge variant="secondary" className="hidden sm:inline-flex">
+      {/* Persona pill follows the same single-`md`-breakpoint rule as
+          the email above (blueprint §6.2): below md the date picker +
+          theme toggle + sign-out already fill a 375px row and the pill
+          pushed the cluster past the viewport edge (UX 실사
+          2026-08-03). No `sm:` tier — that was tried for the email and
+          removed for creating a mixed state at 640-767px. */}
+      <Badge variant="secondary" className="hidden md:inline-flex">
         {PERSONA_LABELS[persona] ?? persona}
       </Badge>
       <SignOutButton />

@@ -96,12 +96,14 @@ export async function ModelVersionBadge() {
               {versionLabel}
             </span>
             {cutoverDate ? (
-              // Cutover date hidden on the narrowest viewports — the
-              // full pill overflowed 375px (UX 실사 2026-08-03). The
-              // aria-label + tooltip still carry the date everywhere.
+              // Cutover date hidden below `md` — the full pill
+              // overflowed a 375px viewport (UX 실사 2026-08-03), and
+              // blueprint §6.2 keeps `md` as the single breakpoint.
+              // The aria-label + tooltip still carry the date at every
+              // width.
               <span
                 aria-hidden="true"
-                className="hidden text-muted-foreground sm:inline"
+                className="hidden text-muted-foreground md:inline"
               >
                 · {cutoverDate}
               </span>
