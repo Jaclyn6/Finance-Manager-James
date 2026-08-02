@@ -169,8 +169,10 @@ function extractMacroScore(blob: unknown): number | null {
  *
  * Own query (no reader exists for per-ticker technical rows — see
  * `getLatestIndicatorReadings`'s header for why the shared map
- * excludes them). Newest-first + first-hit-wins per (ticker, key),
- * same dedupe pattern as the shared readers.
+ * excludes them). Newest-first + first-hit-wins per (ticker, key) —
+ * safe here because the query is filtered to exactly these tickers ×
+ * 2 MA keys with a per-pair-sized limit, unlike the unfiltered
+ * window-scan retired from getLatestIndicatorReadings (2026-08-03).
  */
 async function getLatestMaByTicker(
   tickers: string[],

@@ -184,37 +184,53 @@ export async function loadSignalInputs(
 ): Promise<SignalInputs> {
   // ---- 1. indicator_readings ----
   //
-  // Fetch a bounded window of rows then collapse in JS. We pull up to
-  // WDTGAL_HISTORY_DAYS + 10 days of FRED rows to ensure even with
-  // weekend/holiday gaps we capture ≥ 20 usable WDTGAL observations.
-  // The upper bound of 30 × 5 = 150 rows (WDTGAL_HISTORY_DAYS + 10 ×
-  // FRED_SIGNAL_KEYS.length) is cheap — a single indexed query on
-  // `indicator_readings_dedup`.
-  const {
-    data: fredRows,
-    error: fredErr,
-  } = await supabase
-    .from("indicator_readings")
-    .select("indicator_key, observed_at, value_raw, fetch_status")
-    .in("indicator_key", [...FRED_SIGNAL_KEYS])
-    .lte("observed_at", snapshotDate)
-    .order("observed_at", { ascending: false })
-    .limit((WDTGAL_HISTORY_DAYS + 10) * FRED_SIGNAL_KEYS.length);
-  if (fredErr) {
-    throw new Error(
-      `loadSignalInputs indicator_readings query failed: ${fredErr.message}`,
-    );
-  }
-
-  const byKey = new Map<string, Array<{ observed_at: string; value_raw: number | null }>>();
-  for (const row of fredRows ?? []) {
-    // Only treat 'success' rows as providing a usable value. Error /
-    // partial rows have value_raw=null anyway but we double-guard.
-    if (row.fetch_status !== "success") continue;
-    const bucket = byKey.get(row.indicator_key) ?? [];
-    bucket.push({ observed_at: row.observed_at, value_raw: row.value_raw });
-    byKey.set(row.indicator_key, bucket);
-  }
+  // PER-KEY windows, each sized to its signal's actual need. The
+  // previous shared ORDER-BY window (150 rows across all 5 keys)
+  // silently ages out the slowest-cadence key as daily-row density
+  // grows — monthly SAHMCURRENT was measured at rank 106/150 on
+  // 2026-08-03, ~4 weeks from dropping to null the same way it
+  // already did in `getLatestIndicatorReadings` (fixed the same day,
+  // same per-key strategy). Five tiny indexed queries in parallel;
+  // the cron pays milliseconds for immunity to key growth and
+  // publication lag.
+  const fredKeyLimits: ReadonlyArray<readonly [string, number]> = [
+    ["VIXCLS", 4], // latest only (+ jitter headroom)
+    ["ICSA", 4], // latest only
+    ["SAHMCURRENT", 4], // latest only — monthly, may lag 60+ days
+    ["BAMLH0A0HYM2", BAML_HISTORY_DAYS + 5], // today + 7d history + gaps
+    ["WDTGAL", WDTGAL_HISTORY_DAYS + 10], // today + 20d MA window + gaps
+  ];
+  const fredPerKey = await Promise.all(
+    fredKeyLimits.map(async ([key, limit]) => {
+      const { data, error } = await supabase
+        .from("indicator_readings")
+        .select("indicator_key, observed_at, value_raw, fetch_status")
+        .eq("indicator_key", key)
+        .lte("observed_at", snapshotDate)
+        .order("observed_at", { ascending: false })
+        .limit(limit);
+      if (error) {
+        throw new Error(
+          `loadSignalInputs indicator_readings(${key}) query failed: ${error.message}`,
+        );
+      }
+      // Only 'success' rows provide usable values. Error / partial
+      // rows have value_raw=null anyway but we double-guard.
+      return [
+        key,
+        (data ?? [])
+          .filter((row) => row.fetch_status === "success")
+          .map((row) => ({
+            observed_at: row.observed_at,
+            value_raw: row.value_raw,
+          })),
+      ] as const;
+    }),
+  );
+  const byKey = new Map<
+    string,
+    Array<{ observed_at: string; value_raw: number | null }>
+  >(fredPerKey);
 
   // Helper: latest value-raw for a key (observed_at DESC already applied).
   const latestValue = (key: string): number | null => {

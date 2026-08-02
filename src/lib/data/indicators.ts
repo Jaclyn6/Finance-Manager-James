@@ -290,10 +290,14 @@ export async function getCompositeSnapshotsForAssetRange(
  *                             facts, not per-asset, so the asset_type
  *                             column is informational.
  *   - `onchain_readings`    → MVRV_Z, SOPR, BTC_ETF_NETFLOW, CRYPTO_FG,
- *                             CNN_FG. CNN_FG is stored here for table-
- *                             location convenience even though it feeds
- *                             the sentiment category (per migration 0005
- *                             comment + tags.ts CACHE_TAGS.onchain note).
+ *                             CNN_FG, STOCK_FG_PROXY. CNN_FG is stored
+ *                             here for table-location convenience even
+ *                             though it feeds the sentiment category
+ *                             (per migration 0005 comment + tags.ts
+ *                             CACHE_TAGS.onchain note). STOCK_FG_PROXY
+ *                             is written by /api/cron/write-verdicts,
+ *                             which explicitly busts the `onchain` tag
+ *                             for exactly this reader's sake.
  *
  * `technical_readings` is intentionally NOT included — those rows are
  * keyed by `(ticker, indicator_key)` and the dashboard's
@@ -309,8 +313,10 @@ export async function getCompositeSnapshotsForAssetRange(
  * for the upstream tables. The `prices` tag is NOT used here (price
  * history is visualization-only per blueprint §7.4); we tag against
  * `macroSnapshot` + `onchain` because every cron path that writes raw
- * values into these tables already invalidates one of those tags via
- * the cron tail-call block (blueprint §5 routing table).
+ * values into these tables invalidates one of those tags —
+ * ingest-macro/-onchain/-cnn-fg via their tail-call blocks (blueprint
+ * §5 routing table), and write-verdicts busts `onchain` explicitly
+ * for the STOCK_FG_PROXY row it owns.
  *
  * Returns a plain `Record<string, number | null>` keyed by
  * `indicator_key`. Missing keys mean either no row exists or the
@@ -365,9 +371,14 @@ export async function getLatestIndicatorReadings(): Promise<
       .order("observed_at", { ascending: false })
       .limit(4);
     if (error) {
-      throw new Error(
-        `getLatestIndicatorReadings ${table}(${key}) query failed: ${error.message} (${error.code ?? "no code"})`,
+      // One key's transient failure must not 500 every consumer of
+      // the whole readings map (21 fan-out queries vs the old 2) —
+      // log loudly, drop the key, and the UI renders its documented
+      // "—" missing state for just that gauge.
+      console.error(
+        `[getLatestIndicatorReadings] ${table}(${key}) query failed: ${error.message} (${error.code ?? "no code"})`,
       );
+      return null;
     }
     const best = pickLatestByDateThenVersion(data ?? []);
     return best ? [key, best.value_raw] : null;

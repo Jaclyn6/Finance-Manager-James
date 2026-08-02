@@ -95,6 +95,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           `STOCK_FG_PROXY upsert failed: ${proxyError.message} (${proxyError.code ?? "no code"})`,
         );
       }
+      // getLatestIndicatorReadings surfaces STOCK_FG_PROXY under the
+      // `onchain` tag — this route is that row's ONLY writer, so it
+      // must bust that tag itself or the dashboard shows yesterday's
+      // proxy until an unrelated cron does it incidentally (Trigger 2
+      // review, 2026-08-03).
+      revalidateTag(CACHE_TAGS.onchain, { expire: 0 });
     } catch (proxyErr) {
       const msg =
         proxyErr instanceof Error ? proxyErr.message : String(proxyErr);
