@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseActiveSignals,
   parsePerSignalDetail,
+  signalScopeDiffersFromCommon,
 } from "./signal-alignment-card";
 
 /**
@@ -101,5 +102,22 @@ describe("parseActiveSignals", () => {
       "EXTREME_FEAR",
     ]);
     expect(result.size).toBe(1);
+  });
+});
+
+describe("signalScopeDiffersFromCommon", () => {
+  it("stays silent where the set equals the common card's", () => {
+    // us_equity shares BASE_SIGNALS with common — a scope label there
+    // would announce a difference that does not exist (review 91).
+    expect(signalScopeDiffersFromCommon("us_equity")).toBe(false);
+    expect(signalScopeDiffersFromCommon("common")).toBe(false);
+  });
+
+  it("labels subsets AND supersets — crypto has MORE than common", () => {
+    expect(signalScopeDiffersFromCommon("kr_equity")).toBe(true);
+    expect(signalScopeDiffersFromCommon("global_etf")).toBe(true);
+    // 7 vs 6: not a subset, which is why the label copy must be
+    // direction-neutral (review 87).
+    expect(signalScopeDiffersFromCommon("crypto")).toBe(true);
   });
 });

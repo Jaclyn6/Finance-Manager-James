@@ -91,6 +91,24 @@ export interface SignalAlignmentCardProps {
   isRulesCutoverDay?: boolean;
 }
 
+/**
+ * Scope-label gate: the count line gets a qualifier ONLY when this
+ * asset's applicable signal set actually differs from the common
+ * card's — us_equity shares the common set, and a label there would
+ * announce a difference that does not exist. Compared as sets, not
+ * lengths: the common set is NOT a superset (crypto swaps
+ * MOMENTUM_TURN for two extras, 7 vs 6), which is also why the label
+ * copy must stay direction-neutral (Trigger 2 review, 2026-08-03).
+ */
+export function signalScopeDiffersFromCommon(assetType: AssetType): boolean {
+  const applicable = signalsForAssetType(assetType);
+  const common = new Set(signalsForAssetType("common"));
+  return (
+    applicable.length !== common.size ||
+    applicable.some((signal) => !common.has(signal))
+  );
+}
+
 export function SignalAlignmentCard({
   signalEvent,
   assetType,
@@ -98,6 +116,7 @@ export function SignalAlignmentCard({
 }: SignalAlignmentCardProps) {
   const applicableSignals = signalsForAssetType(assetType);
   const applicableCount = applicableSignals.length;
+  const scopeDiffersFromCommon = signalScopeDiffersFromCommon(assetType);
 
   // ---- Empty state ----
   if (signalEvent === null) {
@@ -119,14 +138,10 @@ export function SignalAlignmentCard({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {applicableCount}가지 독립 매수 조건 중 몇 개가 현재 충족되는가
-                {/* Per-asset surfaces show only that asset's applicable
-                    subset, so the count differs from the 전체 card (e.g.
-                    5 vs 6) — say so, or the family reads it as a bug
-                    (UX 실사 2026-08-03). */}
-                {assetType !== "common" && (
+                {scopeDiffersFromCommon && (
                   <span className="text-muted-foreground/70">
                     {" "}
-                    (이 자산군 적용 조건만)
+                    (이 자산군에 해당하는 조건 기준)
                   </span>
                 )}
               </p>
@@ -179,14 +194,10 @@ export function SignalAlignmentCard({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {applicableCount}가지 독립 매수 조건 중 몇 개가 현재 충족되는가
-                {/* Per-asset surfaces show only that asset's applicable
-                    subset, so the count differs from the 전체 card (e.g.
-                    5 vs 6) — say so, or the family reads it as a bug
-                    (UX 실사 2026-08-03). */}
-                {assetType !== "common" && (
+                {scopeDiffersFromCommon && (
                   <span className="text-muted-foreground/70">
                     {" "}
-                    (이 자산군 적용 조건만)
+                    (이 자산군에 해당하는 조건 기준)
                   </span>
                 )}
               </p>
