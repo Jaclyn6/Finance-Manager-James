@@ -7,6 +7,8 @@ import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { ASSET_SLUGS } from "@/lib/utils/asset-slug";
 import { buildNavHref } from "@/lib/utils/nav-href";
 import {
+  STANCE_DOT_CLASS,
+  STANCE_LABEL_KO,
   VERDICT_ACCENT_BORDER_CLASS,
   VERDICT_BADGE_CLASS,
   VERDICT_LABEL_KO,
@@ -89,14 +91,21 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
           <EvidenceBalanceBar netScore={verdict.netScore} />
         )}
 
-        {verdict.evidenceKo.length > 0 && (
+        {verdict.evidence.length > 0 && (
           <ul className="space-y-1 text-xs text-muted-foreground">
-            {verdict.evidenceKo.slice(0, 2).map((evidence) => (
-              <li key={evidence} className="flex gap-1.5">
-                <span aria-hidden className="text-muted-foreground/60">
-                  ―
+            {verdict.evidence.slice(0, 2).map((item) => (
+              <li key={item.reasonKo} className="flex items-start gap-1.5">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "mt-1 size-1.5 shrink-0 rounded-full",
+                    STANCE_DOT_CLASS[item.stance],
+                  )}
+                />
+                <span className="sr-only">
+                  {STANCE_LABEL_KO[item.stance]}:{" "}
                 </span>
-                <span>{evidence}</span>
+                <span>{item.reasonKo}</span>
               </li>
             ))}
           </ul>

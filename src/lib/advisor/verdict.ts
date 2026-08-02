@@ -133,13 +133,13 @@ export function computeAdvisorVerdict(inputs: AdvisorInputs): AdvisorVerdict {
       ? 0
       : Math.round(coverage * (0.4 + 0.6 * decisiveness) * 100) / 100;
 
-  const evidenceKo = pillars
+  const evidence = pillars
     .filter((p) => p.strength > 0)
     .sort(
       (a, b) =>
         (contributions.get(b.pillar) ?? 0) - (contributions.get(a.pillar) ?? 0),
     )
-    .map((p) => p.reasonKo);
+    .map((p) => ({ reasonKo: p.reasonKo, stance: p.stance }));
 
   return {
     label,
@@ -148,7 +148,8 @@ export function computeAdvisorVerdict(inputs: AdvisorInputs): AdvisorVerdict {
     confidence,
     pillars,
     headlineKo: buildHeadlineKo(label, drawdown, netScore),
-    evidenceKo,
+    evidence,
+    evidenceKo: evidence.map((e) => e.reasonKo),
   };
 }
 

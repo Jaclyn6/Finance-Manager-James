@@ -102,8 +102,23 @@ export interface AdvisorVerdict {
   pillars: PillarEvaluation[];
   /** One-sentence Korean verdict headline. */
   headlineKo: string;
+  /**
+   * Ordered evidence (most influential first) with the source
+   * pillar's stance, so surfaces can mark which SIDE each sentence
+   * supports without re-deriving the combiner's contribution sort or
+   * inventing their own lean threshold (stance comes from the
+   * engine's single ±0.15 band in pillars.ts). `evidenceKo` is
+   * derived from this list — the two can never disagree on order or
+   * content.
+   */
+  evidence: AdvisorEvidenceItem[];
   /** Ordered evidence sentences (most influential first). */
   evidenceKo: string[];
+}
+
+export interface AdvisorEvidenceItem {
+  reasonKo: string;
+  stance: PillarStance;
 }
 
 // ---------------------------------------------------------------------------

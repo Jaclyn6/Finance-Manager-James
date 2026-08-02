@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import {
   PILLAR_LABEL_KO,
   STANCE_BADGE_CLASS,
+  STANCE_DOT_CLASS,
   STANCE_LABEL_KO,
   VERDICT_BADGE_CLASS,
   VERDICT_LABEL_KO,
@@ -61,14 +62,21 @@ export function AdvisorEvidence({ view }: { view: AdvisorAssetView }) {
             {verdict.headlineKo}
           </p>
 
-          {verdict.evidenceKo.length > 0 && (
+          {verdict.evidence.length > 0 && (
             <ul className="space-y-1 text-xs text-muted-foreground">
-              {verdict.evidenceKo.map((evidence) => (
-                <li key={evidence} className="flex gap-1.5">
-                  <span aria-hidden className="text-muted-foreground/60">
-                    ―
+              {verdict.evidence.map((item) => (
+                <li key={item.reasonKo} className="flex items-start gap-1.5">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1 size-1.5 shrink-0 rounded-full",
+                      STANCE_DOT_CLASS[item.stance],
+                    )}
+                  />
+                  <span className="sr-only">
+                    {STANCE_LABEL_KO[item.stance]}:{" "}
                   </span>
-                  <span>{evidence}</span>
+                  <span>{item.reasonKo}</span>
                 </li>
               ))}
             </ul>

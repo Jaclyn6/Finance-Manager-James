@@ -21,6 +21,10 @@ const VERDICT: AdvisorVerdict = {
   confidence: 0.72,
   pillars: [],
   headlineKo: "고점(2026-03-02) 대비 -14.3% — 조정(할인) 구간으로 판단, 근거 우세",
+  evidence: [
+    { reasonKo: "근거 A", stance: "discount" },
+    { reasonKo: "근거 B", stance: "neutral" },
+  ],
   evidenceKo: ["근거 A", "근거 B"],
 };
 

@@ -88,3 +88,16 @@ export const STANCE_BADGE_CLASS: Record<PillarStance, string> = {
   neutral: "bg-muted text-muted-foreground",
   reversal: "bg-red-500/10 text-red-700 dark:bg-red-400/10 dark:text-red-300",
 };
+
+/**
+ * Bullet-marker dot for one evidence sentence — the balance bar's
+ * color language (emerald = 할인, red = 추세전환) at list-item scale,
+ * so evidence bullets answer "which side is this sentence on" without
+ * the reader parsing the sentence. Stance comes from the engine
+ * (±0.15 band in pillars.ts); UI must not re-derive it from scores.
+ */
+export const STANCE_DOT_CLASS: Record<PillarStance, string> = {
+  discount: "bg-emerald-500/80",
+  neutral: "bg-muted-foreground/40",
+  reversal: "bg-red-500/80",
+};

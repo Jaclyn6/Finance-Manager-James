@@ -189,6 +189,23 @@ describe("computeAdvisorVerdict — pillar wiring", () => {
     expect(verdict.evidenceKo[0]).toBe(trend.reasonKo);
   });
 
+  it("evidence carries the engine stance and can never diverge from evidenceKo", () => {
+    const verdict = computeAdvisorVerdict(inputs(REVERSAL_CONTEXT));
+    // Same list, same order — evidenceKo is derived from evidence.
+    expect(verdict.evidence.map((e) => e.reasonKo)).toEqual(
+      verdict.evidenceKo,
+    );
+    // Stance is the source pillar's own (±0.15 band in pillars.ts),
+    // not re-derived: the saturated trend pillar leads as reversal.
+    expect(verdict.evidence[0].stance).toBe("reversal");
+    for (const item of verdict.evidence) {
+      const pillar = verdict.pillars.find(
+        (p) => p.reasonKo === item.reasonKo,
+      )!;
+      expect(item.stance).toBe(pillar.stance);
+    }
+  });
+
   it("confidence reflects coverage: single pillar < full coverage", () => {
     const single = computeAdvisorVerdict(
       inputs({
