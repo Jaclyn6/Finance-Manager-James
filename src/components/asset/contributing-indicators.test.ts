@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  indicatorRowLabel,
   parseContributing,
   resolveIndicatorRowConfig,
 } from "./contributing-indicators";
 
 /**
- * Pure parser tests — the component itself is a render-only Server
- * Component that doesn't bring enough testable logic to justify a
- * `@testing-library/react` dependency. The parse branch (v1 vs v2) is
- * where all the shape-detection judgment lives, so it's where tests
- * land.
+ * Pure-helper tests (parser + row-label resolution) — the component
+ * itself is a render-only Server Component that doesn't bring enough
+ * testable logic to justify a `@testing-library/react` dependency.
  */
 
 describe("parseContributing", () => {
@@ -139,5 +138,24 @@ describe("resolveIndicatorRowConfig", () => {
 
   it("per-ticker rows resolve to undefined (ticker is the label)", () => {
     expect(resolveIndicatorRowConfig("005930.KS")).toBeUndefined();
+  });
+});
+
+describe("indicatorRowLabel", () => {
+  it("falls back to glossary labelKo for non-ticker keys without a config row", () => {
+    // Regression: CNN_FG (every asset's sentiment row) and the crypto
+    // onchain rows rendered as raw ids (Trigger 2, 2026-08-03).
+    expect(indicatorRowLabel("CNN_FG")).not.toBe("CNN_FG");
+    expect(indicatorRowLabel("MVRV_Z")).not.toBe("MVRV_Z");
+    expect(indicatorRowLabel("SOPR")).not.toBe("SOPR");
+  });
+
+  it("prefers the config description when both exist", () => {
+    expect(indicatorRowLabel("DTWEXBGS")).toContain("광역 달러 지수");
+    expect(indicatorRowLabel("FEDFUNDS")).toContain("연방기금");
+  });
+
+  it("keeps the ticker as the natural label for ticker rows", () => {
+    expect(indicatorRowLabel("005930.KS")).toBe("005930.KS");
   });
 });

@@ -302,7 +302,7 @@ export const INDICATOR_GLOSSARY: Record<string, IndicatorGlossaryEntry> = {
   // ────────────────── Regional overlay (KR) (2) ─────────────────
   DTWEXBGS: {
     key: "DTWEXBGS",
-    labelKo: "Broad Dollar Index",
+    labelKo: "광역 달러 지수 (Broad Dollar Index)",
     sourceName: "FRED",
     sourceUrl: "https://fred.stlouisfed.org/series/DTWEXBGS",
     category: "regional_overlay",

@@ -8,6 +8,7 @@ import {
   INDICATOR_CONFIG,
   PHASE2_FRED_REGIONAL_OVERLAY,
 } from "@/lib/score-engine/weights";
+import type { IndicatorConfig } from "@/lib/score-engine/types";
 import type { CategoryName } from "@/lib/score-engine/types";
 import { cn } from "@/lib/utils";
 import {
@@ -252,6 +253,38 @@ function CategorySection({
   );
 }
 
+/**
+ * Row metadata lookup across BOTH config maps. The KR regional
+ * overlay series live in PHASE2_FRED_REGIONAL_OVERLAY, not
+ * INDICATOR_CONFIG — resolving only the latter rendered raw FRED ids
+ * ("DTWEXBGS") as family-facing row titles on /asset/kr-equity even
+ * though Korean descriptions exist (UX 실사 2026-08-03). Exported
+ * for tests.
+ */
+export function resolveIndicatorRowConfig(
+  key: string,
+): Pick<IndicatorConfig, "descriptionKo" | "sourceName" | "sourceUrl"> | undefined {
+  return INDICATOR_CONFIG[key] ?? PHASE2_FRED_REGIONAL_OVERLAY[key];
+}
+
+/**
+ * Row TITLE with a glossary fallback tier: non-ticker keys that have
+ * no config row (CNN_FG on every asset, CRYPTO_FG, MVRV_Z, SOPR,
+ * BTC_ETF_NETFLOW on crypto) still carry Korean labelKo in
+ * INDICATOR_GLOSSARY — without this tier they rendered as raw ids,
+ * the exact leak the config chain above fixed for the overlay keys
+ * (Trigger 2 review, 2026-08-03). Ticker rows (005930.KS, AMZN…)
+ * have neither config nor glossary and keep the ticker as the
+ * natural label.
+ */
+export function indicatorRowLabel(key: string): string {
+  return (
+    resolveIndicatorRowConfig(key)?.descriptionKo ??
+    INDICATOR_GLOSSARY[key]?.labelKo ??
+    key
+  );
+}
+
 function IndicatorRowView({
   indicator,
   latestRawValues,
@@ -260,12 +293,16 @@ function IndicatorRowView({
   latestRawValues?: Record<string, number | null>;
 }) {
   const config = resolveIndicatorRowConfig(indicator.key);
-  const label = config?.descriptionKo ?? indicator.key;
+  const label = indicatorRowLabel(indicator.key);
   // Glossary lookup is keyed by the same canonical id (FEDFUNDS, RSI_14,
   // …). When an indicator key is absent from the glossary (e.g. a future
   // FRED series added before the glossary entry lands) we silently skip
   // the ⓘ trigger — graceful degradation, no broken trigger button.
   const glossaryEntry = INDICATOR_GLOSSARY[indicator.key];
+  // Attribution line: config first, else the glossary (CNN_FG/MVRV_Z
+  // rows carry sourceName/sourceUrl there) — only tickers fall back
+  // to the bare-key line.
+  const source = config ?? glossaryEntry;
   // Raw value lookup: only show a raw value column when the indicator
   // has a glossary entry (we need `unitKo` to render the suffix) AND
   // the page-level reader returned a value for the key. Per-ticker
@@ -292,14 +329,14 @@ function IndicatorRowView({
             />
           ) : null}
         </div>
-        {config ? (
+        {source ? (
           <a
-            href={config.sourceUrl}
+            href={source.sourceUrl}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            {config.sourceName} / {indicator.key}
+            {source.sourceName} / {indicator.key}
             <ExternalLink
               aria-hidden="true"
               focusable="false"
@@ -543,22 +580,3 @@ function formatPercentOrDash(n: number | null): string {
 }
 
 export type CompositeContributingBlob = Tables<"composite_snapshots">["contributing_indicators"];
-
-/**
- * Row metadata lookup across BOTH config maps. The KR regional
- * overlay series live in PHASE2_FRED_REGIONAL_OVERLAY, not
- * INDICATOR_CONFIG — resolving only the latter rendered raw FRED ids
- * ("DTWEXBGS") as family-facing row titles on /asset/kr-equity even
- * though Korean descriptions exist (UX 실사 2026-08-03). Exported
- * for tests. Per-ticker technical rows resolve to undefined by
- * design (the ticker IS the natural label).
- */
-export function resolveIndicatorRowConfig(key: string):
-  | {
-      descriptionKo: string;
-      sourceName: string;
-      sourceUrl: string;
-    }
-  | undefined {
-  return INDICATOR_CONFIG[key] ?? PHASE2_FRED_REGIONAL_OVERLAY[key];
-}

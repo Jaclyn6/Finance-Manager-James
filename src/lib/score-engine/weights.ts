@@ -326,7 +326,10 @@ export const PHASE2_FRED_REGIONAL_OVERLAY: Record<
   }
 > = {
   DTWEXBGS: {
-    descriptionKo: "Broad 달러 지수 — 외국인 원화 자산 매도 압력",
+    // "광역 달러 지수" everywhere — row title, glossary title, and
+    // glossary body must name the series identically (Trigger 2
+    // review, 2026-08-03: one series wore three names in one tap).
+    descriptionKo: "광역 달러 지수 — 외국인 원화 자산 매도 압력",
     sourceName: "FRED",
     sourceUrl: "https://fred.stlouisfed.org/series/DTWEXBGS",
     frequency: "daily",
@@ -335,7 +338,7 @@ export const PHASE2_FRED_REGIONAL_OVERLAY: Record<
     weight: 0.5,
   },
   DEXKOUS: {
-    descriptionKo: "USD/KRW 환율 — 외국인 자금 이탈 + 외화부채 부담",
+    descriptionKo: "USD/KRW 환율 — 외국인 자금 이탈·외화부채 부담",
     sourceName: "FRED",
     sourceUrl: "https://fred.stlouisfed.org/series/DEXKOUS",
     frequency: "daily",

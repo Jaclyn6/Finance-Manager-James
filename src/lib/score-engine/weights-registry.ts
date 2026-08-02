@@ -211,7 +211,7 @@ const V2_0_0_BASELINE: EngineWeights = {
   },
   regionalOverlayConfig: {
     DTWEXBGS: {
-      descriptionKo: "Broad 달러 지수 — 외국인 원화 자산 매도 압력",
+      descriptionKo: "광역 달러 지수 — 외국인 원화 자산 매도 압력",
       sourceName: "FRED",
       sourceUrl: "https://fred.stlouisfed.org/series/DTWEXBGS",
       frequency: "daily",
@@ -220,7 +220,7 @@ const V2_0_0_BASELINE: EngineWeights = {
       weight: 0.5,
     },
     DEXKOUS: {
-      descriptionKo: "USD/KRW 환율 — 외국인 자금 이탈 + 외화부채 부담",
+      descriptionKo: "USD/KRW 환율 — 외국인 자금 이탈·외화부채 부담",
       sourceName: "FRED",
       sourceUrl: "https://fred.stlouisfed.org/series/DEXKOUS",
       frequency: "daily",

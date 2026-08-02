@@ -9,13 +9,15 @@ picks them up.
 
 ## UI / UX polish
 
-### 기여 지표의 뉴스·심리 바스켓이 모든 자산 페이지에서 미국 메가캡 5종
+### 기여 지표의 뉴스·심리 바스켓이 미국 메가캡 5종 (us_equity·global_etf·common)
 
 - **WHERE**: contributing-indicators drill-down on `/asset/[slug]`
   (legacy composite section) — the 뉴스·심리 category lists
   AMZN/MSFT/GOOGL/AAPL/NVDA even on the 글로벌 ETF page (verified
   2026-08-03); 밸류에이션 renders score 50.0 with no child rows
-  (neutral fill).
+  (neutral fill). Correction (#14): kr_equity has NO news category at
+  all (3/6 categories, sentiment = CNN_FG only) — the proxy-basket
+  question applies to us_equity/global_etf/common surfaces.
 - **THE GAP**: the news pipeline only ever collected US mega-cap
   tickers, so every asset's sentiment category is a US-proxy — but
   nothing on the page says so. A family member reading "글로벌 ETF
