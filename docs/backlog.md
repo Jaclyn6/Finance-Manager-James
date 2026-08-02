@@ -9,6 +9,32 @@ picks them up.
 
 ## UI / UX polish
 
+### Score-engine band labels are the most prescriptive copy on a 참고용 page
+
+- **WHERE**: `src/lib/score-engine/backtest.ts` `scoreToBandLabel`
+  (80+ "강한 비중 확대" / 60-79 "비중 확대" / … / "강한 비중 축소"),
+  surfaced via `CompositeStateCard`, `AssetCard`, `RecentChanges`,
+  backtest tables, and changelog copy.
+- **THE GAP**: the product frames itself everywhere as 참고용 해석
+  도구 ("실제 자산 배분은 본인 판단입니다"), and the advisor verdict
+  labels are descriptive (할인 구간 / 신호 혼재 / 추세전환 위험). But
+  the band labels are imperative allocation advice ("비중 확대" =
+  "increase your allocation") — the strongest instruction on the page
+  comes from the *auxiliary* model. UX 실사 2026-08-03 found BTC
+  "비중 확대" sitting under a "판단 유보" verdict; the bridge copy
+  (commit 543e5be) explains the disagreement but the label itself is
+  still doing prescription, not description.
+- **PROPOSED TREATMENT**: rename bands to descriptive weather-style
+  terms (e.g. 강한 우호 / 우호적 / 중립 / 비우호 / 강한 비우호, exact
+  wording TBD with the user). Mechanical rename across
+  `scoreToBandLabel`, `score-band.ts` intensity mapping, tests, and
+  any docs quoting the labels; DB rows store scores not labels, so no
+  migration.
+- **WHY DEFERRED**: label wording is a family-facing product decision
+  (the user may *want* the allocation framing), and the rename
+  touches every score surface + tests — a deliberate feature-unit,
+  not a loop-sized nibble. Needs user sign-off on the new vocabulary.
+
 ### ~~Distinguish 일시 vs 영구 "데이터 부족" on signal tiles~~ — OBSOLETE 2026-07-08
 
 Premise dissolved: the "permanent until Phase 3 budget decision"
