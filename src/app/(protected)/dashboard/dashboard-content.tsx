@@ -204,6 +204,14 @@ export async function DashboardContent({
         <h2 className="text-lg font-semibold tracking-tight md:text-xl">
           자산군별 상태
         </h2>
+        {/* Same score engine as the composite card above, NOT the
+            advisor — without this line the family hits e.g. BTC
+            "비중 확대" here right after "판단 유보" in the verdict
+            card and reads one of them as a bug (UX 실사 2026-08-03). */}
+        <p className="text-sm text-muted-foreground">
+          점수 엔진 기준의 자산군별 요약 — 위 판정 카드와 결론이 다를 수
+          있습니다.
+        </p>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {DASHBOARD_ASSET_ORDER.map((assetType) => {
             const snapshot = snapshotByAsset.get(assetType);

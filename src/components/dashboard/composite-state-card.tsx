@@ -42,7 +42,9 @@ export function CompositeStateCard({ snapshot }: CompositeStateCardProps) {
           <div>
             <p className="text-xs text-muted-foreground">오늘 투자 환경</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              매크로·기술적·온체인 지표가 수렴해 보여주는 전체 상태
+              매크로·기술적·온체인 지표를 가중 합산한 보조 점수입니다. 위
+              판정과 방법이 달라 결론이 다를 수 있으며, 그때는 낙폭 맥락까지
+              반영한 판정을 기준으로 보세요.
             </p>
           </div>
           <StalenessBadge
