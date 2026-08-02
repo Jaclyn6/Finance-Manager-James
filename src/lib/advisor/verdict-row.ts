@@ -15,7 +15,14 @@ import { ADVISOR_ENGINE_VERSION } from "./verdict";
  * - `evidence` keeps the FULL verdict object (headline, evidence
  *   sentences, per-pillar breakdown, drawdown state) for forensics
  *   and future UI — regenerating it later is impossible once the
- *   inputs' caches roll;
+ *   inputs' caches roll. Payload-shape caveat: adv-1.2.0 rows
+ *   persisted before 2026-08-03 predate `verdict.evidence`
+ *   ({reasonKo, stance}[]) — the field was additive with NO version
+ *   bump (no rule changed meaning, and a bump would fabricate a
+ *   cutover day in the (asset_type, verdict_date, engine_version)
+ *   upsert key). JSONB readers must treat `evidence` as optional and
+ *   fall back to `evidenceKo`; engine_version cannot discriminate
+ *   the two shapes;
  * - `verdict_date` is the COMPUTATION day (caller passes the same
  *   endDate the advisor was asked to judge), not the last price date:
  *   weekend rows honestly repeat Friday's judgment rather than

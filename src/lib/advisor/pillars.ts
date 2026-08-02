@@ -130,7 +130,11 @@ export function evaluateSentimentPillar(
     reasonKo = `${gaugeName} ${fg.toFixed(0)} — 극단적 공포(과매도), 역발상 매수 신호`;
   } else if (fg >= 75) {
     score = -clamp01((fg - 75) / 25) * 0.5;
-    reasonKo = `${gaugeName} ${fg.toFixed(0)} — 과열(탐욕) 구간, 조정 여지`;
+    // "하락 전환 주의", not "조정 여지": this branch's stance is
+    // reversal (red dot), and 조정(할인) is the EMERALD side's word in
+    // this product's vocabulary — a red dot next to 조정-flavored text
+    // read as a contradiction (Trigger 2 review, 2026-08-03).
+    reasonKo = `${gaugeName} ${fg.toFixed(0)} — 과열(탐욕) 구간, 하락 전환 주의`;
   }
 
   return {

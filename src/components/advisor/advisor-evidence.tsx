@@ -8,6 +8,7 @@ import {
   STANCE_BADGE_CLASS,
   STANCE_DOT_CLASS,
   STANCE_LABEL_KO,
+  STANCE_SR_PREFIX_KO,
   VERDICT_BADGE_CLASS,
   VERDICT_LABEL_KO,
 } from "@/lib/utils/verdict-labels";
@@ -74,7 +75,7 @@ export function AdvisorEvidence({ view }: { view: AdvisorAssetView }) {
                     )}
                   />
                   <span className="sr-only">
-                    {STANCE_LABEL_KO[item.stance]}:{" "}
+                    {STANCE_SR_PREFIX_KO[item.stance]}:{" "}
                   </span>
                   <span>{item.reasonKo}</span>
                 </li>

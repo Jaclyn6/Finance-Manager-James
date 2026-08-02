@@ -86,7 +86,7 @@ literature-anchored round numbers — inputs to iteration, not truths.
 
 - `/dashboard` leads with **"지금이 할인 구간인가?"** — per-asset
   `VerdictCard`s (verdict pill, headline, drawdown stats, evidence
-  balance bar, top-2 evidence lines), then the `MarketWeatherStrip`
+  balance bar, top-2 evidence lines with stance dots), then the `MarketWeatherStrip`
   (VIX·F&G·삼룰·금리차·HY 스프레드 chips with 7-day ▲/▼ and 꺾임
   callout), then the pre-pivot signal/composite surfaces as
   supporting evidence.
@@ -135,7 +135,8 @@ heatmaps — monitoring value ≫ verdict value for now.
 ## 7. Shipped increments (improvement loop, 2026-07-08)
 
 All reviewed under CLAUDE.md Trigger 2 (5-agent, ≥80 fixed) before
-push; engine rule-set = `ADVISOR_ENGINE_VERSION adv-1.1.0`.
+push; engine rule-set version = `ADVISOR_ENGINE_VERSION` in
+`src/lib/advisor/verdict.ts` (adv-1.2.0 as of 2026-08-02).
 
 | Increment | Where | Loop iter. |
 |---|---|---|
@@ -146,3 +147,4 @@ push; engine rule-set = `ADVISOR_ENGINE_VERSION adv-1.1.0`.
 | STOCK_FG_PROXY — 4-component CNN-outage fallback, 자체 산출 labeling, delta arrow suppressed on proxy path | 92cedb2, fe7bb50, a263ced | 4-6 |
 | Verdict history — migration 0015, `/api/cron/write-verdicts` (cron-technical step 3), `VerdictTimeline` calendar strip with gap cells | 1f009cb, e7d3060, 1240989, 3125da4 | 7-9 |
 | adv-1.2.0 — STLFSI macro sub-input, T10Y2Y 역전 해소 rule, Fed-liquidity collection (§6.5 reference adoption) | 32cbdc8+ | 2026-08-02 |
+| Evidence stance dots — `AdvisorVerdict.evidence` ({reasonKo, stance}[], `evidenceKo` now derived), `STANCE_DOT_CLASS`/`STANCE_SR_PREFIX_KO` bullets on `VerdictCard` + `AdvisorEvidence`; persisted JSONB additive (pre-2026-08-03 adv-1.2.0 rows lack the field — see `verdict-row.ts`) | 42b7f95+ | 2026-08-03 |

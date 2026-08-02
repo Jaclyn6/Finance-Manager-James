@@ -95,9 +95,36 @@ export const STANCE_BADGE_CLASS: Record<PillarStance, string> = {
  * so evidence bullets answer "which side is this sentence on" without
  * the reader parsing the sentence. Stance comes from the engine
  * (±0.15 band in pillars.ts); UI must not re-derive it from scores.
+ * The dot is the pillar's NET vote — a multi-clause macro/onchain
+ * sentence may contain a counter-leaning clause, and that's accepted:
+ * the per-pillar breakdown on /asset/[slug] carries the nuance.
+ *
+ * Colors are per-theme solids, not /80 alphas: a 6px swatch needs the
+ * 3:1 non-text contrast minimum, and alpha emerald on the light card
+ * lands near 2:1 (emerald-600 on white ≈ 3.8:1, red-600 ≈ 4.1:1 —
+ * same split the bar labels use). 중립 is a hollow ring, not a
+ * fainter fill: at this size a low-alpha gray reads as a rendering
+ * artifact, while a ring is visibly deliberate and gives colorblind
+ * readers a non-hue cue (Trigger 2 review, 2026-08-03).
  */
 export const STANCE_DOT_CLASS: Record<PillarStance, string> = {
-  discount: "bg-emerald-500/80",
-  neutral: "bg-muted-foreground/40",
-  reversal: "bg-red-500/80",
+  discount: "bg-emerald-600 dark:bg-emerald-500",
+  neutral: "border border-muted-foreground/70 bg-transparent",
+  reversal: "bg-red-600 dark:bg-red-500",
+};
+
+/**
+ * Spoken (sr-only) prefix per stance. Deliberately NOT
+ * `STANCE_LABEL_KO`: the red side's badge label is "전환 경고", but
+ * the balance bar — the sighted reader's color anchor — is entirely
+ * aria-hidden, so the spoken prefix is a screen-reader user's ONLY
+ * red-side vocabulary. It must match the bar's standardized term
+ * "추세전환 근거" (one-bar-language rule, ba179e5), or sighted and
+ * non-sighted family members end up with different words for the
+ * same side (Trigger 2 review, 2026-08-03).
+ */
+export const STANCE_SR_PREFIX_KO: Record<PillarStance, string> = {
+  discount: "할인 근거",
+  neutral: "중립",
+  reversal: "추세전환 근거",
 };

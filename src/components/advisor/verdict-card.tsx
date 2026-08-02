@@ -8,7 +8,7 @@ import { ASSET_SLUGS } from "@/lib/utils/asset-slug";
 import { buildNavHref } from "@/lib/utils/nav-href";
 import {
   STANCE_DOT_CLASS,
-  STANCE_LABEL_KO,
+  STANCE_SR_PREFIX_KO,
   VERDICT_ACCENT_BORDER_CLASS,
   VERDICT_BADGE_CLASS,
   VERDICT_LABEL_KO,
@@ -103,7 +103,7 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
                   )}
                 />
                 <span className="sr-only">
-                  {STANCE_LABEL_KO[item.stance]}:{" "}
+                  {STANCE_SR_PREFIX_KO[item.stance]}:{" "}
                 </span>
                 <span>{item.reasonKo}</span>
               </li>
