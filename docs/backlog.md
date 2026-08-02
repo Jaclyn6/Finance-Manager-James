@@ -120,6 +120,29 @@ of time.
 
 ## Advisor pivot follow-ups (2026-07-08, see docs/advisor_pivot_blueprint.md §6)
 
+### EXTREME_FEAR signal still waits on CNN — proxy substitution is a rules-version decision
+
+- **WHERE**: `src/lib/score-engine/signals.ts` `evaluateExtremeFear`
+  (`VIX >= 35 || CNN_FG < 25`); inputs wired in `loadSignalInputs`.
+- **THE GAP**: CNN F&G has been outaged since 2026-06-24 (418
+  bot-block; scraping harder is off the table), so the CNN arm of the
+  OR is permanently null. The tile can never reach "inactive" — only
+  "unknown" — until VIX itself spikes >= 35. The advisor's sentiment
+  pillar already falls back to `STOCK_FG_PROXY`, so the two systems
+  disagree about whether US sentiment is observable. As of 2026-08-03
+  the tile honestly shows the live VIX + "CNN F&G 데이터가 없어 판단
+  보류" (commit 9d34b36), which is correct but permanently undecided.
+- **PROPOSED TREATMENT**: substitute the proxy into the signal's CNN
+  arm (`CNN_FG ?? STOCK_FG_PROXY < 25`) — a signal-semantics change,
+  so it requires a `SIGNAL_RULES_VERSION` bump (v1.0.0 → v1.1.0), the
+  cutover-day badge, and a 자체 프록시 tag on the tile's situation
+  line. Alternatively: keep waiting for CNN and accept the permanent
+  판단 보류.
+- **WHY DEFERRED**: whether a 자체 산출 proxy may FIRE a buy signal
+  (not just inform the advisor pillar) is a product-trust decision
+  for the user; rules bumps also create a visible cutover in the
+  signal history the family reads.
+
 ### Stock F&G outage → in-house 4-component proxy (HIGH — advisor input dark)
 
 **Where it lives now:** `src/lib/score-engine/sources/cnn-fear-greed.ts`
