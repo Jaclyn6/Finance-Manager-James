@@ -43,9 +43,10 @@ const EXPECTED_KEYS: readonly string[] = [
   "VIXCLS",
   "BAMLH0A0HYM2",
   "SAHMCURRENT",
-  // Signal-only (2)
+  // Signal-only / advisor raw inputs (3)
   "ICSA",
   "WDTGAL",
+  "STLFSI4",
   // Regional overlay (2)
   "DTWEXBGS",
   "DEXKOUS",
@@ -67,8 +68,8 @@ const EXPECTED_KEYS: readonly string[] = [
 ];
 
 describe("INDICATOR_GLOSSARY", () => {
-  it("contains exactly 23 entries", () => {
-    expect(Object.keys(INDICATOR_GLOSSARY)).toHaveLength(23);
+  it("contains exactly 24 entries", () => {
+    expect(Object.keys(INDICATOR_GLOSSARY)).toHaveLength(24);
   });
 
   it("contains every expected indicator key (no missing, no duplicates)", () => {
