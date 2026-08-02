@@ -6,6 +6,7 @@ import {
   evaluateSentimentPillar,
   evaluateTrendPillar,
   evaluateVolatilityPillar,
+  labelAdvisorInputsKo,
 } from "./pillars";
 
 describe("evaluateTrendPillar", () => {
@@ -482,5 +483,25 @@ describe("pillar score invariants", () => {
       expect(r.strength).toBeGreaterThanOrEqual(0);
       expect(r.strength).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("labelAdvisorInputsKo", () => {
+  it("names inputs in Korean in family-facing sentences", () => {
+    const result = evaluateVolatilityPillar({
+      vix: 16,
+      vixWow: null,
+      drawdownPct: null,
+    });
+    // Raw keys stay in the data contract...
+    expect(result.missingInputs).toEqual(["drawdownPct", "vixWow"]);
+    // ...but no camelCase identifier may leak into reasonKo-style copy.
+    expect(labelAdvisorInputsKo(result.missingInputs)).toBe(
+      "낙폭, VIX 주간 변화",
+    );
+  });
+
+  it("falls back to the raw key for unknown identifiers", () => {
+    expect(labelAdvisorInputsKo(["futureInput"])).toBe("futureInput");
   });
 });

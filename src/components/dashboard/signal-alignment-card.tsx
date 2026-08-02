@@ -331,12 +331,18 @@ function SignalTile({
           </p>
         </TooltipTrigger>
         <TooltipContent side="top" align="center">
-          <div className="space-y-1.5">
+          {/* No raw-inputs echo here: the tile's "지금:" sentence —
+              still visible under the open popup — already renders the
+              same numbers WITH units and an interpretation clause, so
+              a bare number list was a strictly worse duplicate (and
+              its generic formatter could round a threshold-straddling
+              SOPR 0.9996 onto "1"). The tooltip's job is the RULE:
+              name + threshold + state (Trigger 2 review, 2026-08-03).
+              break-keep: same mid-word Hangul wrap defect fixed on
+              the tile copy. */}
+          <div className="space-y-1.5 break-keep">
             <div className="text-sm font-semibold">{fullLabel}</div>
             <div className="text-[11px] opacity-80">{threshold}</div>
-            <div className="text-[11px] opacity-90">
-              {renderInputs(detail?.inputs)}
-            </div>
             <div className="text-[11px] font-medium opacity-90">
               지금 상태: {stateCaption}
             </div>
@@ -345,68 +351,6 @@ function SignalTile({
       </Tooltip>
     </li>
   );
-}
-
-/**
- * Korean labels for the tooltip's raw engine-input echo. The engine's
- * input keys are code identifiers (vix, cnnFg, spyDisparity) —
- * echoing them verbatim leaked developer register into a
- * family-facing tooltip ("cnnFg=—"; UX 실사 2026-08-03). Unknown
- * keys fall back to the raw identifier so a future signal's inputs
- * degrade readable-ish instead of vanishing — keep this map in sync
- * with the `inputs = {...}` objects in
- * src/lib/score-engine/signals.ts.
- */
-const INPUT_LABEL_KO: Record<string, string> = {
-  vix: "VIX",
-  cnnFg: "CNN F&G",
-  spyDisparity: "SPY 이격",
-  qqqDisparity: "QQQ 이격",
-  icsa: "실업 청구",
-  sahmCurrent: "Sahm",
-  bamlToday: "HY 스프레드",
-  maxLast7d: "7일 고점",
-  tgaToday: "TGA 잔액",
-  sma20: "20일 평균",
-  mvrvZ: "MVRV-Z",
-  sopr: "SOPR",
-  currentMacd: "MACD",
-  currentSignal: "시그널",
-  previousMacd: "전일 MACD",
-  previousSignal: "전일 시그널",
-};
-
-/** Inputs stored as fractions (-0.25 = -25%) — render as percent. */
-const PERCENT_INPUT_KEYS = new Set(["spyDisparity", "qqqDisparity"]);
-
-export function renderInputs(
-  inputs: Record<string, number | null> | undefined,
-): string {
-  if (!inputs || Object.keys(inputs).length === 0) {
-    return "입력값 없음";
-  }
-  return Object.entries(inputs)
-    .map(([k, v]) => {
-      const label = INPUT_LABEL_KO[k] ?? k;
-      if (v === null || v === undefined) return `${label} —`;
-      if (PERCENT_INPUT_KEYS.has(k)) {
-        const pct = v * 100;
-        return `${label} ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
-      }
-      return `${label} ${formatInput(v)}`;
-    })
-    .join(" · ");
-}
-
-function formatInput(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  // Small floats get 3 decimals; larger numbers (e.g. ICSA=300000) get
-  // thousand-separated integers. Simple heuristic — tooltips are
-  // informal; no need for a full formatter stack.
-  const abs = Math.abs(v);
-  if (abs < 10) return (Math.round(v * 1000) / 1000).toString();
-  if (abs < 1000) return (Math.round(v * 10) / 10).toString();
-  return Math.round(v).toLocaleString("en-US");
 }
 
 function StateIcon({ state }: { state: SignalState }) {

@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { DrawdownChart } from "@/components/advisor/drawdown-chart";
 import type { AdvisorAssetView } from "@/lib/data/advisor";
+import { labelAdvisorInputsKo } from "@/lib/advisor/pillars";
 import type { PillarEvaluation } from "@/lib/advisor/types";
 import { cn } from "@/lib/utils";
 import {
@@ -128,7 +129,7 @@ function PillarBreakdown({ pillars }: { pillars: PillarEvaluation[] }) {
               <p className="text-xs text-muted-foreground">{p.reasonKo}</p>
               {p.missingInputs.length > 0 && (
                 <p className="text-[11px] text-muted-foreground/70">
-                  누락 입력: {p.missingInputs.join(", ")}
+                  누락 입력: {labelAdvisorInputsKo(p.missingInputs)}
                 </p>
               )}
             </li>

@@ -42,6 +42,39 @@ function stanceOf(score: number): PillarStance {
   return "neutral";
 }
 
+/**
+ * Korean labels for advisor input identifiers. `missingInputs` stays
+ * raw keys (a data contract tests and forensics rely on), but every
+ * SENTENCE that names an input must go through this map — raw
+ * camelCase in family-facing copy ("입력 누락: drawdownPct, vixWow")
+ * is the same developer-register leak the signal tooltip shed in
+ * 844e327 (Trigger 2 review, 2026-08-03). Unknown keys fall back to
+ * the raw identifier so a future input degrades readable-ish.
+ */
+export const ADVISOR_INPUT_LABEL_KO: Record<string, string> = {
+  close: "종가",
+  ma50: "50일선",
+  ma200: "200일선",
+  drawdownPct: "낙폭",
+  vix: "VIX",
+  vixWow: "VIX 주간 변화",
+  fearGreed: "공포·탐욕지수",
+  macroScore: "매크로 종합 점수",
+  sahm: "삼 룰",
+  t10y2y: "장단기금리차",
+  t10y2yRecentlyUninverted: "금리차 역전 해소 여부",
+  hySpread: "하이일드 스프레드",
+  hySpreadWow: "스프레드 주간 변화",
+  stlfsi: "금융스트레스지수",
+  mvrvZ: "MVRV-Z",
+  sopr: "SOPR",
+};
+
+/** Joins raw input keys as a Korean-labeled list for sentences. */
+export function labelAdvisorInputsKo(keys: readonly string[]): string {
+  return keys.map((k) => ADVISOR_INPUT_LABEL_KO[k] ?? k).join(", ");
+}
+
 function missingEvaluation(
   pillar: PillarEvaluation["pillar"],
   missing: string[],
@@ -51,7 +84,7 @@ function missingEvaluation(
     stance: "neutral",
     score: 0,
     strength: 0,
-    reasonKo: `입력 누락: ${missing.join(", ")}`,
+    reasonKo: `입력 누락: ${labelAdvisorInputsKo(missing)}`,
     missingInputs: missing,
   };
 }

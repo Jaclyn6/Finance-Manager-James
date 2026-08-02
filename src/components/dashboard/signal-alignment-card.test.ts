@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   parseActiveSignals,
   parsePerSignalDetail,
-  renderInputs,
   signalScopeDiffersFromCommon,
 } from "./signal-alignment-card";
 
@@ -120,28 +119,5 @@ describe("signalScopeDiffersFromCommon", () => {
     // 7 vs 6: not a subset, which is why the label copy must be
     // direction-neutral (review 87).
     expect(signalScopeDiffersFromCommon("crypto")).toBe(true);
-  });
-});
-
-describe("renderInputs", () => {
-  it("labels engine keys in Korean — no code identifiers leak", () => {
-    expect(renderInputs({ vix: 17.1, cnnFg: null })).toBe(
-      "VIX 17.1 · CNN F&G —",
-    );
-  });
-
-  it("renders fraction-typed disparity inputs as signed percent", () => {
-    expect(renderInputs({ spyDisparity: 0.067, qqqDisparity: -0.256 })).toBe(
-      "SPY 이격 +6.7% · QQQ 이격 -25.6%",
-    );
-  });
-
-  it("falls back to the raw key for unknown inputs", () => {
-    expect(renderInputs({ newSignalInput: 3 })).toBe("newSignalInput 3");
-  });
-
-  it("keeps the empty-inputs sentence", () => {
-    expect(renderInputs({})).toBe("입력값 없음");
-    expect(renderInputs(undefined)).toBe("입력값 없음");
   });
 });
