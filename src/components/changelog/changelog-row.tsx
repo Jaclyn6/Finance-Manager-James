@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { INDICATOR_CONFIG } from "@/lib/score-engine/weights";
+import { indicatorRowLabel } from "@/components/asset/contributing-indicators";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { cn } from "@/lib/utils";
 import type { Json, Tables } from "@/types/database";
@@ -81,8 +81,7 @@ export function ChangelogRow({ row }: ChangelogRowProps) {
             </p>
             <ul className="space-y-1">
               {movers.map((mover) => {
-                const label =
-                  INDICATOR_CONFIG[mover.key]?.descriptionKo ?? mover.key;
+                const label = indicatorRowLabel(mover.key);
                 return (
                   <li
                     key={mover.key}
@@ -132,7 +131,18 @@ function DeltaBadge({ delta }: { delta: number | null }) {
   );
 }
 
-function parseTopMovers(raw: Json): ParsedMover[] {
+/**
+ * Movers below this |delta| don't render. 0.05 aligns with the
+ * one-decimal display rounding: anything smaller would show as
+ * "+0.0"/"−0.0" — a glitch-looking, information-free line that on
+ * quiet days filled every row's mover block with signed zeros
+ * (UX 실사 2026-08-03). The engine still WRITES sub-threshold movers
+ * (top_movers JSONB contract unchanged); this is display-only, so
+ * historical rows are covered too. Exported for tests.
+ */
+export const MIN_VISIBLE_MOVER_DELTA = 0.05;
+
+export function parseTopMovers(raw: Json): ParsedMover[] {
   if (!raw || !Array.isArray(raw)) return [];
   const rows: ParsedMover[] = [];
   for (const item of raw) {
@@ -146,6 +156,7 @@ function parseTopMovers(raw: Json): ParsedMover[] {
       !Number.isFinite(delta)
     )
       continue;
+    if (Math.abs(delta) < MIN_VISIBLE_MOVER_DELTA) continue;
     rows.push({ key, delta });
   }
   return rows;
