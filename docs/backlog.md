@@ -9,6 +9,29 @@ picks them up.
 
 ## UI / UX polish
 
+### 기여 지표의 뉴스·심리 바스켓이 모든 자산 페이지에서 미국 메가캡 5종
+
+- **WHERE**: contributing-indicators drill-down on `/asset/[slug]`
+  (legacy composite section) — the 뉴스·심리 category lists
+  AMZN/MSFT/GOOGL/AAPL/NVDA even on the 글로벌 ETF page (verified
+  2026-08-03); 밸류에이션 renders score 50.0 with no child rows
+  (neutral fill).
+- **THE GAP**: the news pipeline only ever collected US mega-cap
+  tickers, so every asset's sentiment category is a US-proxy — but
+  nothing on the page says so. A family member reading "글로벌 ETF
+  기여 지표: AMZN…" reasonably concludes the data is mislabeled. The
+  empty-child 밸류에이션 row similarly looks broken rather than
+  deliberately neutral.
+- **PROPOSED TREATMENT**: one-line category caption in the
+  drill-down: 뉴스·심리 → "미국 대형주 뉴스 기반 대리 지표" and
+  밸류에이션 → "중립 고정(수집 지표 없음)". Per-asset news baskets
+  are a separate (bigger) decision entangled with the AV 25/day
+  budget item below.
+- **WHY DEFERRED**: legacy composite surface (advisor is the primary
+  lens); caption wording touches the score-engine's honesty framing
+  and overlaps the existing "news-vs-AV-budget" backlog decision —
+  better bundled with that user call than patched piecemeal.
+
 ### Score-engine band labels are the most prescriptive copy on a 참고용 page
 
 - **WHERE**: `src/lib/score-engine/backtest.ts` `scoreToBandLabel`
