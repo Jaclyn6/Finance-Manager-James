@@ -7,6 +7,7 @@ import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { ASSET_SLUGS } from "@/lib/utils/asset-slug";
 import { buildNavHref } from "@/lib/utils/nav-href";
 import {
+  VERDICT_ACCENT_BORDER_CLASS,
   VERDICT_BADGE_CLASS,
   VERDICT_LABEL_KO,
 } from "@/lib/utils/verdict-labels";
@@ -37,7 +38,10 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
     <Card
       size="sm"
       className={cn(
-        "h-full p-5 md:p-6 motion-safe:transition-colors",
+        // border-l-4 accent = the 4-card scan signal: judgment by
+        // color before a single word is read (UX 실사 2026-08-03).
+        "h-full border-l-4 p-5 md:p-6 motion-safe:transition-colors",
+        VERDICT_ACCENT_BORDER_CLASS[verdict.label],
         slug &&
           "hover:bg-muted/40 group-focus-visible/verdict-link:ring-2 group-focus-visible/verdict-link:ring-ring",
       )}
@@ -52,7 +56,7 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
           </p>
           <span
             className={cn(
-              "shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold",
+              "shrink-0 rounded-full px-3 py-1 text-sm font-bold",
               VERDICT_BADGE_CLASS[verdict.label],
             )}
           >
@@ -117,23 +121,59 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
 }
 
 /**
- * Horizontal evidence balance: reversal (left, red) ↔ discount
- * (right, emerald). Marker position maps netScore [-1, 1] → [0%, 100%].
- * Pure CSS — no client JS.
+ * Horizontal evidence balance: reversal (left) ↔ discount (right).
+ *
+ * The track is NEUTRAL; only the stretch from the center to the
+ * marker is colored (red when net evidence points to reversal,
+ * emerald when it points to discount), and the winning side's label
+ * is emphasized. The previous always-fully-colored gradient made a
+ * near-neutral card look alarming — a bar must not say more than the
+ * verdict does (UX 실사 2026-08-03). Marker maps netScore [-1, 1] →
+ * [0%, 100%]. Pure CSS — no client JS; decorative (the headline
+ * carries the meaning for screen readers).
  */
 function EvidenceBalanceBar({ netScore }: { netScore: number }) {
   const pct = ((netScore + 1) / 2) * 100;
+  const fillLeftPct = netScore >= 0 ? 50 : pct;
+  const fillWidthPct = Math.abs(netScore) * 50;
   return (
     <div aria-hidden className="space-y-1">
-      <div className="relative h-1.5 w-full rounded-full bg-gradient-to-r from-red-500/40 via-muted to-emerald-500/40">
+      <div className="relative h-1.5 w-full rounded-full bg-muted">
+        <div className="absolute inset-y-0 left-1/2 w-px bg-muted-foreground/40" />
+        <div
+          className={cn(
+            "absolute top-0 h-full rounded-full",
+            netScore >= 0 ? "bg-emerald-500/80" : "bg-red-500/80",
+          )}
+          style={{
+            left: `${fillLeftPct.toFixed(1)}%`,
+            width: `${fillWidthPct.toFixed(1)}%`,
+          }}
+        />
         <div
           className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-foreground"
           style={{ left: `calc(${pct.toFixed(1)}% - 2px)` }}
         />
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>추세전환 근거</span>
-        <span>할인 근거</span>
+      <div className="flex justify-between text-[10px]">
+        <span
+          className={cn(
+            netScore < 0
+              ? "font-semibold text-red-600 dark:text-red-400"
+              : "text-muted-foreground",
+          )}
+        >
+          추세전환 근거
+        </span>
+        <span
+          className={cn(
+            netScore > 0
+              ? "font-semibold text-emerald-600 dark:text-emerald-400"
+              : "text-muted-foreground",
+          )}
+        >
+          할인 근거
+        </span>
       </div>
     </div>
   );

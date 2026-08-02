@@ -40,6 +40,21 @@ export const VERDICT_BADGE_CLASS: Record<AdvisorVerdictLabel, string> = {
 };
 
 /**
+ * Left-accent border palette for the dashboard verdict cards — lets
+ * the family scan 4 cards' judgments by color alone before reading a
+ * word. Same semantic mapping as VERDICT_BADGE_CLASS.
+ */
+export const VERDICT_ACCENT_BORDER_CLASS: Record<AdvisorVerdictLabel, string> =
+  {
+    insufficient_data: "border-l-muted-foreground/30",
+    no_drawdown: "border-l-muted-foreground/50",
+    healthy_pullback: "border-l-sky-500",
+    discount_zone: "border-l-emerald-500",
+    mixed_signals: "border-l-amber-500",
+    reversal_risk: "border-l-red-500",
+  };
+
+/**
  * Solid dot/square palette for the verdict timeline strip — same
  * semantic mapping as VERDICT_BADGE_CLASS, saturated for 8-12px
  * swatches where a /10 tint would be illegible.

@@ -38,9 +38,9 @@ export default function DashboardPage({
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
             오늘 시장 상황
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            매크로 코어와 자산군별 합성 점수입니다. 확정적 투자 자문이 아닌
-            해석 도구로 사용해 주세요.
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            지금이 할인 구간인지, 추세전환인지 — 근거와 함께 판정하는
+            참고용 해석 도구입니다.
           </p>
         </div>
         {/*
