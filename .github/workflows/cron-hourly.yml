@@ -29,8 +29,15 @@
 # row (no audit written) is what a postmortem flags, not a red GHA badge.
 #
 # CRON_SECRET is synced into GitHub Actions secrets manually
-# (plan §0.2 #8 — no OIDC). PRODUCTION_URL points at the current
-# Vercel production deployment.
+# (plan §0.2 #8 — no OIDC). PRODUCTION_URL MUST be the stable prod
+# alias (https://finance-manager-james.vercel.app), never a
+# deployment-specific *-jaclyn6s-projects.vercel.app URL: immutable
+# deployment URLs freeze the code the crons hit, and a route added
+# later 404s while older routes keep "succeeding" on stale code —
+# exactly how write-verdicts silently failed for 3 days
+# (2026-07-30..08-01, fixed 2026-08-02). Applies to every workflow
+# in this directory; ingest-macro is a Vercel cron (vercel.json) and
+# always hits the live deployment.
 
 name: Hourly cron (cnn-fg / news)
 
