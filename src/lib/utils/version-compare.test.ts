@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { compareVersionsNumeric } from "./version-compare";
+import {
+  compareVersionsNumeric,
+  pickLatestByDateThenVersion,
+} from "./version-compare";
 
 describe("compareVersionsNumeric", () => {
   it("orders double-digit components numerically (the lexicographic trap)", () => {
@@ -30,5 +33,36 @@ describe("compareVersionsNumeric", () => {
       "adv-1.2.0",
       "adv-1.10.0",
     ]);
+  });
+});
+
+describe("pickLatestByDateThenVersion", () => {
+  it("newest observed_at wins regardless of row order", () => {
+    const best = pickLatestByDateThenVersion([
+      { observed_at: "2026-07-01", model_version: "v2.0.0", v: 1 },
+      { observed_at: "2026-08-01", model_version: "v2.0.0", v: 2 },
+      { observed_at: "2026-07-15", model_version: "v2.0.0", v: 3 },
+    ]);
+    expect(best?.v).toBe(2);
+  });
+
+  it("same-date cutover rows resolve by NUMERIC version (v2.10 > v2.9)", () => {
+    const best = pickLatestByDateThenVersion([
+      { observed_at: "2026-08-01", model_version: "v2.9.0", v: 1 },
+      { observed_at: "2026-08-01", model_version: "v2.10.0", v: 2 },
+    ]);
+    expect(best?.v).toBe(2);
+  });
+
+  it("timestamps and plain dates compare on the calendar day", () => {
+    const best = pickLatestByDateThenVersion([
+      { observed_at: "2026-08-01T23:00:00Z", model_version: "v2.0.0", v: 1 },
+      { observed_at: "2026-08-01", model_version: "v2.1.0", v: 2 },
+    ]);
+    expect(best?.v).toBe(2);
+  });
+
+  it("empty input → null", () => {
+    expect(pickLatestByDateThenVersion([])).toBeNull();
   });
 });

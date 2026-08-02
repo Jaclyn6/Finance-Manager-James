@@ -4,7 +4,16 @@ import {
   collapseToDaily,
   type IndicatorSeriesPoint,
 } from "@/lib/advisor/series";
-import { compareVersionsNumeric } from "@/lib/utils/version-compare";
+import { STOCK_FG_PROXY_KEY } from "@/lib/advisor/stock-fg-proxy";
+import {
+  INDICATOR_KEYS,
+  PHASE2_ACTIVE_FRED_SIGNAL_KEYS,
+  PHASE2_FRED_REGIONAL_OVERLAY_KEYS,
+} from "@/lib/score-engine/weights";
+import {
+  compareVersionsNumeric,
+  pickLatestByDateThenVersion,
+} from "@/lib/utils/version-compare";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AssetType } from "@/lib/score-engine/types";
 import type { Tables } from "@/types/database";
@@ -318,50 +327,60 @@ export async function getLatestIndicatorReadings(): Promise<
 
   const supabase = getSupabaseAdminClient();
 
-  // Two independent queries in parallel. Each pulls a bounded recent
-  // window then collapses to "latest per indicator_key" in JS — same
-  // pattern as `loadSignalInputs`. The window size is chosen to absorb
-  // up to ~2 weeks of weekend/holiday gaps for the slowest-frequency
-  // FRED series (CPIAUCSL is monthly with revisions; we still want the
-  // most recent observed_at row to land here on the first hit).
-  const FRED_RECENT_LIMIT = 330; // 15 keys × ~22 rows headroom (STLFSI4 + 유동성 3종 추가, 2026-08-02)
-  const ONCHAIN_RECENT_LIMIT = 100; // 5 keys × ~20 rows headroom
-  const [fredResult, onchainResult] = await Promise.all([
-    supabase
-      .from("indicator_readings")
-      .select("indicator_key, observed_at, value_raw, fetch_status")
+  // PER-KEY latest queries, not a shared recent-rows window. The
+  // previous window-scan (ORDER BY observed_at DESC LIMIT ~330 across
+  // ALL keys) silently dropped slow-frequency series as the key count
+  // grew: after the 2026-08-02 series expansion, monthly SAHMCURRENT's
+  // newest row ranked 342nd and vanished from the advisor's macro
+  // pillar while the composite still displayed it — measured in prod
+  // (UX 실사 2026-08-03). One tiny indexed query per key is immune to
+  // both key growth and publication lag, and the whole fan-out runs
+  // inside this daily-cached scope. limit(4) per key covers a
+  // same-date model-version cutover plus jitter;
+  // pickLatestByDateThenVersion applies the numeric-version tiebreak
+  // (90ff598 lesson).
+  const fredKeys = [
+    ...INDICATOR_KEYS,
+    ...PHASE2_ACTIVE_FRED_SIGNAL_KEYS,
+    ...PHASE2_FRED_REGIONAL_OVERLAY_KEYS,
+  ];
+  const onchainKeys = [
+    "CNN_FG",
+    "CRYPTO_FG",
+    "MVRV_Z",
+    "SOPR",
+    "BTC_ETF_NETFLOW",
+    STOCK_FG_PROXY_KEY,
+  ];
+
+  const latestFor = async (
+    table: "indicator_readings" | "onchain_readings",
+    key: string,
+  ): Promise<[string, number | null] | null> => {
+    const { data, error } = await supabase
+      .from(table)
+      .select("indicator_key, observed_at, value_raw, fetch_status, model_version")
+      .eq("indicator_key", key)
+      .eq("fetch_status", "success")
       .order("observed_at", { ascending: false })
-      .limit(FRED_RECENT_LIMIT),
-    supabase
-      .from("onchain_readings")
-      .select("indicator_key, observed_at, value_raw, fetch_status")
-      .order("observed_at", { ascending: false })
-      .limit(ONCHAIN_RECENT_LIMIT),
+      .limit(4);
+    if (error) {
+      throw new Error(
+        `getLatestIndicatorReadings ${table}(${key}) query failed: ${error.message} (${error.code ?? "no code"})`,
+      );
+    }
+    const best = pickLatestByDateThenVersion(data ?? []);
+    return best ? [key, best.value_raw] : null;
+  };
+
+  const entries = await Promise.all([
+    ...fredKeys.map((key) => latestFor("indicator_readings", key)),
+    ...onchainKeys.map((key) => latestFor("onchain_readings", key)),
   ]);
 
-  if (fredResult.error) {
-    throw new Error(
-      `getLatestIndicatorReadings indicator_readings query failed: ${fredResult.error.message} (${fredResult.error.code ?? "no code"})`,
-    );
-  }
-  if (onchainResult.error) {
-    throw new Error(
-      `getLatestIndicatorReadings onchain_readings query failed: ${onchainResult.error.message} (${onchainResult.error.code ?? "no code"})`,
-    );
-  }
-
   const out: Record<string, number | null> = {};
-  // First-occurrence-wins per indicator_key — both sources arrive
-  // newest-first thanks to the ORDER BY, so the first hit IS the latest.
-  for (const row of fredResult.data ?? []) {
-    if (row.fetch_status !== "success") continue;
-    if (out[row.indicator_key] !== undefined) continue;
-    out[row.indicator_key] = row.value_raw;
-  }
-  for (const row of onchainResult.data ?? []) {
-    if (row.fetch_status !== "success") continue;
-    if (out[row.indicator_key] !== undefined) continue;
-    out[row.indicator_key] = row.value_raw;
+  for (const entry of entries) {
+    if (entry) out[entry[0]] = entry[1];
   }
   return out;
 }

@@ -14,6 +14,36 @@
  * compare digit chunks numerically, non-digit chunks lexicographically,
  * left to right. "adv-1.1.9" < "adv-1.1.10", "v2.9.0" < "v2.10.0".
  */
+/**
+ * Picks the authoritative "latest" row from a small per-key result
+ * set: newest `observed_at` wins; among rows sharing that date (a
+ * model/engine-version cutover day) the numerically-newest version
+ * wins. Pure — extracted so the reading-table readers' selection rule
+ * is unit-testable without Supabase.
+ */
+export function pickLatestByDateThenVersion<
+  T extends { observed_at: string; model_version: string },
+>(rows: ReadonlyArray<T>): T | null {
+  let best: T | null = null;
+  for (const row of rows) {
+    if (best === null) {
+      best = row;
+      continue;
+    }
+    const dateA = String(row.observed_at).slice(0, 10);
+    const dateB = String(best.observed_at).slice(0, 10);
+    if (dateA > dateB) {
+      best = row;
+    } else if (
+      dateA === dateB &&
+      compareVersionsNumeric(row.model_version, best.model_version) > 0
+    ) {
+      best = row;
+    }
+  }
+  return best;
+}
+
 export function compareVersionsNumeric(a: string, b: string): number {
   const chunksA = a.split(/(\d+)/).filter((c) => c.length > 0);
   const chunksB = b.split(/(\d+)/).filter((c) => c.length > 0);
