@@ -445,11 +445,20 @@ export async function getIndicatorSeries(
  * was a ~2024 value and the weather strip ranked it inside a
  * truncated window ("5년 하위 1%" for a VIX actually at the 42nd
  * percentile of the real 5y series — UX 실사 2026-08-03). Fetch per
- * key AND page in max-rows chunks until a short page proves the
- * window is complete. The `id` tiebreak gives pagination a total
- * order so same-date multi-version rows can't be skipped or doubled
- * across a page boundary; semantic ordering is re-derived in
- * collapseRowsToSeries anyway.
+ * key AND page until an EMPTY page proves the window is complete. A
+ * short-but-nonempty page is NOT proof: it can also mean a server
+ * max-rows cap below the requested size, so the loop advances by the
+ * rows actually received — termination never depends on the cap and
+ * page size. The `id` tiebreak gives pagination a total order so
+ * same-date multi-version rows can't be skipped or doubled across a
+ * page boundary (upsert-only tables: rows never delete or move);
+ * semantic ordering is re-derived in collapseRowsToSeries anyway.
+ */
+/**
+ * Requested rows per page. Purely a batching knob: the loop advances
+ * by rows actually received, so a server cap above OR below this
+ * value stays correct (costs one extra empty round-trip per key,
+ * inside a "use cache" daily scope).
  */
 const SERIES_PAGE_SIZE = 1000;
 
@@ -469,7 +478,7 @@ async function fetchSeriesRowsPaged(
 ): Promise<SeriesRow[]> {
   const supabase = getSupabaseAdminClient();
   const rows: SeriesRow[] = [];
-  for (let offset = 0; ; offset += SERIES_PAGE_SIZE) {
+  for (let offset = 0; ; ) {
     const { data, error } = await supabase
       .from(table)
       .select(
@@ -487,8 +496,10 @@ async function fetchSeriesRowsPaged(
         `fetchSeriesRowsPaged(${table}, ${key}, ${startDate}..${endDate}) failed at offset ${offset}: ${error.message} (${error.code ?? "no code"})`,
       );
     }
-    rows.push(...(data ?? []));
-    if ((data?.length ?? 0) < SERIES_PAGE_SIZE) return rows;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length === 0) return rows;
+    offset += page.length;
   }
 }
 

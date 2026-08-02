@@ -118,3 +118,33 @@ export function computeWowDelta(
   }
   return null;
 }
+
+/**
+ * Percentile rank + the actual span of series the rank was computed
+ * over. Consumers need the span because a requested window is NOT a
+ * coverage guarantee — e.g. BAMLH0A0HYM2 collection starts 2023-07,
+ * so a "5년" window request yields a ~3y series and labeling it 5년
+ * would overclaim (UX 실사 2026-08-03).
+ */
+export interface WindowedPercentile {
+  rank: number;
+  /** Calendar days between the series' first and last observation. */
+  coverageDays: number;
+}
+
+/**
+ * Korean window label for a percentile context line. Claims the full
+ * requested window ("5년") only when coverage reaches ≥90% of it;
+ * otherwise states the floored actual span ("3년"), floored at 1년
+ * (percentileRank's sample floor keeps sub-year daily series from
+ * reaching here anyway).
+ */
+export function formatWindowLabelKo(
+  coverageDays: number,
+  fullWindowDays: number,
+): string {
+  if (coverageDays >= fullWindowDays * 0.9) {
+    return `${Math.round(fullWindowDays / 365)}년`;
+  }
+  return `${Math.max(1, Math.floor(coverageDays / 365))}년`;
+}

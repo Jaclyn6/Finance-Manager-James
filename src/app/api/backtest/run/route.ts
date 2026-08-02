@@ -65,6 +65,15 @@ import type { Database, Json } from "@/types/database";
 
 export const maxDuration = 60;
 
+/**
+ * Also the silent-truncation guard: this route's composite_snapshots
+ * and backtest_snapshots selects are UNPAGINATED, so they stay
+ * correct only while the request window keeps row counts under
+ * PostgREST max-rows (1,000). Raising this past ~1,000 days requires
+ * paging those reads first — see fetchSeriesRowsPaged in
+ * src/lib/data/indicators.ts for the pattern and the truncation
+ * incident it fixed (99d7935, 2026-08-03).
+ */
 const MAX_RANGE_DAYS = 365;
 
 type SupabaseAdmin = ReturnType<typeof getSupabaseAdminClient>;

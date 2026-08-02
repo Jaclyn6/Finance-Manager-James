@@ -15,7 +15,11 @@ import {
   pickRepresentativeTicker,
 } from "@/lib/utils/asset-labels";
 
-import { computeWowDelta, percentileRank } from "@/lib/advisor/series";
+import {
+  computeWowDelta,
+  percentileRank,
+  type WindowedPercentile,
+} from "@/lib/advisor/series";
 import type { IndicatorSeriesPoint } from "@/lib/advisor/series";
 import {
   computeStockFgProxy,
@@ -514,20 +518,37 @@ export async function getWeatherDeltas(
  * row than the daily-collapsed window). A one-day skew moves the
  * rank by well under a percent of the 5y window. Null (hidden chip
  * line) until the FRED backfill has seeded ≥250 observations.
+ *
+ * Returns coverageDays alongside the rank: a requested window is not
+ * a coverage guarantee (BAMLH0A0HYM2 collection starts 2023-07 —
+ * ~3y), and the strip must not label a 3y series "5년"
+ * (Trigger 2 review, 2026-08-03).
  */
 export async function getWeatherPercentiles(
   endDate: string,
-): Promise<Record<string, number | null>> {
+): Promise<Record<string, WindowedPercentile | null>> {
   const series = await getIndicatorSeries(
     [...DIRECTION_KEYS],
     endDate,
     PERCENTILE_WINDOW_DAYS,
   );
-  const out: Record<string, number | null> = {};
+  const out: Record<string, WindowedPercentile | null> = {};
   for (const key of DIRECTION_KEYS) {
     const points = series[key] ?? [];
     const latest = points.length > 0 ? points[points.length - 1] : null;
-    out[key] = latest === null ? null : percentileRank(points, latest.value);
+    const rank =
+      latest === null ? null : percentileRank(points, latest.value);
+    if (latest === null || rank === null) {
+      out[key] = null;
+      continue;
+    }
+    const firstMs = Date.parse(`${points[0].date}T00:00:00Z`);
+    const lastMs = Date.parse(`${latest.date}T00:00:00Z`);
+    const coverageDays =
+      Number.isFinite(firstMs) && Number.isFinite(lastMs)
+        ? Math.round((lastMs - firstMs) / (24 * 60 * 60 * 1000))
+        : 0;
+    out[key] = { rank, coverageDays };
   }
   return out;
 }

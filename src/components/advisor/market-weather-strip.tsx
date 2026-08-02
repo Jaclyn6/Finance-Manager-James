@@ -1,5 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { formatPercentileBandKo } from "@/lib/advisor/series";
+import {
+  formatPercentileBandKo,
+  formatWindowLabelKo,
+  type WindowedPercentile,
+} from "@/lib/advisor/series";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,11 +33,12 @@ export interface MarketWeatherStripProps {
   /** `getWeatherDeltas()` output — 7-day change per indicator_key. */
   deltas?: Record<string, number | null>;
   /**
-   * `getWeatherPercentiles()` output — 5y percentile rank (0-1) of
-   * the current value per indicator_key. Null/absent = no context
-   * line (series not deep enough yet).
+   * `getWeatherPercentiles()` output — percentile rank of the current
+   * value per indicator_key plus the actual coverage of the series
+   * the rank was computed over. Null/absent = no context line
+   * (series not deep enough yet).
    */
-  percentiles?: Record<string, number | null>;
+  percentiles?: Record<string, WindowedPercentile | null>;
   /**
    * `getStockFgProxy().value` — shown on the 공포·탐욕(미국) chip
    * ONLY when CNN_FG itself has no fresh reading, with an explicit
@@ -134,15 +139,24 @@ const GAUGES: GaugeSpec[] = [
 ];
 
 /**
- * 5-year percentile context line — two-sided phrasing shared with the
+ * Percentile context line — two-sided phrasing shared with the
  * proxy's junk-demand detail via formatPercentileBandKo (see its
  * docstring for the 상위/하위/중간권/1%-미만 rules and the UX 실사
  * 2026-08-03 rationale). Only rendered for gauges where "elevated vs
  * own history" is the natural read (VIX, HY spread — both
- * risingIsBad).
+ * risingIsBad). The window label comes from the series' ACTUAL
+ * coverage, not the requested window — HY collection starts 2023-07,
+ * so its line must say "3년", not "5년" (Trigger 2 review,
+ * 2026-08-03).
  */
-function formatPercentileKo(percentile: number): string {
-  return `5년 ${formatPercentileBandKo(percentile)}`;
+const PERCENTILE_FULL_WINDOW_DAYS = 1825;
+
+function formatPercentileKo(percentile: WindowedPercentile): string {
+  const label = formatWindowLabelKo(
+    percentile.coverageDays,
+    PERCENTILE_FULL_WINDOW_DAYS,
+  );
+  return `${label} ${formatPercentileBandKo(percentile.rank)}`;
 }
 
 const TONE_DOT_CLASS: Record<Tone, string> = {

@@ -4,6 +4,7 @@ import {
   collapseToDaily,
   computeWowDelta,
   formatPercentileBandKo,
+  formatWindowLabelKo,
   percentileRank,
   type IndicatorSeriesPoint,
 } from "./series";
@@ -140,5 +141,22 @@ describe("collapseToDaily", () => {
 
   it("handles empty input", () => {
     expect(collapseToDaily([])).toEqual([]);
+  });
+});
+
+describe("formatWindowLabelKo", () => {
+  it("claims the full window only at >=90% coverage", () => {
+    expect(formatWindowLabelKo(1825, 1825)).toBe("5년");
+    expect(formatWindowLabelKo(1700, 1825)).toBe("5년"); // 93%
+  });
+
+  it("states the floored ACTUAL span for young series (HY = 3.06y)", () => {
+    // BAMLH0A0HYM2 collection starts 2023-07 — a "5년" label over a
+    // ~1116-day series would overclaim (Trigger 2, 2026-08-03).
+    expect(formatWindowLabelKo(1116, 1825)).toBe("3년");
+  });
+
+  it("floors at 1년", () => {
+    expect(formatWindowLabelKo(300, 1825)).toBe("1년");
   });
 });
