@@ -29,9 +29,21 @@ import type { Tables } from "@/types/database";
  */
 export interface CompositeStateCardProps {
   snapshot: Tables<"composite_snapshots">;
+  /**
+   * True only when an advisor verdict surface actually renders above
+   * this card on the same page. Advisor surfaces are latest-only —
+   * they hide under a historical `?date=` — so callers must gate this
+   * on their own advisor-view presence; an unconditional bridge
+   * sentence would point at a card that is not on the page
+   * (Trigger 2 review, 2026-08-03).
+   */
+  verdictVisible?: boolean;
 }
 
-export function CompositeStateCard({ snapshot }: CompositeStateCardProps) {
+export function CompositeStateCard({
+  snapshot,
+  verdictVisible = false,
+}: CompositeStateCardProps) {
   const band = scoreToBand(snapshot.score_0_100);
   const score = Math.round(snapshot.score_0_100 * 10) / 10;
 
@@ -42,9 +54,14 @@ export function CompositeStateCard({ snapshot }: CompositeStateCardProps) {
           <div>
             <p className="text-xs text-muted-foreground">오늘 투자 환경</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              매크로·기술적·온체인 지표를 가중 합산한 보조 점수입니다. 위
-              판정과 방법이 달라 결론이 다를 수 있으며, 그때는 낙폭 맥락까지
-              반영한 판정을 기준으로 보세요.
+              {/* "매크로·기술적 지표 등" — the only two categories
+                  present in EVERY asset's CATEGORY_WEIGHTS row.
+                  Enumerating onchain here would be false for the
+                  common/us/kr/etf snapshots, where its weight is zero
+                  (Trigger 2 review, 2026-08-03). */}
+              매크로·기술적 지표 등 여러 범주를 합산한 보조 점수입니다.
+              {verdictVisible &&
+                " 할인·추세전환 판정과 결론이 다를 때는 판정을 기준으로 보세요."}
             </p>
           </div>
           <StalenessBadge

@@ -208,7 +208,10 @@ export async function AssetContent({
         are identical to the dashboard common-card, just scoped to
         this asset. DRY beats diverging two near-identical components.
       */}
-      <CompositeStateCard snapshot={snapshot} />
+      <CompositeStateCard
+        snapshot={snapshot}
+        verdictVisible={advisorView !== null}
+      />
 
       <ScorePriceOverlay
         scoreData={trendSeries.map((s) => ({

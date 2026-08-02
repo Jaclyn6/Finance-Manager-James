@@ -198,20 +198,28 @@ export async function DashboardContent({
         }
       />
 
-      <CompositeStateCard snapshot={commonSnapshot} />
+      <CompositeStateCard
+        snapshot={commonSnapshot}
+        verdictVisible={advisorViews !== null}
+      />
 
       <section className="space-y-3 md:space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight md:text-xl">
-          자산군별 상태
-        </h2>
-        {/* Same score engine as the composite card above, NOT the
-            advisor — without this line the family hits e.g. BTC
-            "비중 확대" here right after "판단 유보" in the verdict
-            card and reads one of them as a bug (UX 실사 2026-08-03). */}
-        <p className="text-sm text-muted-foreground">
-          점수 엔진 기준의 자산군별 요약 — 위 판정 카드와 결론이 다를 수
-          있습니다.
-        </p>
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight md:text-xl">
+            자산군별 상태
+          </h2>
+          {/* Provenance line: same auxiliary score as the composite
+              card above, NOT the advisor — without it the family hits
+              e.g. BTC "비중 확대" here right after "판단 유보" in the
+              verdict card and reads one of them as a bug. Kept
+              deliberately free of deictic "위 판정" references so it
+              stays true in historical ?date= mode, where the verdict
+              section is hidden (UX 실사 + Trigger 2, 2026-08-03). */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            위 &apos;오늘 투자 환경&apos;과 같은 보조 점수 기준의 요약입니다
+            — 할인·추세전환 판정과는 별개의 계산입니다.
+          </p>
+        </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {DASHBOARD_ASSET_ORDER.map((assetType) => {
             const snapshot = snapshotByAsset.get(assetType);
