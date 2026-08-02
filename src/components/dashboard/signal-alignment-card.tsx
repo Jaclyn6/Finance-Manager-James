@@ -119,6 +119,16 @@ export function SignalAlignmentCard({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {applicableCount}가지 독립 매수 조건 중 몇 개가 현재 충족되는가
+                {/* Per-asset surfaces show only that asset's applicable
+                    subset, so the count differs from the 전체 card (e.g.
+                    5 vs 6) — say so, or the family reads it as a bug
+                    (UX 실사 2026-08-03). */}
+                {assetType !== "common" && (
+                  <span className="text-muted-foreground/70">
+                    {" "}
+                    (이 자산군 적용 조건만)
+                  </span>
+                )}
               </p>
             </div>
             <span
@@ -169,6 +179,16 @@ export function SignalAlignmentCard({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {applicableCount}가지 독립 매수 조건 중 몇 개가 현재 충족되는가
+                {/* Per-asset surfaces show only that asset's applicable
+                    subset, so the count differs from the 전체 card (e.g.
+                    5 vs 6) — say so, or the family reads it as a bug
+                    (UX 실사 2026-08-03). */}
+                {assetType !== "common" && (
+                  <span className="text-muted-foreground/70">
+                    {" "}
+                    (이 자산군 적용 조건만)
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
