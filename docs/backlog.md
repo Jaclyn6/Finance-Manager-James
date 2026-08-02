@@ -9,6 +9,27 @@ picks them up.
 
 ## UI / UX polish
 
+### top_movers가 매크로 카테고리만 커버 — 같은 날짜 행마다 동일 블록 반복 + 비매크로 요인 무설명
+
+- **WHERE**: `src/app/api/cron/ingest-macro/route.ts` (~726행,
+  `computeTopMovers(macroComposite.contributing, ...)`) +
+  `src/lib/score-engine/top-movers.ts`; 렌더는
+  `src/components/changelog/changelog-row.tsx`.
+- **THE GAP**: 행의 delta는 전 카테고리 합성점수 변화인데 무버는 7개
+  매크로 FRED 지표만 diff — (i) 매크로는 자산 간 공유라 같은 날짜의
+  자산 5행이 사실상 동일한 무버 블록을 반복하고, (ii) 기술적/온체인/
+  심리 요인(가중치 55~75%)으로 점수가 움직인 날은 설명이 아예 없음.
+  2026-08-03 표시 계층 수정(71d3900+)으로 조용한 날의 ±0.0 노이즈와
+  침묵 생략은 해소했지만("주요 매크로 지표의 변동은 미미했습니다"),
+  스코프 자체는 그대로.
+- **PROPOSED TREATMENT**: 엔진 측 — cron이 자산별 v2 `contributing`
+  블롭(카테고리별 지표 서브맵이 이미 영속됨, route.ts 640-664)에서
+  전 카테고리 무버를 계산하도록 확장. 블록 중복과 무설명 문제를 한
+  번에 해결. `top_movers` JSONB에 category 필드 추가 고려.
+- **WHY DEFERRED**: cron 쓰기 경로 + JSONB 계약 변경(과거 행과 혼재)
+  이라 feature-unit급이고, 표시 계층 완화가 이미 배포되어 급하지 않음
+  (관찰 2026-08-03 #17, Trigger 2 리뷰 92점 확인).
+
 ### 무낙폭(고점 부근) 카드에서 '할인 근거' 강조가 '할인 없음' 헤드라인과 어휘 충돌
 
 - **WHERE**: `src/components/advisor/verdict-card.tsx`

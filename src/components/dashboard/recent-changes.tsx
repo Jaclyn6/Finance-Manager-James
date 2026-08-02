@@ -1,6 +1,10 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { cn } from "@/lib/utils";
+import {
+  formatSignedDelta,
+  isDisplayZeroDelta,
+} from "@/lib/utils/signed-delta";
 import type { Tables } from "@/types/database";
 
 /**
@@ -77,14 +81,18 @@ export function RecentChanges({ rows }: RecentChangesProps) {
                     <span
                       className={cn(
                         "ml-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                        row.delta > 0
-                          ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
-                          : row.delta < 0
-                            ? "bg-red-500/10 text-red-700 dark:bg-red-400/10 dark:text-red-300"
-                            : "bg-muted text-muted-foreground",
+                        // Style follows the DISPLAYED value — a raw
+                        // ±0.03 renders "0.0" and must take the
+                        // neutral style, same rule as the changelog
+                        // DeltaBadge (Trigger 2 review, 2026-08-03).
+                        isDisplayZeroDelta(row.delta)
+                          ? "bg-muted text-muted-foreground"
+                          : row.delta > 0
+                            ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
+                            : "bg-red-500/10 text-red-700 dark:bg-red-400/10 dark:text-red-300",
                       )}
                     >
-                      {formatDelta(row.delta)}
+                      {formatSignedDelta(row.delta)}
                     </span>
                   )}
                 </div>
@@ -97,9 +105,3 @@ export function RecentChanges({ rows }: RecentChangesProps) {
   );
 }
 
-function formatDelta(delta: number): string {
-  const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
-  const magnitude = Math.abs(delta);
-  const rounded = Math.round(magnitude * 10) / 10;
-  return `${sign}${rounded.toFixed(1)}`;
-}

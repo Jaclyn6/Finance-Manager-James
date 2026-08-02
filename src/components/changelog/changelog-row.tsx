@@ -1,5 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { indicatorRowLabel } from "@/components/asset/contributing-indicators";
+import {
+  formatSignedDelta,
+  isDisplayZeroDelta,
+} from "@/lib/utils/signed-delta";
 import { ASSET_LABELS } from "@/lib/utils/asset-labels";
 import { cn } from "@/lib/utils";
 import type { Json, Tables } from "@/types/database";
@@ -16,9 +20,15 @@ import type { Json, Tables } from "@/types/database";
  * Top movers: renders the up-to-3 indicators that shifted most in
  * weighted contribution (written by `computeTopMovers` during the
  * cron run, see `src/lib/score-engine/top-movers.ts`). Each mover
- * shows the indicator's Korean label (from `INDICATOR_CONFIG`) and
- * the signed delta. A row with no `top_movers` (first-ever snapshot
- * per asset, or a legacy row) renders without the movers block.
+ * shows the indicator's Korean label via `indicatorRowLabel` (config
+ * → glossary → key) and the signed delta. A row with no `top_movers`
+ * (first-ever snapshot per asset, or a legacy row) renders without
+ * the movers block; a row whose movers are ALL below
+ * {@link MIN_VISIBLE_MOVER_DELTA} keeps the block header with a
+ * single "변동 미미" line instead — silent omission next to a
+ * nonzero row delta reads as a missing explanation, and the movers
+ * cover only the macro category, so non-macro-driven moves are
+ * routine.
  */
 export interface ChangelogRowProps {
   row: Tables<"score_changelog">;
@@ -31,6 +41,12 @@ interface ParsedMover {
 
 export function ChangelogRow({ row }: ChangelogRowProps) {
   const movers = parseTopMovers(row.top_movers);
+  // Raw movers existed but all fell below the display floor — show
+  // the quiet line, not silence (see header docstring).
+  const allQuiet =
+    movers.length === 0 &&
+    Array.isArray(row.top_movers) &&
+    row.top_movers.length > 0;
   const assetLabel = ASSET_LABELS[row.asset_type] ?? row.asset_type;
 
   return (
@@ -74,36 +90,46 @@ export function ChangelogRow({ row }: ChangelogRowProps) {
           </span>
         </div>
 
-        {movers.length > 0 && (
+        {(movers.length > 0 || allQuiet) && (
           <div className="border-t pt-3">
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               주요 변동 지표
             </p>
-            <ul className="space-y-1">
-              {movers.map((mover) => {
-                const label = indicatorRowLabel(mover.key);
-                return (
-                  <li
-                    key={mover.key}
-                    className="flex items-baseline justify-between gap-3 text-xs"
-                  >
-                    <span className="text-muted-foreground">{label}</span>
-                    <span
-                      className={cn(
-                        "tabular-nums",
-                        mover.delta > 0
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : mover.delta < 0
-                            ? "text-red-700 dark:text-red-300"
-                            : "text-muted-foreground",
-                      )}
+            {movers.length > 0 ? (
+              <ul className="space-y-1">
+                {movers.map((mover) => {
+                  const label = indicatorRowLabel(mover.key);
+                  return (
+                    <li
+                      key={mover.key}
+                      className="flex items-baseline justify-between gap-3 text-xs"
                     >
-                      {formatSignedDelta(mover.delta)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+                      <span className="text-muted-foreground">{label}</span>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          // Post-filter a mover can't display as 0.0,
+                          // so two branches suffice.
+                          mover.delta > 0
+                            ? "text-emerald-700 dark:text-emerald-300"
+                            : "text-red-700 dark:text-red-300",
+                        )}
+                      >
+                        {formatSignedDelta(mover.delta)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              // Macro-scoped wording on purpose: movers only cover the
+              // macro category, so the score may have moved on
+              // technical/onchain/sentiment factors this line must not
+              // deny (Trigger 2 review, 2026-08-03).
+              <p className="break-keep text-xs text-muted-foreground">
+                주요 매크로 지표의 변동은 미미했습니다.
+              </p>
+            )}
           </div>
         )}
       </CardContent>
@@ -113,8 +139,11 @@ export function ChangelogRow({ row }: ChangelogRowProps) {
 
 function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta == null) return null;
-  const positive = delta > 0;
-  const zero = delta === 0;
+  // Style follows the DISPLAYED value: a raw +0.03 renders "0.0", and
+  // an emerald "+0.0" badge is the same signed-zero glitch the mover
+  // floor removed (Trigger 2 review, 2026-08-03).
+  const zero = isDisplayZeroDelta(delta);
+  const positive = !zero && delta > 0;
   return (
     <span
       className={cn(
@@ -167,8 +196,3 @@ function formatScore(n: number | null): string {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
-function formatSignedDelta(delta: number): string {
-  const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
-  const magnitude = Math.abs(delta);
-  return `${sign}${(Math.round(magnitude * 10) / 10).toFixed(1)}`;
-}
