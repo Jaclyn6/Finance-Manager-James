@@ -347,7 +347,39 @@ function SignalTile({
   );
 }
 
-function renderInputs(
+/**
+ * Korean labels for the tooltip's raw engine-input echo. The engine's
+ * input keys are code identifiers (vix, cnnFg, spyDisparity) —
+ * echoing them verbatim leaked developer register into a
+ * family-facing tooltip ("cnnFg=—"; UX 실사 2026-08-03). Unknown
+ * keys fall back to the raw identifier so a future signal's inputs
+ * degrade readable-ish instead of vanishing — keep this map in sync
+ * with the `inputs = {...}` objects in
+ * src/lib/score-engine/signals.ts.
+ */
+const INPUT_LABEL_KO: Record<string, string> = {
+  vix: "VIX",
+  cnnFg: "CNN F&G",
+  spyDisparity: "SPY 이격",
+  qqqDisparity: "QQQ 이격",
+  icsa: "실업 청구",
+  sahmCurrent: "Sahm",
+  bamlToday: "HY 스프레드",
+  maxLast7d: "7일 고점",
+  tgaToday: "TGA 잔액",
+  sma20: "20일 평균",
+  mvrvZ: "MVRV-Z",
+  sopr: "SOPR",
+  currentMacd: "MACD",
+  currentSignal: "시그널",
+  previousMacd: "전일 MACD",
+  previousSignal: "전일 시그널",
+};
+
+/** Inputs stored as fractions (-0.25 = -25%) — render as percent. */
+const PERCENT_INPUT_KEYS = new Set(["spyDisparity", "qqqDisparity"]);
+
+export function renderInputs(
   inputs: Record<string, number | null> | undefined,
 ): string {
   if (!inputs || Object.keys(inputs).length === 0) {
@@ -355,10 +387,15 @@ function renderInputs(
   }
   return Object.entries(inputs)
     .map(([k, v]) => {
-      if (v === null || v === undefined) return `${k}=—`;
-      return `${k}=${formatInput(v)}`;
+      const label = INPUT_LABEL_KO[k] ?? k;
+      if (v === null || v === undefined) return `${label} —`;
+      if (PERCENT_INPUT_KEYS.has(k)) {
+        const pct = v * 100;
+        return `${label} ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+      }
+      return `${label} ${formatInput(v)}`;
     })
-    .join(", ");
+    .join(" · ");
 }
 
 function formatInput(v: number): string {
