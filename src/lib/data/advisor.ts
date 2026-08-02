@@ -94,6 +94,15 @@ export const DIRECTION_WINDOW_DAYS = 21;
 export const DIRECTION_KEYS = ["VIXCLS", "BAMLH0A0HYM2"] as const;
 
 /**
+ * Trailing window for the T10Y2Y "역전 해소" check (~6 months — the
+ * historical recession-onset window after an un-inversion) plus
+ * request headroom, and the minimum observations below which the
+ * check answers null (direction unknown) instead of false.
+ */
+export const UNINVERSION_WINDOW_DAYS = 200;
+export const UNINVERSION_MIN_SAMPLES = 100;
+
+/**
  * Sentiment gauges whose 7-day direction the weather strip shows.
  * Stored in `onchain_readings` (one row per day, refreshed hourly /
  * 4h by their crons), so they read through {@link getOnchainSeries},
@@ -224,24 +233,37 @@ export async function getAdvisorViews(
 
   // Two Promise.all groups (not one spread array) so TypeScript keeps
   // the tuple types of the fixed group instead of collapsing to a union.
-  const [[readings, snapshots, maByTicker, directionSeries, fgProxy], histories] =
-    await Promise.all([
-      Promise.all([
-        getLatestIndicatorReadings(),
-        getLatestCompositeSnapshots(),
-        getLatestMaByTicker(tickers),
-        getIndicatorSeries([...DIRECTION_KEYS], endDate, DIRECTION_WINDOW_DAYS),
-        getStockFgProxy(endDate),
-      ]),
-      Promise.all(
-        tickers.map((t) =>
-          getPriceHistoryForTicker(t, endDate, ADVISOR_SERIES_WINDOW_DAYS),
-        ),
+  const [
+    [readings, snapshots, maByTicker, directionSeries, fgProxy, curveSeries],
+    histories,
+  ] = await Promise.all([
+    Promise.all([
+      getLatestIndicatorReadings(),
+      getLatestCompositeSnapshots(),
+      getLatestMaByTicker(tickers),
+      getIndicatorSeries([...DIRECTION_KEYS], endDate, DIRECTION_WINDOW_DAYS),
+      getStockFgProxy(endDate),
+      getIndicatorSeries(["T10Y2Y"], endDate, UNINVERSION_WINDOW_DAYS),
+    ]),
+    Promise.all(
+      tickers.map((t) =>
+        getPriceHistoryForTicker(t, endDate, ADVISOR_SERIES_WINDOW_DAYS),
       ),
-    ]);
+    ),
+  ]);
 
   const vixWow = computeWowDelta(directionSeries["VIXCLS"] ?? []);
   const hySpreadWow = computeWowDelta(directionSeries["BAMLH0A0HYM2"] ?? []);
+
+  // "역전 해소" check: was the curve negative at any point in the
+  // trailing window? Thin history answers null (unknown), never false
+  // — the engine renders positive-curve-with-unknown-history as plain
+  // 정상 with the flag listed missing.
+  const t10y2ySeries = curveSeries["T10Y2Y"] ?? [];
+  const t10y2yRecentlyUninverted =
+    t10y2ySeries.length < UNINVERSION_MIN_SAMPLES
+      ? null
+      : t10y2ySeries.some((p) => p.value < 0);
 
   // Stock F&G source order: CNN when its latest row is a success
   // (it may recover — self-healing), else the in-house proxy with the
@@ -290,6 +312,8 @@ export async function getAdvisorViews(
         t10y2y: readings["T10Y2Y"] ?? null,
         hySpread: readings["BAMLH0A0HYM2"] ?? null,
         hySpreadWow,
+        stlfsi: readings["STLFSI4"] ?? null,
+        t10y2yRecentlyUninverted,
       },
       onchain:
         assetClass === "crypto"

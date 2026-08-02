@@ -255,13 +255,43 @@ export function evaluateMacroPillar(inputs: MacroInputs): PillarEvaluation {
 
   if (inputs.t10y2y !== null) {
     if (inputs.t10y2y >= 0) {
-      subScores.push(clamp01(inputs.t10y2y / 0.5) * 0.4);
-      notes.push(`장단기금리차 +${inputs.t10y2y.toFixed(2)}%p(정상)`);
+      if (inputs.t10y2yRecentlyUninverted === true) {
+        // 역전 해소 직후: historically the UN-inversion — the curve
+        // re-steepening out of negative territory — is what coincides
+        // with recession onset (see 2000, 2007). A freshly-normalized
+        // curve is a caution window, not an all-clear.
+        subScores.push(-0.3);
+        notes.push(
+          `장단기금리차 +${inputs.t10y2y.toFixed(2)}%p — 역전 해소 직후(6개월 내), 역사적으로 침체 개시와 맞물리는 구간`,
+        );
+      } else {
+        subScores.push(clamp01(inputs.t10y2y / 0.5) * 0.4);
+        notes.push(`장단기금리차 +${inputs.t10y2y.toFixed(2)}%p(정상)`);
+        if (inputs.t10y2yRecentlyUninverted === null) {
+          missing.push("t10y2yRecentlyUninverted");
+        }
+      }
     } else {
       subScores.push(clampSigned(inputs.t10y2y / 1.0));
       notes.push(`장단기금리차 ${inputs.t10y2y.toFixed(2)}%p — 역전(침체 경고)`);
     }
   } else missing.push("t10y2y");
+
+  if (inputs.stlfsi !== null) {
+    const stress = inputs.stlfsi;
+    if (stress >= 1) {
+      subScores.push(clampSigned(-(0.5 + clamp01((stress - 1) / 2) * 0.5)));
+      notes.push(
+        `금융스트레스지수 ${stress.toFixed(2)} — 시스템 스트레스 ${stress >= 3 ? "위기 수준" : "고조"}`,
+      );
+    } else if (stress >= 0) {
+      subScores.push(-0.2 * clamp01(stress));
+      notes.push(`금융스트레스지수 ${stress.toFixed(2)} — 평균 상회(관찰)`);
+    } else {
+      subScores.push(clamp01(-stress / 1.0) * 0.3);
+      notes.push(`금융스트레스지수 ${stress.toFixed(2)} — 안정`);
+    }
+  } else missing.push("stlfsi");
 
   if (inputs.hySpread !== null) {
     const spread = inputs.hySpread;
@@ -312,7 +342,7 @@ export function evaluateMacroPillar(inputs: MacroInputs): PillarEvaluation {
     pillar: "macro",
     stance: stanceOf(score),
     score,
-    strength: subScores.length / 4,
+    strength: subScores.length / 5,
     reasonKo: notes.join(" · "),
     missingInputs: missing,
   };

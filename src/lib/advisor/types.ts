@@ -155,6 +155,21 @@ export interface MacroInputs {
    * from "stress peaking". Null = history too thin.
    */
   hySpreadWow: number | null;
+  /**
+   * FRED STLFSI4 St. Louis Fed Financial Stress Index. 0 = historical
+   * average; ≥1 elevated stress; ≥3 crisis. An 18-component composite,
+   * so one number covers funding/credit/equity stress the other
+   * sub-inputs can miss. Null until the series has accrued.
+   */
+  stlfsi: number | null;
+  /**
+   * True when T10Y2Y is positive NOW but was inverted (negative)
+   * within the trailing ~6 months — the "역전 후 상승 전환" window.
+   * Historically the UN-inversion, not the inversion itself, is what
+   * coincides with recession onset, so a freshly-normalized curve
+   * must not read as an all-clear. Null = history too thin to judge.
+   */
+  t10y2yRecentlyUninverted: boolean | null;
 }
 
 export interface OnchainInputs {

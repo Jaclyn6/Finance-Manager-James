@@ -29,6 +29,8 @@ function inputs(partial: Partial<AdvisorInputs>): AdvisorInputs {
       t10y2y: null,
       hySpread: null,
       hySpreadWow: null,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: null,
     },
     onchain: { mvrvZ: null, sopr: null },
     ...partial,
@@ -45,6 +47,8 @@ const DISCOUNT_CONTEXT: Partial<AdvisorInputs> = {
     t10y2y: 0.5,
     hySpread: 2.8,
     hySpreadWow: null,
+    stlfsi: -0.4,
+    t10y2yRecentlyUninverted: false,
   },
 };
 
@@ -58,6 +62,8 @@ const REVERSAL_CONTEXT: Partial<AdvisorInputs> = {
     t10y2y: -0.7,
     hySpread: 6.8,
     hySpreadWow: null,
+    stlfsi: 1.8,
+    t10y2yRecentlyUninverted: false,
   },
 };
 
@@ -165,6 +171,8 @@ describe("computeAdvisorVerdict — pillar wiring", () => {
           t10y2y: null,
           hySpread: null,
           hySpreadWow: null,
+          stlfsi: null,
+          t10y2yRecentlyUninverted: null,
         },
       }),
     );
@@ -190,6 +198,8 @@ describe("computeAdvisorVerdict — pillar wiring", () => {
           t10y2y: 0.5,
           hySpread: 3,
           hySpreadWow: null,
+          stlfsi: null,
+          t10y2yRecentlyUninverted: null,
         },
       }),
     );
@@ -218,6 +228,8 @@ describe("PILLAR_WEIGHTS invariants", () => {
           t10y2y: 10,
           hySpread: 0,
           hySpreadWow: -1e6,
+          stlfsi: -1e6,
+          t10y2yRecentlyUninverted: false,
         },
       }),
     );

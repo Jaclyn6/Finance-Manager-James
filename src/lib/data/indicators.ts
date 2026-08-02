@@ -324,7 +324,7 @@ export async function getLatestIndicatorReadings(): Promise<
   // up to ~2 weeks of weekend/holiday gaps for the slowest-frequency
   // FRED series (CPIAUCSL is monthly with revisions; we still want the
   // most recent observed_at row to land here on the first hit).
-  const FRED_RECENT_LIMIT = 250; // 11 keys × ~22 rows headroom
+  const FRED_RECENT_LIMIT = 330; // 15 keys × ~22 rows headroom (STLFSI4 + 유동성 3종 추가, 2026-08-02)
   const ONCHAIN_RECENT_LIMIT = 100; // 5 keys × ~20 rows headroom
   const [fredResult, onchainResult] = await Promise.all([
     supabase

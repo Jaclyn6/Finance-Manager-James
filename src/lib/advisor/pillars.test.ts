@@ -198,6 +198,8 @@ describe("evaluateMacroPillar", () => {
     t10y2y: 0.6,
     hySpread: 2.8,
     hySpreadWow: null,
+    stlfsi: -0.5,
+    t10y2yRecentlyUninverted: false,
   };
   const recession = {
     macroScore: 30,
@@ -205,6 +207,8 @@ describe("evaluateMacroPillar", () => {
     t10y2y: -0.8,
     hySpread: 7.5,
     hySpreadWow: null,
+    stlfsi: 2.5,
+    t10y2yRecentlyUninverted: false,
   };
 
   it("healthy macro across the board → discount stance", () => {
@@ -229,6 +233,8 @@ describe("evaluateMacroPillar", () => {
       t10y2y: null,
       hySpread: null,
       hySpreadWow: null,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: null,
     });
     expect(result.score).toBe(-1);
   });
@@ -240,9 +246,11 @@ describe("evaluateMacroPillar", () => {
       t10y2y: null,
       hySpread: null,
       hySpreadWow: null,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: null,
     });
-    expect(result.strength).toBe(0.25);
-    expect(result.missingInputs).toEqual(["sahm", "t10y2y", "hySpread"]);
+    expect(result.strength).toBe(0.2);
+    expect(result.missingInputs).toEqual(["sahm", "t10y2y", "stlfsi", "hySpread"]);
     expect(result.score).toBeCloseTo(0.2, 5);
   });
 
@@ -253,14 +261,101 @@ describe("evaluateMacroPillar", () => {
       t10y2y: null,
       hySpread: null,
       hySpreadWow: null,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: null,
     });
     expect(result.strength).toBe(0);
     expect(result.reasonKo).toMatch(/입력 누락/);
   });
 });
 
+describe("evaluateMacroPillar — STLFSI + curve un-inversion (AssetX2 reference)", () => {
+  const base = {
+    macroScore: null,
+    sahm: null,
+    hySpread: null,
+    hySpreadWow: null,
+  };
+
+  it("stress below average → mild positive sub-read", () => {
+    const result = evaluateMacroPillar({
+      ...base,
+      t10y2y: null,
+      stlfsi: -0.8,
+      t10y2yRecentlyUninverted: null,
+    });
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.reasonKo).toMatch(/금융스트레스지수.*안정/);
+  });
+
+  it("stress ≥1 → strong negative; ≥3 labeled 위기 수준", () => {
+    const elevated = evaluateMacroPillar({
+      ...base,
+      t10y2y: null,
+      stlfsi: 1.5,
+      t10y2yRecentlyUninverted: null,
+    });
+    expect(elevated.score).toBeLessThan(-0.5);
+    const crisis = evaluateMacroPillar({
+      ...base,
+      t10y2y: null,
+      stlfsi: 3.2,
+      t10y2yRecentlyUninverted: null,
+    });
+    expect(crisis.score).toBeLessThan(elevated.score);
+    expect(crisis.reasonKo).toMatch(/위기 수준/);
+  });
+
+  it("positive curve freshly un-inverted → caution, not all-clear", () => {
+    const uninverted = evaluateMacroPillar({
+      ...base,
+      t10y2y: 0.4,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: true,
+    });
+    expect(uninverted.score).toBeLessThan(0);
+    expect(uninverted.reasonKo).toMatch(/역전 해소 직후/);
+
+    const longNormal = evaluateMacroPillar({
+      ...base,
+      t10y2y: 0.4,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: false,
+    });
+    expect(longNormal.score).toBeGreaterThan(0);
+    expect(longNormal.reasonKo).toMatch(/정상/);
+  });
+
+  it("positive curve with unknown history → 정상 read + flag listed missing", () => {
+    const result = evaluateMacroPillar({
+      ...base,
+      t10y2y: 0.4,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: null,
+    });
+    expect(result.score).toBeGreaterThan(0);
+    expect(result.missingInputs).toContain("t10y2yRecentlyUninverted");
+  });
+
+  it("inverted curve ignores the un-inversion flag", () => {
+    const result = evaluateMacroPillar({
+      ...base,
+      t10y2y: -0.5,
+      stlfsi: null,
+      t10y2yRecentlyUninverted: true,
+    });
+    expect(result.reasonKo).toMatch(/역전\(침체 경고\)/);
+  });
+});
+
 describe("evaluateMacroPillar — HY spread direction (video rule)", () => {
-  const base = { macroScore: null, sahm: null, t10y2y: null };
+  const base = {
+    macroScore: null,
+    sahm: null,
+    t10y2y: null,
+    stlfsi: null,
+    t10y2yRecentlyUninverted: null,
+  };
 
   it("spread 4.6 turned down (wow -0.4) → 꺾임 buy-signal, discount sub-read", () => {
     const result = evaluateMacroPillar({
@@ -367,6 +462,8 @@ describe("pillar score invariants", () => {
         t10y2y: 1e6,
         hySpread: -1e6,
         hySpreadWow: -1e6,
+        stlfsi: -1e6,
+        t10y2yRecentlyUninverted: false,
       }),
       evaluateMacroPillar({
         macroScore: -1e6,
@@ -374,6 +471,8 @@ describe("pillar score invariants", () => {
         t10y2y: -1e6,
         hySpread: 1e6,
         hySpreadWow: 1e6,
+        stlfsi: 1e6,
+        t10y2yRecentlyUninverted: true,
       }),
       evaluateOnchainPillar({ mvrvZ: -1e6, sopr: 1e6 }),
     ];

@@ -230,6 +230,49 @@ export const PHASE2_FRED_SIGNAL_INPUTS: Record<
     notes:
       "Activation procedure: flip active:false→true here + update signal engine LIQUIDITY_EASING input source + bump SIGNAL_RULES_VERSION per blueprint §2.3.",
   },
+  // ---- Advisor-input expansion (2026-08-02, docs/advisor_pivot_blueprint.md
+  // §6 + AssetX2 reference dashboard) ---------------------------------------
+  // The four series below are RAW-ONLY inputs like ICSA/WDTGAL: no
+  // score_0_100, no composite membership. STLFSI4 feeds the advisor's
+  // macro pillar directly; the three Fed-liquidity series accrue
+  // history (via the §4.1 full-window backfill) for the net-liquidity
+  // weather gauge and future LIQUIDITY_EASING refinements.
+  STLFSI4: {
+    descriptionKo:
+      "세인트루이스 연준 금융스트레스지수 — advisor macro pillar 서브인풋 (0 = 역사 평균, 1↑ 스트레스, 3↑ 위기)",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/STLFSI4",
+    frequency: "weekly",
+    windowYears: 5,
+    active: true,
+    notes: "18개 지표 종합. advisor pillars.ts evaluateMacroPillar가 소비.",
+  },
+  WALCL: {
+    descriptionKo:
+      "연준 총자산(대차대조표) 주간 — QE/QT 방향, 순유동성 게이지 재료",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/WALCL",
+    frequency: "weekly",
+    windowYears: 5,
+    active: true,
+  },
+  WRESBAL: {
+    descriptionKo: "연준 지급준비금 잔액 주간 — 은행 시스템 유동성 쿠션",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/WRESBAL",
+    frequency: "weekly",
+    windowYears: 5,
+    active: true,
+  },
+  RRPONTSYD: {
+    descriptionKo:
+      "연준 역레포(RRP) 일일 잔액 — 초과유동성 흡수량, 감소 = 시장 유동성 재유입",
+    sourceName: "FRED",
+    sourceUrl: "https://fred.stlouisfed.org/series/RRPONTSYD",
+    frequency: "daily",
+    windowYears: 5,
+    active: true,
+  },
 };
 
 export const PHASE2_ACTIVE_FRED_SIGNAL_KEYS: readonly string[] = Object.entries(
