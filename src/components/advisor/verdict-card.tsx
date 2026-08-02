@@ -16,8 +16,10 @@ import {
  * Per-asset advisor verdict card — the dashboard's answer to "지금이
  * 할인 구간인가?" for one asset class.
  *
- * Visual hierarchy (PRD pivot 2026-07-08): the verdict pill + headline
- * carry the judgment, the drawdown stats quantify it, and the top-2
+ * Visual hierarchy (PRD pivot 2026-07-08; intuition pass 2026-08-03):
+ * the border-left accent color is the fastest scan signal (judgment
+ * by color across 4 cards), the verdict pill + headline carry the
+ * judgment in words, the drawdown stats quantify it, and the top-2
  * evidence lines preview the WHY — the full pillar breakdown lives on
  * `/asset/[slug]`. Server component (no chart here) so the dashboard
  * stays server-rendered; the whole card links to the detail page.
@@ -121,44 +123,48 @@ export function VerdictCard({ view, currentDate = null }: VerdictCardProps) {
 }
 
 /**
+ * Threshold above which a side's label is emphasized — mirrors the
+ * verdict combiner's ±0.2 discount/reversal bands (verdict.ts), so
+ * the label row never declares a winner on a mixed_signals-grade
+ * netScore the verdict itself calls 혼재.
+ */
+const BALANCE_EMPHASIS_FLOOR = 0.2;
+
+/**
  * Horizontal evidence balance: reversal (left) ↔ discount (right).
  *
- * The track is NEUTRAL; only the stretch from the center to the
- * marker is colored (red when net evidence points to reversal,
- * emerald when it points to discount), and the winning side's label
- * is emphasized. The previous always-fully-colored gradient made a
- * near-neutral card look alarming — a bar must not say more than the
- * verdict does (UX 실사 2026-08-03). Marker maps netScore [-1, 1] →
- * [0%, 100%]. Pure CSS — no client JS; decorative (the headline
+ * Same visual idiom as the asset page's PillarScoreBar (neutral
+ * track, center-flush directional fill at /70, center tick at /30) —
+ * dashboard and drill-down must speak one bar language. The fill's
+ * outer edge IS the netScore position; the center tick renders LAST
+ * so it stays visible over the fill on both signs. The previous
+ * always-fully-colored gradient made a near-neutral card look
+ * alarming — a bar must not say more than the verdict does (UX 실사
+ * 2026-08-03 + Trigger 2 review). Pure CSS; decorative (the headline
  * carries the meaning for screen readers).
  */
 function EvidenceBalanceBar({ netScore }: { netScore: number }) {
-  const pct = ((netScore + 1) / 2) * 100;
-  const fillLeftPct = netScore >= 0 ? 50 : pct;
-  const fillWidthPct = Math.abs(netScore) * 50;
+  const halfPct = Math.min(Math.abs(netScore), 1) * 50;
   return (
     <div aria-hidden className="space-y-1">
       <div className="relative h-1.5 w-full rounded-full bg-muted">
-        <div className="absolute inset-y-0 left-1/2 w-px bg-muted-foreground/40" />
-        <div
-          className={cn(
-            "absolute top-0 h-full rounded-full",
-            netScore >= 0 ? "bg-emerald-500/80" : "bg-red-500/80",
-          )}
-          style={{
-            left: `${fillLeftPct.toFixed(1)}%`,
-            width: `${fillWidthPct.toFixed(1)}%`,
-          }}
-        />
-        <div
-          className="absolute top-1/2 h-3 w-1 -translate-y-1/2 rounded-full bg-foreground"
-          style={{ left: `calc(${pct.toFixed(1)}% - 2px)` }}
-        />
+        {halfPct > 0 && (
+          <div
+            className={cn(
+              "absolute top-0 h-full",
+              netScore > 0
+                ? "left-1/2 rounded-r-full bg-emerald-500/70"
+                : "right-1/2 rounded-l-full bg-red-500/70",
+            )}
+            style={{ width: `${halfPct.toFixed(1)}%` }}
+          />
+        )}
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-muted-foreground/30" />
       </div>
       <div className="flex justify-between text-[10px]">
         <span
           className={cn(
-            netScore < 0
+            netScore <= -BALANCE_EMPHASIS_FLOOR
               ? "font-semibold text-red-600 dark:text-red-400"
               : "text-muted-foreground",
           )}
@@ -167,7 +173,7 @@ function EvidenceBalanceBar({ netScore }: { netScore: number }) {
         </span>
         <span
           className={cn(
-            netScore > 0
+            netScore >= BALANCE_EMPHASIS_FLOOR
               ? "font-semibold text-emerald-600 dark:text-emerald-400"
               : "text-muted-foreground",
           )}

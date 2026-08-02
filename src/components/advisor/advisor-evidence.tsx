@@ -44,7 +44,9 @@ export function AdvisorEvidence({ view }: { view: AdvisorAssetView }) {
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                // Same pill scale as the dashboard VerdictCard — one
+                // verdict, one look across surfaces.
+                "rounded-full px-3 py-1 text-sm font-bold",
                 VERDICT_BADGE_CLASS[verdict.label],
               )}
             >
@@ -148,7 +150,6 @@ function PillarScoreBar({
       aria-hidden
       className="relative h-1.5 w-full max-w-xs rounded-full bg-muted"
     >
-      <div className="absolute left-1/2 top-0 h-full w-px bg-muted-foreground/30" />
       {showFill && (
         <div
           className={cn(
@@ -160,6 +161,9 @@ function PillarScoreBar({
           style={{ width: `${halfPct.toFixed(1)}%` }}
         />
       )}
+      {/* Tick LAST so it stays visible over the fill on both signs —
+          same paint-order rule as the dashboard EvidenceBalanceBar. */}
+      <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-muted-foreground/30" />
     </div>
   );
 }
