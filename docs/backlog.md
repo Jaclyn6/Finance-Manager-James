@@ -9,6 +9,26 @@ picks them up.
 
 ## UI / UX polish
 
+### 무낙폭(고점 부근) 카드에서 '할인 근거' 강조가 '할인 없음' 헤드라인과 어휘 충돌
+
+- **WHERE**: `src/components/advisor/verdict-card.tsx`
+  `EvidenceBalanceBar` — netScore ≥ 0.2면 오른쪽 라벨 "할인 근거"를
+  에메랄드 볼드로 강조. 미국 주식 카드(-1.7%, no_drawdown)가 현재
+  이 상태.
+- **THE GAP**: 헤드라인은 "고점 부근, 할인 없음"인데 바로 아래 바는
+  "할인 근거" 우세를 강조 — 가족 입장에서 "할인이 없다면서 왜 할인
+  근거가 우세?"라는 어휘 충돌. 실제 의미는 "낙폭이 생긴다면 건전한
+  조정일 확률이 높은 시장 상태"로, 판정(낙폭 밴드)과 바(증거 방향)는
+  다른 축인데 같은 단어(할인)를 씀.
+- **PROPOSED TREATMENT**: 후보 (a) no_drawdown 카드에서 바 숨김
+  (정보 손실), (b) no_drawdown일 때만 바 아래 한 줄 캡션 "낙폭이
+  없어 할인 판정은 아님 — 근거는 시장 건전성 방향" (one-bar-language
+  유지, 최소 변경), (c) 사이드 라벨을 판정 문맥에 따라 스왑 (일관성
+  파괴 위험). (b) 권장.
+- **WHY DEFERRED**: 판정-vs-증거 축의 구분은 제품 언어 설계라 어휘
+  선택에 유저 확인이 필요하고, 최근 카드 카피가 여러 번 바뀐 직후라
+  한 사이클 관찰 후 적용이 안전함 (관찰 2026-08-03, #11/#15).
+
 ### 기여 지표의 뉴스·심리 바스켓이 미국 메가캡 5종 (us_equity·global_etf·common)
 
 - **WHERE**: contributing-indicators drill-down on `/asset/[slug]`
