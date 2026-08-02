@@ -1,4 +1,8 @@
-import { percentileRank, type IndicatorSeriesPoint } from "./series";
+import {
+  formatPercentileBandKo,
+  percentileRank,
+  type IndicatorSeriesPoint,
+} from "./series";
 
 /**
  * In-house stock Fear & Greed proxy — `STOCK_FG_PROXY`.
@@ -179,7 +183,9 @@ function junkDemandComponent(
   return {
     key: "junkDemand",
     score,
-    detailKo: `하이일드 스프레드 ${current.toFixed(2)}%p — 기간 내 상위 ${((1 - rank) * 100).toFixed(0)}%`,
+    // Two-sided band phrasing — the one-sided "상위 (1-rank)%" had the
+    // same low-reading inversion the weather strip fixed (2026-08-03).
+    detailKo: `하이일드 스프레드 ${current.toFixed(2)}%p — 기간 내 ${formatPercentileBandKo(rank)}`,
   };
 }
 

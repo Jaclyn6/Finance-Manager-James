@@ -1,4 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { formatPercentileBandKo } from "@/lib/advisor/series";
 import { cn } from "@/lib/utils";
 
 /**
@@ -133,21 +134,15 @@ const GAUGES: GaugeSpec[] = [
 ];
 
 /**
- * 5-year percentile context line. `percentile` is the SHARE OF
- * HISTORY AT OR BELOW the current value. Phrasing is TWO-SIDED: the
- * elevated half reads "상위 X%" and the calm half reads "하위 X%" —
- * a one-sided "상위 (1-p)%" made a historically-LOW VIX (p≈0.01)
- * render as "5년 상위 99%", which reads as extreme danger next to an
- * 안정 note (UX 실사 2026-08-03). Only rendered for gauges where
- * "elevated vs own history" is the natural read (VIX, HY spread —
- * both risingIsBad).
+ * 5-year percentile context line — two-sided phrasing shared with the
+ * proxy's junk-demand detail via formatPercentileBandKo (see its
+ * docstring for the 상위/하위/중간권/1%-미만 rules and the UX 실사
+ * 2026-08-03 rationale). Only rendered for gauges where "elevated vs
+ * own history" is the natural read (VIX, HY spread — both
+ * risingIsBad).
  */
 function formatPercentileKo(percentile: number): string {
-  const p = Math.max(0, Math.min(1, percentile));
-  if (p >= 0.5) {
-    return `5년 상위 ${((1 - p) * 100).toFixed(0)}%`;
-  }
-  return `5년 하위 ${(p * 100).toFixed(0)}%`;
+  return `5년 ${formatPercentileBandKo(percentile)}`;
 }
 
 const TONE_DOT_CLASS: Record<Tone, string> = {

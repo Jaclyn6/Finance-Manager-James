@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   collapseToDaily,
   computeWowDelta,
+  formatPercentileBandKo,
   percentileRank,
   type IndicatorSeriesPoint,
 } from "./series";
@@ -87,6 +88,33 @@ describe("percentileRank", () => {
   it("returns null for non-finite values, never guesses", () => {
     expect(percentileRank(flat300(10), Number.NaN)).toBeNull();
     expect(percentileRank(flat300(10), Number.POSITIVE_INFINITY)).toBeNull();
+  });
+});
+
+describe("formatPercentileBandKo", () => {
+  it("elevated half reads 상위, calm half reads 하위", () => {
+    expect(formatPercentileBandKo(0.88)).toBe("상위 12%");
+    expect(formatPercentileBandKo(0.24)).toBe("하위 24%");
+  });
+
+  it("a historically-low reading never renders as 상위 99%", () => {
+    expect(formatPercentileBandKo(0.01)).toBe("하위 1%");
+  });
+
+  it("mid band says 중간권 instead of flipping words at the same number", () => {
+    expect(formatPercentileBandKo(0.5)).toBe("중간권");
+    expect(formatPercentileBandKo(0.46)).toBe("중간권");
+    expect(formatPercentileBandKo(0.549)).toBe("중간권");
+  });
+
+  it("tail extremes say 1% 미만 instead of a glitch-looking 0%", () => {
+    expect(formatPercentileBandKo(0.999)).toBe("상위 1% 미만");
+    expect(formatPercentileBandKo(0.002)).toBe("하위 1% 미만");
+  });
+
+  it("clamps out-of-range input", () => {
+    expect(formatPercentileBandKo(1.5)).toBe("상위 1% 미만");
+    expect(formatPercentileBandKo(-0.2)).toBe("하위 1% 미만");
   });
 });
 

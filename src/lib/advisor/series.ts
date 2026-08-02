@@ -70,6 +70,28 @@ export function percentileRank(
 }
 
 /**
+ * Two-sided Korean phrasing for a percentile rank (share of history
+ * at or below the value). One-sided "상위 (1-p)%" made historically
+ * LOW readings render as "상위 99%" — danger-sounding copy next to an
+ * 안정 note (UX 실사 2026-08-03). Rules:
+ * - 0.45 ≤ p ≤ 0.55 → "중간권" (either-sided % at the boundary flips
+ *   wording at the same displayed number — say neither);
+ * - p > 0.55 → "상위 X%", p < 0.45 → "하위 X%";
+ * - a tail that rounds to 0% reads as a glitch → "1% 미만".
+ * Callers prepend their own window label ("5년", "기간 내").
+ */
+export function formatPercentileBandKo(percentile: number): string {
+  const p = Math.max(0, Math.min(1, percentile));
+  if (p >= 0.45 && p <= 0.55) return "중간권";
+  if (p > 0.55) {
+    const top = (1 - p) * 100;
+    return top < 1 ? "상위 1% 미만" : `상위 ${top.toFixed(0)}%`;
+  }
+  const bottom = p * 100;
+  return bottom < 1 ? "하위 1% 미만" : `하위 ${bottom.toFixed(0)}%`;
+}
+
+/**
  * Week-over-week change of a series: latest value minus the value at
  * the most recent observation at least `lookbackDays` calendar days
  * older than the latest. Null when the series is too thin to cover
