@@ -53,8 +53,8 @@ import type {
  * (HY 꺾임 / VIX cooling) + crypto pillar-set alignment + F&G proxy
  * fallback (2026-07-08).
  * adv-1.2.0 = macro pillar gains STLFSI4 stress sub-input (5-way
- * average) + T10Y2Y 역전 해소(un-inversion) caution rule (2026-08-02,
- * AssetX2 reference dashboard adoption).
+ * average) + T10Y2Y 역전 해소(un-inversion) caution rule (2026-08-02;
+ * source: blueprint §6.5 reference-dashboard adoption).
  */
 export const ADVISOR_ENGINE_VERSION = "adv-1.2.0";
 

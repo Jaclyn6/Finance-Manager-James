@@ -77,6 +77,9 @@ import { CACHE_TAGS } from "./tags";
  *   macro.t10y2y    T10Y2Y
  *   macro.hySpread  BAMLH0A0HYM2
  *   macro.hySpreadWow    computeWowDelta over BAMLH0A0HYM2 21d series
+ *   macro.stlfsi    STLFSI4 (raw-only; null until series accrues)
+ *   macro.t10y2yRecentlyUninverted   T10Y2Y 200d series에 음수 존재
+ *                   여부 (100-sample floor 미만이면 null)
  *   onchain.*       MVRV_Z / SOPR (crypto only)
  */
 

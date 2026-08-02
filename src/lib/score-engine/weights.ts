@@ -230,8 +230,11 @@ export const PHASE2_FRED_SIGNAL_INPUTS: Record<
     notes:
       "Activation procedure: flip active:false→true here + update signal engine LIQUIDITY_EASING input source + bump SIGNAL_RULES_VERSION per blueprint §2.3.",
   },
-  // ---- Advisor-input expansion (2026-08-02, docs/advisor_pivot_blueprint.md
-  // §6 + AssetX2 reference dashboard) ---------------------------------------
+  // ---- Advisor-input expansion (2026-08-02) -------------------------------
+  // Source + adoption rationale documented in
+  // docs/advisor_pivot_blueprint.md §6.5 (자산제곱/AssetX2 모니터링
+  // 대시보드, https://assetx2-dashboard.vercel.app/ — user-provided
+  // reference, 2026-08-02).
   // The four series below are RAW-ONLY inputs like ICSA/WDTGAL: no
   // score_0_100, no composite membership. STLFSI4 feeds the advisor's
   // macro pillar directly; the three Fed-liquidity series accrue

@@ -229,6 +229,24 @@ for days AND 4h news freshness proves insufficient, the remaining
 option is an external scheduler (CRON_SECRET on a third party —
 user decision required).
 
+### Net-liquidity weather gauge + AssetX2 deferred candidates
+
+**Where it lives now:** blueprint §6.5. WALCL/WRESBAL/RRPONTSYD
+collection started 2026-08-02 (adv-1.2.0 unit); WDTGAL was already
+collected. Nothing consumes them yet.
+
+**The gap:** 자산제곱 방법론의 유동성 축(연준 대차대조표·지급준비금·
+RRP·TGA 조합)이 판정/날씨에 반영되지 않음.
+
+**Proposed treatment:** once ~4 weeks of history accrue, add a
+날씨 스트립 순유동성 칩 (주간 Δ(WALCL) − Δ(TGA) − Δ(RRP) 방향 +
+추세) and evaluate a macro sub-input. Also deferred from the same
+reference: SKEW/VVIX/PCR 옵션 게이지, WTI/구리, EM ETF 확장,
+섹터/상관 히트맵 — 판정 기여도가 입증되면 승격.
+
+**Why deferred:** weekly series need history depth first; the
+verdict-value of option gauges is unproven vs their source cost.
+
 ## Data-pipeline reliability
 
 ### News sentiment vs Alpha Vantage 25/day budget (pre-existing, surfaced 2026-07-09)

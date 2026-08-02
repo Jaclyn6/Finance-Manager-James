@@ -47,7 +47,7 @@ src/components/advisor/   ← VerdictCard, MarketWeatherStrip,
 | trend | close, MA50, MA200 | above MA200, 정배열 | below MA200, 역배열 |
 | sentiment | CNN_FG / CRYPTO_FG | ≤25 극단적 공포 (contrarian) | ≥75 과열 (mild) |
 | volatility (equity only) | VIX, vixWow, drawdownPct | ≥30 패닉 (+0.15 more if wow ≤ −2 "정점 통과") | calm VIX + ≥10% dd "slow bleed"; ≥30 & wow ≥ +2 tempered |
-| macro | macroScore, Sahm, T10Y2Y, hySpread, hySpreadWow | Sahm<0.5, curve normal, HY<3 안정, **HY≥4 & wow≤−0.1 = 꺾임 매수 신호(+0.7)** | Sahm≥0.5 (−1), inversion, HY≥4 rising |
+| macro | macroScore, Sahm, T10Y2Y(+역전해소 flag), hySpread, hySpreadWow, STLFSI | Sahm<0.5, curve normal(단, 역전 해소 6개월 내는 제외), HY<3 안정, **HY≥4 & wow≤−0.1 = 꺾임 매수 신호(+0.7)**, STLFSI<0 안정 | Sahm≥0.5 (−1), inversion, **역전 해소 직후(−0.3)**, HY≥4 rising, STLFSI≥1 스트레스(≥3 위기) |
 | onchain (crypto) | MVRV-Z, SOPR | Z≤0 저평가, SOPR<1 항복 | Z≥4 사이클 고점 |
 
 Weights: equity `macro .35 / trend .30 / vol .20 / sent .15`; crypto
@@ -113,6 +113,25 @@ every ingest route that writes an input invalidates the verdict.
 - Verdict-flip alerting + hit-rate report (needs months of persisted
   history; revisit ~2026-10).
 
+## 6.5 External reference: 자산제곱(AssetX2) 모니터링 대시보드
+
+https://assetx2-dashboard.vercel.app/ — the reference methodology
+channel's own indicator dashboard, shared by the user 2026-08-02 as
+"판정에 더 쓸만한 지표" 소스. Adoption policy: we do NOT clone the
+monitoring wall; we absorb only indicators that sharpen the 할인 vs
+추세전환 verdict.
+
+Adopted (2026-08-02, adv-1.2.0):
+- **STLFSI4** 금융스트레스지수 → macro pillar 5th sub-input.
+- **T10Y2Y 역전 해소("역전 후 상승 전환") caution rule** — their
+  §11 note: un-inversion timing coincides with recession onset.
+- **Fed-liquidity collection** (WALCL, WRESBAL, RRPONTSYD; WDTGAL은
+  기존) — raw accrual for a future net-liquidity gauge (backlog).
+
+Reviewed and deferred (backlog "AssetX2 후보" entry): SKEW/VVIX/PCR
+option gauges, WTI/구리 commodities, EM ETF expansion, sector/corr
+heatmaps — monitoring value ≫ verdict value for now.
+
 ## 7. Shipped increments (improvement loop, 2026-07-08)
 
 All reviewed under CLAUDE.md Trigger 2 (5-agent, ≥80 fixed) before
@@ -126,3 +145,4 @@ push; engine rule-set = `ADVISOR_ENGINE_VERSION adv-1.1.0`.
 | Cron off-:00 schedules (GHA saturated-slot skip mitigation) | 9f50067 | 3 |
 | STOCK_FG_PROXY — 4-component CNN-outage fallback, 자체 산출 labeling, delta arrow suppressed on proxy path | 92cedb2, fe7bb50, a263ced | 4-6 |
 | Verdict history — migration 0015, `/api/cron/write-verdicts` (cron-technical step 3), `VerdictTimeline` calendar strip with gap cells | 1f009cb, e7d3060, 1240989, 3125da4 | 7-9 |
+| adv-1.2.0 — STLFSI macro sub-input, T10Y2Y 역전 해소 rule, Fed-liquidity collection (§6.5 reference adoption) | 32cbdc8+ | 2026-08-02 |

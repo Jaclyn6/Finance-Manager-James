@@ -223,9 +223,10 @@ export const HY_TURN_EPS = 0.1;
 /**
  * Macro pillar — the anchor of the verdict. A decline against a
  * healthy macro backdrop is a discount; a decline WITH deteriorating
- * macro (Sahm trigger, curve inversion, HY-spread blowout) is how
- * bear markets start. Averages whatever sub-inputs are available;
- * strength = coverage.
+ * macro (Sahm trigger, curve inversion — or a freshly UN-inverted
+ * curve, HY-spread blowout, STLFSI stress) is how bear markets
+ * start. Five sub-inputs (macroScore, Sahm, T10Y2Y, HY spread,
+ * STLFSI); averages whatever is available; strength = coverage /5.
  *
  * The HY-spread sub-read is direction-aware: a spread ≥4 that is
  * still RISING is credit stress building (strong reversal evidence),
