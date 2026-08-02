@@ -429,22 +429,67 @@ export async function getIndicatorSeries(
         .slice(0, 10)
     : endDate;
 
+  const perKey = await Promise.all(
+    keys.map((key) =>
+      fetchSeriesRowsPaged("indicator_readings", key, startDate, endDate),
+    ),
+  );
+  return collapseRowsToSeries(keys, perKey.flat());
+}
+
+/**
+ * PostgREST hard-caps EVERY response at the project's max-rows
+ * (1,000 here) no matter how wide the requested window is — a
+ * multi-key 5y series query silently kept only the OLDEST 1,000 rows
+ * (ascending order), so the "latest" point of the truncated series
+ * was a ~2024 value and the weather strip ranked it inside a
+ * truncated window ("5년 하위 1%" for a VIX actually at the 42nd
+ * percentile of the real 5y series — UX 실사 2026-08-03). Fetch per
+ * key AND page in max-rows chunks until a short page proves the
+ * window is complete. The `id` tiebreak gives pagination a total
+ * order so same-date multi-version rows can't be skipped or doubled
+ * across a page boundary; semantic ordering is re-derived in
+ * collapseRowsToSeries anyway.
+ */
+const SERIES_PAGE_SIZE = 1000;
+
+interface SeriesRow {
+  indicator_key: string;
+  observed_at: string;
+  value_raw: number | null;
+  fetch_status: string;
+  model_version: string;
+}
+
+async function fetchSeriesRowsPaged(
+  table: "indicator_readings" | "onchain_readings",
+  key: string,
+  startDate: string,
+  endDate: string,
+): Promise<SeriesRow[]> {
   const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("indicator_readings")
-    .select("indicator_key, observed_at, value_raw, fetch_status, model_version")
-    .in("indicator_key", keys)
-    .gte("observed_at", startDate)
-    .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true });
+  const rows: SeriesRow[] = [];
+  for (let offset = 0; ; offset += SERIES_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(
+        "indicator_key, observed_at, value_raw, fetch_status, model_version",
+      )
+      .eq("indicator_key", key)
+      .gte("observed_at", startDate)
+      .lte("observed_at", `${endDate}T23:59:59Z`)
+      .order("observed_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + SERIES_PAGE_SIZE - 1);
 
-  if (error) {
-    throw new Error(
-      `getIndicatorSeries(${keys.join(",")}, ${endDate}, ${windowDays}) failed: ${error.message} (${error.code ?? "no code"})`,
-    );
+    if (error) {
+      throw new Error(
+        `fetchSeriesRowsPaged(${table}, ${key}, ${startDate}..${endDate}) failed at offset ${offset}: ${error.message} (${error.code ?? "no code"})`,
+      );
+    }
+    rows.push(...(data ?? []));
+    if ((data?.length ?? 0) < SERIES_PAGE_SIZE) return rows;
   }
-
-  return collapseRowsToSeries(keys, data ?? []);
 }
 
 /**
@@ -522,22 +567,12 @@ export async function getOnchainSeries(
         .slice(0, 10)
     : endDate;
 
-  const supabase = getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("onchain_readings")
-    .select("indicator_key, observed_at, value_raw, fetch_status, model_version")
-    .in("indicator_key", keys)
-    .gte("observed_at", startDate)
-    .lte("observed_at", `${endDate}T23:59:59Z`)
-    .order("observed_at", { ascending: true });
-
-  if (error) {
-    throw new Error(
-      `getOnchainSeries(${keys.join(",")}, ${endDate}, ${windowDays}) failed: ${error.message} (${error.code ?? "no code"})`,
-    );
-  }
-
-  return collapseRowsToSeries(keys, data ?? []);
+  const perKey = await Promise.all(
+    keys.map((key) =>
+      fetchSeriesRowsPaged("onchain_readings", key, startDate, endDate),
+    ),
+  );
+  return collapseRowsToSeries(keys, perKey.flat());
 }
 
 /**
