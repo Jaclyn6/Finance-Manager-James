@@ -147,7 +147,17 @@ export function BacktestPanel({
             <Field label="자산군">
               <select
                 value={assetType}
-                onChange={(e) => setAssetType(e.target.value as AssetType)}
+                onChange={(e) => {
+                  setAssetType(e.target.value as AssetType);
+                  // Clear the tuning override, mirroring the 가중치
+                  // 버전 select below: handleApply stores a
+                  // SINGLE-asset map, so carrying it across an asset
+                  // switch runs stale weights while the panel's
+                  // reseeded sliders (appliedDraft=null) can no
+                  // longer flag the mismatch (Trigger 2 review,
+                  // 2026-08-03).
+                  setCustomCategoryWeights(null);
+                }}
                 className="h-11 w-full rounded-md border bg-background px-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="자산군 선택"
               >
@@ -210,7 +220,11 @@ export function BacktestPanel({
               {isPending ? "백테스트 실행 중…" : "백테스트 실행"}
             </button>
             {customCategoryWeights ? (
-              <span className="text-[11px] text-amber-700 dark:text-amber-300">
+              // Emerald, not amber: this confirms the same state the
+              // slider panel's ✓ 적용됨 caption confirms — amber on
+              // this page now means "action needed" (un-applied
+              // sliders), and one state must not wear both colors.
+              <span className="break-keep text-[11px] leading-snug text-emerald-700 dark:text-emerald-300">
                 ⚙ 사용자 정의 가중치 적용 중 (튜닝 슬라이더 기준)
               </span>
             ) : null}

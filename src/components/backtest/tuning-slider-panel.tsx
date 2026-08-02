@@ -36,24 +36,14 @@ const CATEGORY_LABELS_KO: Record<string, string> = {
  * - Each slider 0-100 in 1-pt increments. Sum != 100 is allowed —
  *   the engine renormalizes per blueprint §2.2 tenet 1.
  * - "초기화" reverts to baseline + clears the override.
- * - "적용 후 재실행" callback hands the panel's local state to the
- *   parent, which fires a fresh POST.
+ * - "적용" stores the draft as the weights the NEXT 백테스트 실행
+ *   will POST — it does not run anything itself. Un-applied slider
+ *   changes therefore show an amber hint (which supersedes the
+ *   emerald ✓ 적용됨 caption) so 실행 can't silently run stale
+ *   weights.
  * - "이름 붙여 저장" (SaveWeightsButton) POSTs the draft to
  *   `/api/backtest/save-weights` — does not auto-apply.
  */
-/**
- * Shallow record equality for slider drafts. Exported for tests —
- * the dirty-state hint below hinges on it.
- */
-export function weightsDraftDiffers(
-  a: Record<string, number>,
-  b: Record<string, number>,
-): boolean {
-  const aKeys = Object.keys(a);
-  if (aKeys.length !== Object.keys(b).length) return true;
-  return aKeys.some((k) => a[k] !== b[k]);
-}
-
 export function TuningSliderPanel({
   assetType,
   baselineWeights,
@@ -63,11 +53,7 @@ export function TuningSliderPanel({
 }: Props) {
   // Local slider state, seeded from baseline.
   const [draft, setDraft] = useState<Record<string, number>>(() =>
-    Object.fromEntries(
-      Object.entries(baselineWeights).filter(
-        ([, v]) => typeof v === "number",
-      ) as Array<[string, number]>,
-    ),
+    numericBaseline(baselineWeights),
   );
   // The draft as of the last 적용 click. The 실행 button runs the
   // APPLIED weights, not the sliders — without tracking this, moving
@@ -84,13 +70,7 @@ export function TuningSliderPanel({
   // When the user changes asset type at the controls panel, reseed
   // the sliders to the new baseline.
   useEffect(() => {
-    setDraft(
-      Object.fromEntries(
-        Object.entries(baselineWeights).filter(
-          ([, v]) => typeof v === "number",
-        ) as Array<[string, number]>,
-      ),
-    );
+    setDraft(numericBaseline(baselineWeights));
     setAppliedDraft(null);
   }, [baselineWeights, assetType]);
 
@@ -103,26 +83,17 @@ export function TuningSliderPanel({
   }
 
   function handleReset() {
-    const baseline = Object.fromEntries(
-      Object.entries(baselineWeights).filter(
-        ([, v]) => typeof v === "number",
-      ) as Array<[string, number]>,
-    );
-    setDraft(baseline);
+    setDraft(numericBaseline(baselineWeights));
     setAppliedDraft(null);
     onReset();
   }
 
-  // Dirty = the sliders show something the next 실행 will NOT use.
-  const reference = active ? appliedDraft : null;
-  const baselineRecord = Object.fromEntries(
-    Object.entries(baselineWeights).filter(
-      ([, v]) => typeof v === "number",
-    ) as Array<[string, number]>,
-  );
-  const isDirty = reference
-    ? weightsDraftDiffers(draft, reference)
-    : !active && weightsDraftDiffers(draft, baselineRecord);
+  const isDirty = isSliderDirty({
+    draft,
+    appliedDraft,
+    baseline: numericBaseline(baselineWeights),
+    active,
+  });
 
   const totalDraft = Object.values(draft).reduce((a, b) => a + b, 0);
   const totalBaseline = Object.values(baselineWeights).reduce(
@@ -197,12 +168,15 @@ export function TuningSliderPanel({
           </button>
           <SaveWeightsButton draft={draft} assetType={assetType} />
           {isDirty ? (
-            <span className="self-center text-[11px] font-medium text-amber-700 dark:text-amber-300">
+            <span className="self-center break-keep text-[11px] font-medium leading-snug text-amber-700 dark:text-amber-300">
               슬라이더 변경이 아직 미적용 — &apos;적용&apos;을 눌러야 다음
-              실행에 반영됩니다
+              백테스트에 반영됩니다
             </span>
-          ) : active ? (
-            <span className="self-center text-[11px] text-emerald-700 dark:text-emerald-300">
+          ) : active && appliedDraft !== null ? (
+            // Gated on appliedDraft too ("no hint rather than a wrong
+            // one"): active without a locally-recorded apply means we
+            // can't vouch that the sliders match the running weights.
+            <span className="self-center break-keep text-[11px] leading-snug text-emerald-700 dark:text-emerald-300">
               ✓ 적용됨 — 백테스트 실행 시 사용
             </span>
           ) : null}
@@ -316,4 +290,55 @@ function SaveWeightsButton({
       ) : null}
     </div>
   );
+}
+
+/** Numeric-only projection of a weights row (drops absent categories). */
+export function numericBaseline(
+  weights: PerAssetCategoryWeights,
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(weights).filter(([, v]) => typeof v === "number") as Array<
+      [string, number]
+    >,
+  );
+}
+
+export function weightsDraftDiffers(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return true;
+  return aKeys.some((k) => a[k] !== b[k]);
+}
+
+/**
+ * The FULL dirty decision, exported for tests (project precedent:
+ * the tested unit is the decision, not just its equality primitive).
+ * Dirty = the sliders show something the next 백테스트 실행 will NOT
+ * use:
+ * - override active + a locally-recorded 적용 → dirty when the
+ *   sliders moved since that 적용;
+ * - override active but NO locally-recorded 적용 (asset-type reseed
+ *   raced a stale parent override) → NOT dirty — "no hint rather
+ *   than a wrong one"; the parent clears the override on asset
+ *   switch, so this state is transient;
+ * - no override → dirty when the sliders differ from baseline (실행
+ *   would run baseline, not what is shown).
+ */
+export function isSliderDirty({
+  draft,
+  appliedDraft,
+  baseline,
+  active,
+}: {
+  draft: Record<string, number>;
+  appliedDraft: Record<string, number> | null;
+  baseline: Record<string, number>;
+  active: boolean;
+}): boolean {
+  if (active) {
+    return appliedDraft !== null && weightsDraftDiffers(draft, appliedDraft);
+  }
+  return weightsDraftDiffers(draft, baseline);
 }
