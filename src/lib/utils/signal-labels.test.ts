@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ALL_SIGNALS } from "@/lib/score-engine/signals";
 
 import {
+  describeSignalSituation,
   resolveAlignmentBadge,
   SIGNAL_FULL_NAMES_KO,
   SIGNAL_LABELS_KO,
@@ -58,5 +59,43 @@ describe("resolveAlignmentBadge", () => {
     expect(resolveAlignmentBadge(null).tier).toBe("waiting");
     expect(resolveAlignmentBadge(Number.NaN).tier).toBe("waiting");
     expect(resolveAlignmentBadge(-3).tier).toBe("waiting");
+  });
+});
+
+describe("describeSignalSituation — partial-unknown copy", () => {
+  it("EXTREME_FEAR names only the missing arm and shows the live VIX", () => {
+    // The dashboard shows VIX on the weather strip right above the
+    // tile — a blanket "VIX 또는 CNN F&G 부족" contradicted it.
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "unknown",
+      inputs: { vix: 17.1, cnnFg: null },
+      threshold: "VIX >= 35 || CNN_FG < 25",
+    });
+    expect(text).toContain("VIX 17.1");
+    expect(text).toContain("발동 기준 아님");
+    expect(text).toContain("CNN F&G 데이터가 없어");
+    expect(text).not.toContain("VIX 또는");
+  });
+
+  it("EXTREME_FEAR both-null keeps the all-missing sentence", () => {
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "unknown",
+      inputs: { vix: null, cnnFg: null },
+      threshold: "VIX >= 35 || CNN_FG < 25",
+    });
+    expect(text).toBe("VIX와 CNN F&G 데이터가 모두 부족합니다.");
+  });
+
+  it("ECONOMY_INTACT partial-unknown stays neutral about the present arm", () => {
+    // AND-semantics: the present arm may pass or refute, so the copy
+    // must not claim 충족/미충족 — just 확인 + 판정 보류.
+    const text = describeSignalSituation("ECONOMY_INTACT", {
+      state: "unknown",
+      inputs: { icsa: 197000, sahmCurrent: null },
+      threshold: "ICSA < 300000 && SAHMCURRENT < 0.5",
+    });
+    expect(text).toContain("실업 청구 197,000건 확인");
+    expect(text).toContain("Sahm 데이터가 없어 판정 보류");
+    expect(text).not.toContain("양호");
   });
 });

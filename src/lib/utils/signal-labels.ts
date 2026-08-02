@@ -121,7 +121,18 @@ export function describeSignalSituation(
       if (state === "inactive") {
         return `VIX ${fmt(vix, "—")}, CNN F&G ${fmt(cnnFg, "—")} — 평온 구간`;
       }
-      return "VIX 또는 CNN F&G 데이터가 부족합니다.";
+      // Partial-unknown: one arm present, the other missing. The
+      // present arm is guaranteed non-firing here (a firing arm would
+      // have made the OR active), so "발동 기준 아님" is safe. Naming
+      // BOTH as 부족 contradicted the weather strip showing a live
+      // VIX right above the tile (UX 실사 2026-08-03).
+      if (vix !== null) {
+        return `VIX ${fmt(vix, "—")} — 발동 기준 아님 · CNN F&G 데이터가 없어 판정 보류`;
+      }
+      if (cnnFg !== null) {
+        return `CNN F&G ${fmt(cnnFg, "—")} — 발동 기준 아님 · VIX 데이터가 없어 판정 보류`;
+      }
+      return "VIX와 CNN F&G 데이터가 모두 부족합니다.";
     }
     case "DISLOCATION": {
       const spy = pctOrNull(inputs.spyDisparity);
@@ -132,7 +143,14 @@ export function describeSignalSituation(
       if (state === "inactive") {
         return `SPY ${spy}, QQQ ${qqq} — 200일 평균에서 정상 범위`;
       }
-      return "SPY 또는 QQQ 200일 평균 데이터가 부족합니다.";
+      // Same OR-shape partial-unknown handling as EXTREME_FEAR.
+      if (numOrNull(inputs.spyDisparity) !== null) {
+        return `SPY ${spy} — 발동 기준 아님 · QQQ 데이터가 없어 판정 보류`;
+      }
+      if (numOrNull(inputs.qqqDisparity) !== null) {
+        return `QQQ ${qqq} — 발동 기준 아님 · SPY 데이터가 없어 판정 보류`;
+      }
+      return "SPY와 QQQ 200일 평균 데이터가 모두 부족합니다.";
     }
     case "ECONOMY_INTACT": {
       const icsa = numOrNull(inputs.icsa);
@@ -145,7 +163,16 @@ export function describeSignalSituation(
       if (state === "inactive") {
         return `실업 청구 ${icsaText}, Sahm ${sahmText} — 경계 구간`;
       }
-      return "실업 청구 또는 Sahm 데이터가 부족합니다.";
+      // AND-semantics: unknown fires on ANY missing arm, so the
+      // present arm may pass OR refute — show its value without
+      // claiming either direction.
+      if (icsa !== null) {
+        return `실업 청구 ${icsaText} 확인 · Sahm 데이터가 없어 판정 보류`;
+      }
+      if (sahm !== null) {
+        return `Sahm ${sahmText} 확인 · 실업 청구 데이터가 없어 판정 보류`;
+      }
+      return "실업 청구와 Sahm 데이터가 모두 부족합니다.";
     }
     case "SPREAD_REVERSAL": {
       const today = numOrNull(inputs.bamlToday);
