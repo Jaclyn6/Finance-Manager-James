@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { parseContributing } from "./contributing-indicators";
+import {
+  parseContributing,
+  resolveIndicatorRowConfig,
+} from "./contributing-indicators";
 
 /**
  * Pure parser tests — the component itself is a render-only Server
@@ -113,5 +116,28 @@ describe("parseContributing", () => {
     expect(categories).toHaveLength(1);
     expect(categories[0].category).toBe("valuation");
     expect(categories[0].indicators).toEqual([]);
+  });
+});
+
+describe("resolveIndicatorRowConfig", () => {
+  it("resolves core macro keys from INDICATOR_CONFIG", () => {
+    expect(resolveIndicatorRowConfig("FEDFUNDS")?.descriptionKo).toContain(
+      "연방기금",
+    );
+  });
+
+  it("resolves KR regional-overlay keys — raw FRED ids must not surface as row titles", () => {
+    // Regression: these two rendered as "DTWEXBGS"/"DEXKOUS" on
+    // /asset/kr-equity (UX 실사 2026-08-03).
+    expect(resolveIndicatorRowConfig("DTWEXBGS")?.descriptionKo).toContain(
+      "달러",
+    );
+    expect(resolveIndicatorRowConfig("DEXKOUS")?.descriptionKo).toContain(
+      "환율",
+    );
+  });
+
+  it("per-ticker rows resolve to undefined (ticker is the label)", () => {
+    expect(resolveIndicatorRowConfig("005930.KS")).toBeUndefined();
   });
 });

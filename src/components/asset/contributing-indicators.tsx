@@ -4,7 +4,10 @@ import { CategoryContributionBar } from "@/components/asset/category-contributio
 import { IndicatorInfoPopover } from "@/components/asset/indicator-info-popover";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { INDICATOR_CONFIG } from "@/lib/score-engine/weights";
+import {
+  INDICATOR_CONFIG,
+  PHASE2_FRED_REGIONAL_OVERLAY,
+} from "@/lib/score-engine/weights";
 import type { CategoryName } from "@/lib/score-engine/types";
 import { cn } from "@/lib/utils";
 import {
@@ -256,7 +259,7 @@ function IndicatorRowView({
   indicator: IndicatorRow;
   latestRawValues?: Record<string, number | null>;
 }) {
-  const config = INDICATOR_CONFIG[indicator.key];
+  const config = resolveIndicatorRowConfig(indicator.key);
   const label = config?.descriptionKo ?? indicator.key;
   // Glossary lookup is keyed by the same canonical id (FEDFUNDS, RSI_14,
   // …). When an indicator key is absent from the glossary (e.g. a future
@@ -540,3 +543,22 @@ function formatPercentOrDash(n: number | null): string {
 }
 
 export type CompositeContributingBlob = Tables<"composite_snapshots">["contributing_indicators"];
+
+/**
+ * Row metadata lookup across BOTH config maps. The KR regional
+ * overlay series live in PHASE2_FRED_REGIONAL_OVERLAY, not
+ * INDICATOR_CONFIG — resolving only the latter rendered raw FRED ids
+ * ("DTWEXBGS") as family-facing row titles on /asset/kr-equity even
+ * though Korean descriptions exist (UX 실사 2026-08-03). Exported
+ * for tests. Per-ticker technical rows resolve to undefined by
+ * design (the ticker IS the natural label).
+ */
+export function resolveIndicatorRowConfig(key: string):
+  | {
+      descriptionKo: string;
+      sourceName: string;
+      sourceUrl: string;
+    }
+  | undefined {
+  return INDICATOR_CONFIG[key] ?? PHASE2_FRED_REGIONAL_OVERLAY[key];
+}
