@@ -41,6 +41,19 @@ const CATEGORY_LABELS_KO: Record<string, string> = {
  * - "이름 붙여 저장" (SaveWeightsButton) POSTs the draft to
  *   `/api/backtest/save-weights` — does not auto-apply.
  */
+/**
+ * Shallow record equality for slider drafts. Exported for tests —
+ * the dirty-state hint below hinges on it.
+ */
+export function weightsDraftDiffers(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return true;
+  return aKeys.some((k) => a[k] !== b[k]);
+}
+
 export function TuningSliderPanel({
   assetType,
   baselineWeights,
@@ -56,6 +69,17 @@ export function TuningSliderPanel({
       ) as Array<[string, number]>,
     ),
   );
+  // The draft as of the last 적용 click. The 실행 button runs the
+  // APPLIED weights, not the sliders — without tracking this, moving
+  // a slider and clicking 실행 silently runs stale weights and every
+  // delta reads +0.00, which a non-expert reads as "sliders are
+  // broken" (UX 실사 2026-08-03, reproduced first-hand). Null =
+  // nothing applied from this panel (also after asset-type reseed,
+  // where we'd rather show no hint than a wrong one).
+  const [appliedDraft, setAppliedDraft] = useState<Record<
+    string,
+    number
+  > | null>(null);
 
   // When the user changes asset type at the controls panel, reseed
   // the sliders to the new baseline.
@@ -67,25 +91,38 @@ export function TuningSliderPanel({
         ) as Array<[string, number]>,
       ),
     );
+    setAppliedDraft(null);
   }, [baselineWeights, assetType]);
 
   function handleApply() {
     const custom = {
       [assetType]: draft,
     } as Record<AssetType, Record<string, number>>;
+    setAppliedDraft(draft);
     onApply(custom);
   }
 
   function handleReset() {
-    setDraft(
-      Object.fromEntries(
-        Object.entries(baselineWeights).filter(
-          ([, v]) => typeof v === "number",
-        ) as Array<[string, number]>,
-      ),
+    const baseline = Object.fromEntries(
+      Object.entries(baselineWeights).filter(
+        ([, v]) => typeof v === "number",
+      ) as Array<[string, number]>,
     );
+    setDraft(baseline);
+    setAppliedDraft(null);
     onReset();
   }
+
+  // Dirty = the sliders show something the next 실행 will NOT use.
+  const reference = active ? appliedDraft : null;
+  const baselineRecord = Object.fromEntries(
+    Object.entries(baselineWeights).filter(
+      ([, v]) => typeof v === "number",
+    ) as Array<[string, number]>,
+  );
+  const isDirty = reference
+    ? weightsDraftDiffers(draft, reference)
+    : !active && weightsDraftDiffers(draft, baselineRecord);
 
   const totalDraft = Object.values(draft).reduce((a, b) => a + b, 0);
   const totalBaseline = Object.values(baselineWeights).reduce(
@@ -159,8 +196,13 @@ export function TuningSliderPanel({
             초기화
           </button>
           <SaveWeightsButton draft={draft} assetType={assetType} />
-          {active ? (
-            <span className="self-center text-[11px] text-amber-700 dark:text-amber-300">
+          {isDirty ? (
+            <span className="self-center text-[11px] font-medium text-amber-700 dark:text-amber-300">
+              슬라이더 변경이 아직 미적용 — &apos;적용&apos;을 눌러야 다음
+              실행에 반영됩니다
+            </span>
+          ) : active ? (
+            <span className="self-center text-[11px] text-emerald-700 dark:text-emerald-300">
               ✓ 적용됨 — 백테스트 실행 시 사용
             </span>
           ) : null}
