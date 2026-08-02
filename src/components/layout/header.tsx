@@ -97,7 +97,12 @@ function HeaderRightSkeleton() {
       {/* DatePicker placeholder — rough width for the date button. */}
       <Skeleton className="h-11 w-28 rounded-md" />
       <Skeleton className="size-11 rounded-md" />
-      <Skeleton className="h-11 w-56 rounded-md" />
+      {/* UserDisplay placeholder — MUST track the responsive footprint
+          of the real content (email hidden <md, persona badge hidden
+          <sm): a fixed w-56 fallback overflowed the 375px viewport and
+          produced horizontal scroll during every mobile load (UX 실사
+          2026-08-03). */}
+      <Skeleton className="h-11 w-16 rounded-md sm:w-28 md:w-56" />
     </div>
   );
 }

@@ -55,7 +55,13 @@ export async function UserDisplay() {
       <div className="hidden text-right md:block">
         <p className="text-xs text-muted-foreground">{email}</p>
       </div>
-      <Badge variant="secondary">{PERSONA_LABELS[persona] ?? persona}</Badge>
+      {/* Persona pill hidden on the narrowest viewports: at 375px the
+          date picker + theme toggle + sign-out already fill the row,
+          and the pill pushed the cluster past the viewport edge (UX
+          실사 2026-08-03). It returns at `sm:` where the row has room. */}
+      <Badge variant="secondary" className="hidden sm:inline-flex">
+        {PERSONA_LABELS[persona] ?? persona}
+      </Badge>
       <SignOutButton />
     </div>
   );
