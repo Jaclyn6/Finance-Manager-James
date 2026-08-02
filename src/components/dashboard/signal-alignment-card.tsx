@@ -319,10 +319,14 @@ function SignalTile({
               <StateIcon state={state} />
             </div>
           </div>
-          <p className="text-[11px] leading-snug text-muted-foreground">
+          {/* break-keep: Korean copy in a ~120px 2-col mobile tile
+              otherwise breaks mid-word between Hangul syllables
+              ("판단 보/류") — wrap at spaces only (Trigger 2 review,
+              2026-08-03). */}
+          <p className="break-keep text-[11px] leading-snug text-muted-foreground">
             {description}
           </p>
-          <p className="text-[11px] leading-snug font-medium text-foreground/80">
+          <p className="break-keep text-[11px] leading-snug font-medium text-foreground/80">
             지금: {situation}
           </p>
         </TooltipTrigger>

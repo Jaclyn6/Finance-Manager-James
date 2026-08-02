@@ -127,10 +127,10 @@ export function describeSignalSituation(
       // BOTH as 부족 contradicted the weather strip showing a live
       // VIX right above the tile (UX 실사 2026-08-03).
       if (vix !== null) {
-        return `VIX ${fmt(vix, "—")} — 발동 기준 아님 · CNN F&G 데이터가 없어 판정 보류`;
+        return `VIX ${fmt(vix, "—")} — 발동 기준 아님 · CNN F&G 데이터가 없어 판단 보류`;
       }
       if (cnnFg !== null) {
-        return `CNN F&G ${fmt(cnnFg, "—")} — 발동 기준 아님 · VIX 데이터가 없어 판정 보류`;
+        return `CNN F&G ${fmt(cnnFg, "—")} — 발동 기준 아님 · VIX 데이터가 없어 판단 보류`;
       }
       return "VIX와 CNN F&G 데이터가 모두 부족합니다.";
     }
@@ -145,10 +145,10 @@ export function describeSignalSituation(
       }
       // Same OR-shape partial-unknown handling as EXTREME_FEAR.
       if (numOrNull(inputs.spyDisparity) !== null) {
-        return `SPY ${spy} — 발동 기준 아님 · QQQ 데이터가 없어 판정 보류`;
+        return `SPY ${spy} — 발동 기준 아님 · QQQ 데이터가 없어 판단 보류`;
       }
       if (numOrNull(inputs.qqqDisparity) !== null) {
-        return `QQQ ${qqq} — 발동 기준 아님 · SPY 데이터가 없어 판정 보류`;
+        return `QQQ ${qqq} — 발동 기준 아님 · SPY 데이터가 없어 판단 보류`;
       }
       return "SPY와 QQQ 200일 평균 데이터가 모두 부족합니다.";
     }
@@ -164,13 +164,16 @@ export function describeSignalSituation(
         return `실업 청구 ${icsaText}, Sahm ${sahmText} — 경계 구간`;
       }
       // AND-semantics: unknown fires on ANY missing arm, so the
-      // present arm may pass OR refute — show its value without
-      // claiming either direction.
+      // present arm may pass OR refute — bare value only, no
+      // direction claim. Not "확인": the description line above the
+      // tile uses 확인 to mean the POSITIVE confirmation the signal
+      // looks for, so the same word here would read as "it fired"
+      // (Trigger 2 review, 2026-08-03).
       if (icsa !== null) {
-        return `실업 청구 ${icsaText} 확인 · Sahm 데이터가 없어 판정 보류`;
+        return `실업 청구 ${icsaText} — Sahm 데이터가 없어 판단 보류`;
       }
       if (sahm !== null) {
-        return `Sahm ${sahmText} 확인 · 실업 청구 데이터가 없어 판정 보류`;
+        return `Sahm ${sahmText} — 실업 청구 데이터가 없어 판단 보류`;
       }
       return "실업 청구와 Sahm 데이터가 모두 부족합니다.";
     }
@@ -185,7 +188,17 @@ export function describeSignalSituation(
       if (state === "inactive") {
         return `HY 스프레드 ${todayText} (7일 고점 ${maxText}) — 아직 반전 조건 아님`;
       }
-      return "하이일드 스프레드 데이터가 부족합니다.";
+      // Same partial-unknown pattern as ECONOMY_INTACT (the present
+      // arm may pass or refute — bare value, no claim): unknown with
+      // a live bamlToday happens whenever the 7-day window is short,
+      // and the weather strip shows that live spread two cards up.
+      if (today !== null) {
+        return `HY 스프레드 ${todayText} — 최근 7일 고점 데이터가 없어 판단 보류`;
+      }
+      if (max !== null) {
+        return `7일 고점 ${maxText} — 오늘 스프레드 데이터가 없어 판단 보류`;
+      }
+      return "하이일드 스프레드 데이터가 모두 부족합니다.";
     }
     case "LIQUIDITY_EASING": {
       const today = numOrNull(inputs.tgaToday);
@@ -200,7 +213,13 @@ export function describeSignalSituation(
       if (state === "inactive") {
         return `TGA ${todayText} (20일 평균 ${smaText}) — 유동성 흡수 구간`;
       }
-      return "TGA 잔액 데이터가 부족합니다.";
+      if (today !== null) {
+        return `TGA ${todayText} — 20일 평균 데이터가 없어 판단 보류`;
+      }
+      if (sma !== null) {
+        return `20일 평균 ${smaText} — 오늘 TGA 잔액 데이터가 없어 판단 보류`;
+      }
+      return "TGA 잔액 데이터가 모두 부족합니다.";
     }
     case "MOMENTUM_TURN": {
       if (state === "active") {

@@ -194,23 +194,15 @@ export type SignalInputs = {
  * EXTREME_FEAR = `VIX ≥ 35 || CNN_FG < 25` (blueprint §4.5, PRD §10.4).
  *
  * Null semantics: OR-logic with graceful degradation.
- *   - BOTH inputs null → "unknown".
- *   - One null, the other fires its threshold → "active".
- *   - One null, the other does NOT fire → "inactive" (the null arm
- *     cannot rescue the OR; only a confirmed non-firing arm plus the
- *     other arm's presence is an "inactive" finding).
- *
- * Actually — with one arm null and the other below threshold, we still
- * know the whole OR is "inactive" from the non-null arm's perspective
- * only if the OR could not have fired via the missing arm. Since we
- * can't know, conservatively we still return "inactive" ONLY when the
- * non-null arm is non-firing; however a stricter reading would keep it
- * "unknown" in that case. Blueprint §10.4 note "EXTREME_FEAR degrades
- * gracefully" is explicit about the "active via one arm" direction but
- * silent on the asymmetric-null-inactive direction. We follow the
- * pragmatic path: if at least one arm is confirmed non-firing and the
- * other arm is missing, we return "unknown" — consistent with the
- * tenet-1 bias toward loud failure.
+ *   - BOTH null → "unknown".
+ *   - One null, the other FIRES → "active" (one confirmed arm is
+ *     enough for an OR; blueprint §10.4 "degrades gracefully").
+ *   - One null, the other does NOT fire → "unknown" — the missing
+ *     arm could still have fired the OR, so "inactive" would be a
+ *     claim we can't back (tenet-1 loud-failure bias). Downstream
+ *     copy relies on this invariant: in "unknown", any PRESENT arm
+ *     is guaranteed non-firing (signal-labels.ts partial-unknown).
+ *   - Both present, neither fires → "inactive".
  */
 export function evaluateExtremeFear(
   vix: number | null,

@@ -88,14 +88,17 @@ describe("describeSignalSituation — partial-unknown copy", () => {
 
   it("ECONOMY_INTACT partial-unknown stays neutral about the present arm", () => {
     // AND-semantics: the present arm may pass or refute, so the copy
-    // must not claim 충족/미충족 — just 확인 + 판정 보류.
+    // must not claim 충족/미충족 — just 확인 + 판단 보류.
     const text = describeSignalSituation("ECONOMY_INTACT", {
       state: "unknown",
       inputs: { icsa: 197000, sahmCurrent: null },
       threshold: "ICSA < 300000 && SAHMCURRENT < 0.5",
     });
-    expect(text).toContain("실업 청구 197,000건 확인");
-    expect(text).toContain("Sahm 데이터가 없어 판정 보류");
+    expect(text).toContain("실업 청구 197,000건");
+    expect(text).toContain("Sahm 데이터가 없어 판단 보류");
     expect(text).not.toContain("양호");
+    // 확인 is the description line's word for the POSITIVE
+    // confirmation — it must not leak into the neutral copy.
+    expect(text).not.toContain("확인");
   });
 });
