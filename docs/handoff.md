@@ -2,61 +2,103 @@
 
 ## 1. Snapshot Timestamp
 
-2026-04-27 (KST late evening) — Phase 3.4 Backtest UI **CLOSED**. Trigger 2 5-agent review complete; fix-up `feaea46` shipped + pushed (security/correctness/drift findings ≥ 80 confidence resolved). Next sub-phase = **3.1 Regime Classification** (ECOS adapter blocked on user-supplied API key).
+2026-08-03 09:40
 
 ## 2. Current Phase / Step
 
-**Phase 3.4 = closed.** All steps shipped + production-verified + Trigger 2 reviewed + fixed up. CLAUDE.md mandate satisfied. Next: **Phase 3.1 Regime Classification** entry — first action is blueprint authoring after user supplies ECOS API key.
+Post-MVP. Phase 1–3.4 build sequence complete; product pivoted to 할인
+판독기 (advisor verdicts, `adv-1.2.0`, 2026-07-08~). Currently running
+the 15-min UX 실사 improvement loop (cron f3f137d2) — 36 iterations
+done, ~12 shipped feature-units. Mid-step: user just requested wiring
+the missing EXTREME_FEAR sentiment arm (CNN outage) to collectable
+data — STOCK_FG_PROXY substitution + `SIGNAL_RULES_VERSION` v1.1.0
+bump is the planned treatment (was a backlog user-decision item; now
+green-lit).
 
 ## 3. Last Commit
 
-`feaea46` — `fix(phase3.4): Trigger 2 review fix-up — security + correctness + drift` on `main`. Pushed (origin in sync). Working tree clean.
+`23f88ec` docs(ci): PRODUCTION_URL must be the prod alias — on `main`,
+pushed, deployed. Uncommitted: only untracked `.agents/`, `.codex/`
+(user's own tool configs — do NOT commit) and stray scratchpad-named
+files at repo root (noise).
 
 ## 4. Active Thread
 
-- **Just finished**: Phase 3.4 Trigger 2 5-agent review on `9ac146f..6c4924b` aggregate diff. 5 reviewers ran in parallel covering compliance / shallow bug / git history / comments-vs-reality / security+integration. Confidence ≥ 80 findings consolidated and fixed in single commit `feaea46`. Migration `0012_phase34_backtest_fixup.sql` applied to prod (Supabase `hhohrclmfsvpkigbdpsb`). Tests 577/577 (was 571; +6 hash collision/canonical/null-routing). `next build` clean. Vercel auto-deploy will redeploy on push.
-- **About to start (next session)**: Phase 3.1 blueprint authoring at `docs/phase3_1_regime_classification_blueprint.md` — modeled on Phase 3.0 / 3.4 blueprint structure. ECOS adapter (BOK rate, KR 10Y, M2, KRW/USD daily) extends FRED's `DEXKOUS` + `DTWEXBGS` regional_overlay baseline.
-- **Not blocked.** 7-day reliability watch ticks until 2026-05-03; cron stable.
+- Just finished: PRODUCTION_URL incident — GH secret pointed at a
+  stale immutable deployment; write-verdicts 404'd 3 days
+  (2026-07-30..08-01). Fixed (secret → alias), verified on the real
+  22:07Z schedule (23:02Z success, verdicts_written 4).
+- In progress: EXTREME_FEAR 데이터 부족 해소 — CNN_FG is permanently
+  null (418 bot-block since 06-24; bypass prohibited), so the tile
+  can never resolve. Implement proxy-arm substitution with rules
+  bump v1.1.0 + honest 자체 프록시 labeling, Trigger 2, deploy.
+- Loop steady-state: iterations now mostly clean verification passes.
 
 ## 5. Pending User Decisions
 
-- **ECOS API key** — required for Phase 3.1 entry. Free signup at `https://ecos.bok.or.kr/api/`. Once keyed, set `ECOS_API_KEY` in `.env.local` + GH secrets + Vercel Production env.
+- Supabase magic-link login (password UX for family) — proposed, no
+  answer yet.
+- Score-engine band label vocabulary (비중 확대 → descriptive terms)
+  — `docs/backlog.md` "band labels prescribe allocation".
+- Video strategies #3/#4 identification (original pivot request).
+- no_drawdown card 할인 어휘 충돌 treatment (b) — backlog, needs
+  wording sign-off.
 
 ## 6. Recent Context (last 5 commits)
 
-- `feaea46` Trigger 2 fix-up — proxy auth gap closed (`/backtest`+`/indicators`), `customWeightsId` ownership enforced, memo hash includes inline customWeights payload, `reweightSnapshot` null-routing fixed, migration 0012 (RLS form, NOT NULL+CASCADE, `raw_inputs` JSONB).
-- `14b863c` Handoff snapshot pre-fix-up.
-- `6c4924b` Handoff snapshot — Phase 3.4 production verified (drift = 0).
-- `b93098b` Steps 7b + 8 + 9 — `/api/backtest/save-weights` + family reader + PRD §18 promotion + handoff doc.
-- `3ee42da` Steps 5–7 — `/backtest` UI (Suspense shell + 4 client components + tuning slider).
+- `23f88ec` CI postmortem note: PRODUCTION_URL must be the alias.
+- `6e1fd0a` signed-delta shared module — no ±0.0 badges anywhere;
+  quiet-mover line instead of silent omission.
+- `71d3900` changelog mover display floor (|Δ|<0.05 hidden).
+- `d18d2fb` backlog: no_drawdown bar wording collision.
+- `0f7232b` glossary label tier — zero raw-id row titles remain.
 
 ## 7. Open Issues to Watch
 
-- **`FamilyRunsReader` user_email** still displays user_id 8-char prefix (Phase 3.4.1 nicety — full plumbing needs an auth metadata reader).
-- **MOMENTUM_TURN signal** still `unknown` — MACD 7-day window accumulation pending. Self-resolves over the cron watch window (~2026-05-03).
-- **Phase 3.4.1 OOS**: signal-only backtest (would consume `backtest_snapshots.raw_inputs` JSONB now provisioned by migration 0012), multi-asset overlay, full email plumbing.
-- **DART/ECOS adapters** still scheduled for 3.2 / 3.1 respectively. DART_API_KEY already provisioned across .env.local + GH secrets + Vercel; ECOS pending §5.
-- **pg_graphql anon SELECT advisor warning** on all 16 public tables (RLS enforces row-level access; only schema names are visible). Pre-Phase-3.4 condition; not introduced by 0011/0012.
-- **Market-holiday calendar follow-up** to 0.1 weekend skip — see [`docs/backlog.md` "Market-holiday calendar integration"](backlog.md).
+- `docs/backlog.md` is the source of truth; top opens: EXTREME_FEAR
+  proxy substitution (NOW IN PROGRESS), macro-only top_movers scope,
+  news-basket US-megacap labeling + AV 25/day budget, net-liquidity
+  gauge (needs ~4wk WALCL/WRESBAL/RRPONTSYD history), verdict-flip
+  alerting, hit-rate report (~2026-10).
+- advisor_verdicts JSONB: adv-1.2.0 rows before 2026-08-03 lack
+  `verdict.evidence` — readers must fall back (`verdict-row.ts` doc).
+- Backtest reads are unpaginated, guarded only by MAX_RANGE_DAYS=365
+  (`src/app/api/backtest/run/route.ts` comment).
+- GH cron slots drift/skip under load (off-minute schedules already);
+  intervene only on 2+ consecutive misses.
+- 60-day GHA auto-disable clock reset by 2026-08-02 commits.
 
 ## 8. Environment State
 
-- **Stack**: Next.js 16.2.4 (Turbopack, cacheComponents:true), React 19.2.4, Tailwind v4, @supabase/ssr 0.10.2, TS 5 strict, Recharts 3.x, Vitest 4.1.4.
-- **Tests**: **577/577 green** across 39 files (Phase 3.0 closed at 532; Phase 3.4 base added 39: 12 weights-registry + 21 backtest engine + 6 hash; fix-up added 6: 4 hash collision + 2 canonical sha256 + null-routing reshape).
-- **MCP servers**: figma, supabase, context7, alphavantage, Claude-in-Chrome (jw.byun@toss.im authenticated).
-- **`.env.local` keys**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, FRED_API_KEY, ALPHA_VANTAGE_API_KEY, CRON_SECRET, FINNHUB_API_KEY, VERCEL_OIDC_TOKEN, **TWELVEDATA_API_KEY** (Phase 3.0), **DART_API_KEY** (Phase 3.2 pre-provisioned), **ECOS_API_KEY** (Phase 3.1 — provisioned 2026-04-27, pending GH/Vercel sync).
-- **Vercel prod**: `finance-manager-james.vercel.app` → auto-deploys `feaea46` on push.
-- **GitHub repo secrets**: CRON_SECRET, PRODUCTION_URL (`https://finance-manager-james.vercel.app`), FINNHUB_API_KEY, TWELVEDATA_API_KEY, DART_API_KEY.
-- **Supabase**: `hhohrclmfsvpkigbdpsb` (Seoul, Postgres 17.6.1.104). Migrations 0001–0012 applied. Phase 3.4 base = `0011`; fix-up = `0012`.
-- **Cron workflows**: `cron-hourly.yml` (cnn-fg + news, hourly), `cron-onchain.yml` (BGeometrics every 4h), `cron-technical.yml` (daily 22:00 UTC, 19 tickers fallback chain).
-- **Known degraded**: BGeometrics 15/day (4h cadence keeps under cap), CNN F&G partial parsing (VIX-only fallback for EXTREME_FEAR), MOMENTUM_TURN unknown until MACD history accumulates.
+- Next.js 16.2.4 (`cacheComponents`), @supabase/ssr 0.10.2, Supabase
+  `hhohrclmfsvpkigbdpsb` (Seoul), Vercel CLI deploys (account
+  jaclyn6, no Git integration — deploy via `npx vercel --prod`).
+- Tests: 800 passing (vitest). `next build` clean.
+- MCP: supabase, context7, alphavantage, figma (figma + vercel-plugin
+  need OAuth re-auth in an interactive session).
+- `.env.local` names: NEXT_PUBLIC_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY,
+  FRED_API_KEY, ALPHA_VANTAGE_API_KEY (25 req/day!), CRON_SECRET,
+  VERCEL_OIDC_TOKEN, FINNHUB_API_KEY, TWELVEDATA_API_KEY,
+  DART_API_KEY, ECOS_API_KEY.
+- GH Actions secrets: CRON_SECRET, PRODUCTION_URL (MUST stay the
+  alias `https://finance-manager-james.vercel.app`).
+- Crons: Vercel `ingest-macro` 06:00Z; GHA hourly cnn-fg :17, onchain
+  4h :42, technical daily 22:07Z (incl. write-verdicts step 3).
+- Known-broken: CNN F&G scrape (418 since 06-24 — do not bypass);
+  ingest-news removed from hourly (AV quota).
 
 ## 9. How to Resume
 
-1. **First action**: prompt user for ECOS API key (`https://ecos.bok.or.kr/api/`, free, 100k req/day) → kick off Phase 3.1 blueprint authoring (`docs/phase3_1_regime_classification_blueprint.md`) modeled on Phase 3.0 / 3.4 blueprint structure. Reference existing FRED `DEXKOUS` + `DTWEXBGS` regional_overlay as the macro-only baseline; ECOS adds BOK rate, KR 10Y, M2, KRW/USD daily.
-2. **Then**: `gh run list --workflow=cron-technical.yml --limit 3` + `cron-onchain.yml` + `cron-hourly.yml` to confirm Phase 3.0 reliability watch holds (target: 7 consecutive green days through 2026-05-03).
-3. **Watch**: Vercel deployment of `feaea46` → check `/backtest` + `/indicators` redirect to `/login` when unauthenticated (proxy fix verification).
-
----
-
-*Handoffs are manual-only. This file is rewritten on every `/handoff` invocation.*
+- Read `docs/phase1_architecture_blueprint.md` v2.1 §9 to understand
+  build sequence, then `docs/advisor_pivot_blueprint.md` (§7 shipped
+  log) for the current product shape.
+- Read `docs/backlog.md` for open items and CLAUDE.md for the
+  Trigger 2 review rule (mandatory before any push).
+- Next concrete action: implement EXTREME_FEAR proxy-arm substitution
+  — `evaluateExtremeFear` accepts STOCK_FG_PROXY fallback with a
+  viaProxy flag, bump `SIGNAL_RULES_VERSION` to v1.1.0
+  (`src/lib/score-engine/weights.ts:46`), label 자체 프록시 in
+  `describeSignalSituation`/`SIGNAL_THRESHOLD_KO`, wire proxy into
+  `loadSignalInputs` (`src/lib/data/signals.ts`), then Trigger 2 →
+  push → `npx vercel --prod` → verify the tile resolves.
