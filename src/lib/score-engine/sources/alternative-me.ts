@@ -41,8 +41,9 @@ import {
  *    CNN F&G which needs `fetchWithBackOff`).
  *
  * 6. **Distinct from CNN F&G.** Per blueprint §4.5, crypto F&G feeds
- *    the on-chain composite; CNN F&G drives the EXTREME_FEAR stock
- *    signal. They are NOT interchangeable.
+ *    the on-chain composite; CNN F&G (with STOCK_FG_PROXY as its
+ *    v1.1.0 fallback) drives the EXTREME_FEAR stock signal. They are
+ *    NOT interchangeable.
  */
 
 export type {

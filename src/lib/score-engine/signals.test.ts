@@ -40,7 +40,7 @@ const ALL_NULL_INPUTS: SignalInputs = {
 };
 
 // ---------------------------------------------------------------------------
-// EXTREME_FEAR — VIX >= 35 || CNN_FG < 25
+// EXTREME_FEAR — VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25
 // ---------------------------------------------------------------------------
 
 describe("evaluateExtremeFear", () => {
@@ -107,6 +107,11 @@ describe("evaluateExtremeFear", () => {
   it("echoes all three inputs for UI labeling", () => {
     const result = evaluateExtremeFear(17.1, null, 65);
     expect(result.inputs).toEqual({ vix: 17.1, cnnFg: null, stockFgProxy: 65 });
+  });
+
+  it("proxy boundary matches CNN's strict < 25", () => {
+    expect(evaluateExtremeFear(20, null, 24).state).toBe("active");
+    expect(evaluateExtremeFear(20, null, 25).state).toBe("inactive");
   });
 });
 
@@ -522,5 +527,29 @@ describe("signalsForAssetType", () => {
     expect(list).not.toContain("MOMENTUM_TURN");
     expect(list).toContain("EXTREME_FEAR");
     expect(list).toContain("DISLOCATION");
+  });
+});
+
+describe("computeSignals — EXTREME_FEAR proxy wiring", () => {
+  it("the proxy alone can decide the tile through the full pipeline", () => {
+    // Pins the 3rd-argument pass-through: reverting computeSignals to
+    // the 2-arg evaluateExtremeFear call would keep every other test
+    // green while silently regressing v1.1.0 to the permanent 판단
+    // 보류 the proxy arm exists to fix (Trigger 2, 2026-08-03).
+    const active = computeSignals({
+      ...ALL_NULL_INPUTS,
+      vix: 20,
+      cnnFg: null,
+      stockFgProxy: 12,
+    });
+    expect(active.perSignal.EXTREME_FEAR.state).toBe("active");
+
+    const inactive = computeSignals({
+      ...ALL_NULL_INPUTS,
+      vix: 17.1,
+      cnnFg: null,
+      stockFgProxy: 65,
+    });
+    expect(inactive.perSignal.EXTREME_FEAR.state).toBe("inactive");
   });
 });

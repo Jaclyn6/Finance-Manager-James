@@ -5,7 +5,10 @@ import { cacheLife, cacheTag } from "next/cache";
 import { STOCK_FG_PROXY_KEY } from "@/lib/advisor/stock-fg-proxy";
 import { computeSignals, type SignalInputs } from "@/lib/score-engine/signals";
 import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
-import { pickLatestByDateThenVersion } from "@/lib/utils/version-compare";
+import {
+  compareVersionsNumeric,
+  pickLatestByDateThenVersion,
+} from "@/lib/utils/version-compare";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Tables } from "@/types/database";
 
@@ -148,14 +151,18 @@ const SPY_MACD_HISTORY_DAYS = 30;
  *    daily; taking the latest row ≤ today handles upstream outages
  *    without silently passing stale data (the `observed_at` stays
  *    visible for UI staleness gating).
+ * 2b. `onchain_readings` for STOCK_FG_PROXY (per-key,
+ *    date-then-NUMERIC-version pick with a 5-day freshness floor —
+ *    the one exception to the no-model_version-filter policy below,
+ *    because proxy rows are engine-versioned).
  * 3. `technical_readings` for SPY + QQQ DISPARITY (latest observed_at
  *    ≤ snapshotDate) and SPY MACD_12_26_9 (last ~30 observations for
  *    the cross-detection window).
  *
  * ─ `model_version` cross-version policy ─────────────────────────────
  *
- * These queries do NOT filter on `model_version` on the underlying
- * reading tables. Mirroring `src/lib/data/indicators.ts` (greenfield-
+ * These queries (except the §2b proxy read above) do NOT filter on
+ * `model_version` on the underlying reading tables. Mirroring `src/lib/data/indicators.ts` (greenfield-
  * coexistence rationale), at the v1 → v2 cutover the two versions
  * never share an `observed_at` for the same indicator key — v1 covers
  * pre-cutover reads and v2 post-cutover. A cross-version scan is
@@ -307,11 +314,26 @@ export async function loadSignalInputs(
   // cutover days hold two rows per date and the pick must be the
   // date-then-NUMERIC-version rule, not the plain latest-success scan
   // latestOnchain does (same trap as getLatestIndicatorReadings).
+  // Usability criterion is value_raw non-null, NOT fetch_status:
+  // proxy rows are stamped "partial" whenever ANY of the 4 components
+  // is missing even though value_raw still carries the renormalized
+  // 3-of-4 mean the advisor pillar happily consumes — a success-only
+  // filter would skip those and silently pin arm 2 to an older row.
+  // The 5-day floor bounds staleness the other way: a stalled
+  // write-verdicts (the proxy's only writer; it has gapped 24 days
+  // before) must degrade to null → honest 판단 보류, never ride a
+  // weeks-old value labeled as current (Trigger 2 review, 2026-08-03).
+  const proxyFreshFloor = new Date(
+    Date.parse(`${snapshotDate}T00:00:00Z`) - 5 * 24 * 60 * 60 * 1000,
+  )
+    .toISOString()
+    .slice(0, 10);
   const { data: proxyRows, error: proxyErr } = await supabase
     .from("onchain_readings")
     .select("observed_at, value_raw, fetch_status, model_version")
     .eq("indicator_key", STOCK_FG_PROXY_KEY)
-    .eq("fetch_status", "success")
+    .not("value_raw", "is", null)
+    .gte("observed_at", proxyFreshFloor)
     .lte("observed_at", snapshotDate)
     .order("observed_at", { ascending: false })
     .limit(4);
@@ -435,11 +457,17 @@ export async function loadSignalInputs(
  * Returns the most recent `signal_events` row ≤ `snapshotDate` (or
  * the overall latest when `snapshotDate` is omitted).
  *
- * Filters on `signal_rules_version = SIGNAL_RULES_VERSION` to keep the
- * UI consistent with the engine that's live in code. Cross-version
- * historical reads are a Phase 3 concern (similar to the composite
- * model_version story — see `src/lib/data/indicators.ts` for the
- * greenfield-coexistence rationale).
+ * Version-AGNOSTIC on purpose: the old `.eq(signal_rules_version,
+ * SIGNAL_RULES_VERSION)` pin was a no-op while every row was v1.0.0,
+ * but the moment v1.1.0 shipped it would have blacked out ALL
+ * pre-cutover history (date-browsing rendered the "수집 중" empty
+ * state over months of collected rows) and made the 규칙 전환일
+ * badge unreachable — its whole condition is row-version ≠ engine-
+ * version, which an .eq pin makes impossible (Trigger 2 review,
+ * 2026-08-03). Cutover days hold one row per rules version (PK
+ * `(snapshot_date, signal_rules_version)`), so collapse per date by
+ * NUMERIC version — a string order-by would resurrect the
+ * v1.10.0 < v1.9.0 trap.
  *
  * Returns `null` when there is no matching row — the UI renders a
  * "signals not yet computed" placeholder rather than an empty card.
@@ -458,16 +486,10 @@ export async function getLatestSignalEvent(
   let query = supabase
     .from("signal_events")
     .select("*")
-    .eq("signal_rules_version", SIGNAL_RULES_VERSION)
-    // No secondary tie-break order needed here: migration 0006 PK is
-    // `(snapshot_date, signal_rules_version)`, and the `.eq(...)` above
-    // pins `signal_rules_version`. Within that filter there is at most
-    // one row per `snapshot_date`, so the DESC `snapshot_date` order is
-    // already deterministic. Copy-pasting this pattern to a reader
-    // whose filter does NOT uniquely determine the row per date must
-    // add a secondary `.order(...)` (see indicators reader for the idiom).
     .order("snapshot_date", { ascending: false })
-    .limit(1);
+    // 4 rows = the newest date's version pair plus headroom for the
+    // date before it — enough to collapse the newest date reliably.
+    .limit(4);
 
   if (snapshotDate) {
     query = query.lte("snapshot_date", snapshotDate);
@@ -480,5 +502,21 @@ export async function getLatestSignalEvent(
     );
   }
 
-  return data?.[0] ?? null;
+  const rows = data ?? [];
+  if (rows.length === 0) return null;
+  const newestDate = rows[0].snapshot_date;
+  let best: SignalEventRow | null = null;
+  for (const row of rows) {
+    if (row.snapshot_date !== newestDate) continue;
+    if (
+      best === null ||
+      compareVersionsNumeric(
+        row.signal_rules_version,
+        best.signal_rules_version,
+      ) > 0
+    ) {
+      best = row;
+    }
+  }
+  return best;
 }

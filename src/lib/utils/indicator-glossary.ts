@@ -582,6 +582,29 @@ export const INDICATOR_GLOSSARY: Record<string, IndicatorGlossaryEntry> = {
     unitKo: "포인트",
   },
 
+  STOCK_FG_PROXY: {
+    key: "STOCK_FG_PROXY",
+    labelKo: "공포·탐욕 프록시 (자체 산출)",
+    sourceName: "자체 산출",
+    sourceUrl:
+      "https://github.com/Jaclyn6/Finance-Manager-James/blob/main/docs/advisor_pivot_blueprint.md",
+    category: "sentiment",
+    shortKo: "CNN 결측 시 쓰는 자체 공포·탐욕 대체 지수 (0-100)",
+    beginnerExplanationKo:
+      "CNN 공포·탐욕 지수가 2026-06-24부터 차단되어, 이미 수집 중인 재료로 직접 계산하는 대체 지수입니다. SPY 모멘텀(125일선 대비)·VIX(50일선 대비)·하이일드 스프레드 백분위·주식-채권 20일 수익률 차의 4개 성분을 CNN과 같은 0-100 방향으로 평균합니다.",
+    bullishCaseKo:
+      "25 이하로 내려가면 시장이 극단적 공포 구간이라는 뜻으로, 역사적으로 그때가 평균적으로 좋은 매수 시점이었습니다. 극단 공포 매수 신호의 발동 조건이기도 합니다.",
+    bearishCaseKo:
+      "75 이상이면 과열(탐욕) 구간으로, 신규 매수를 서두르지 않는 편이 평균적으로 유리했습니다.",
+    typicalRangeKo:
+      "중립은 40-60. 25 이하 = 극단 공포, 75 이상 = 과열로 분류합니다.",
+    scoreDirectionKo:
+      "역발상 지표입니다. 낮을수록(공포) 매수 기회 쪽 점수가 높아지고, 높을수록(탐욕) 낮아집니다.",
+    scoringMethodKo:
+      "4개 성분을 각각 0-100 점수로 바꾼 뒤 계산 가능한 성분만 평균합니다. 일부 성분이 빠지면 남은 성분만으로 평균을 다시 내고, CNN이 복구되면 자동으로 CNN 값을 우선 사용합니다.",
+    unitKo: "",
+  },
+
   CNN_FG: {
     key: "CNN_FG",
     labelKo: "CNN Markets Fear & Greed",

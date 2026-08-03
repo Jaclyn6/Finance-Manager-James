@@ -19,9 +19,9 @@ import {
  * historically changed this endpoint without notice. If live responses
  * stop parsing, inspect the raw body and adjust
  * `cnn-fear-greed-parse.ts` accordingly. The blueprint's EXTREME_FEAR
- * signal depends on CNN F&G being available; total outage requires
- * falling back to VIX-only per the `VIX >= 35 || CNN_FG < 25` OR
- * semantics — see blueprint §4.5.
+ * signal prefers CNN F&G; on outage arm 2 falls back to
+ * STOCK_FG_PROXY (rules v1.1.0), then VIX-only when both fg sources
+ * are dark — see blueprint §4.5.
  *
  * Design choices (mirrors the other Phase 2 source fetchers):
  *

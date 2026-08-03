@@ -168,9 +168,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // ---- 5.5. Signal Alignment engine tail (blueprint §4.5, §5 routing) ----
   //
-  // CNN F&G is the OR-arm 2 input for EXTREME_FEAR. Even if this cron's
-  // main write failed, run signals with the most recent stored CNN_FG
-  // value (signals tolerate null inputs via state:"unknown"). Soft
+  // CNN F&G is the preferred OR-arm 2 input for EXTREME_FEAR (with
+  // STOCK_FG_PROXY as the v1.1.0 fallback), so this tail stays
+  // meaningful even while CNN itself is blocked. Even if this cron's
+  // main write failed, run signals with the most recent stored
+  // values (signals tolerate null inputs via state:"unknown"). Soft
   // failure: signals-tail errors don't flip the response to 500.
   try {
     const supabase = getSupabaseAdminClient();

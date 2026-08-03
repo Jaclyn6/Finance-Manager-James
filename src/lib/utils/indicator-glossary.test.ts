@@ -50,6 +50,8 @@ const EXPECTED_KEYS: readonly string[] = [
   // Regional overlay (2)
   "DTWEXBGS",
   "DEXKOUS",
+  // Sentiment proxy (1) — in-house CNN substitute, rules v1.1.0
+  "STOCK_FG_PROXY",
   // Technical (6)
   "RSI_14",
   "MACD_12_26_9",
@@ -68,8 +70,8 @@ const EXPECTED_KEYS: readonly string[] = [
 ];
 
 describe("INDICATOR_GLOSSARY", () => {
-  it("contains exactly 24 entries", () => {
-    expect(Object.keys(INDICATOR_GLOSSARY)).toHaveLength(24);
+  it("contains exactly 25 entries", () => {
+    expect(Object.keys(INDICATOR_GLOSSARY)).toHaveLength(25);
   });
 
   it("contains every expected indicator key (no missing, no duplicates)", () => {

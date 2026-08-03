@@ -8,7 +8,7 @@
  *
  *   Base (apply to every asset type unless explicitly excluded per
  *   blueprint §4.5 lines 292–297):
- *     - EXTREME_FEAR      : VIX ≥ 35 || CNN_FG < 25
+ *     - EXTREME_FEAR      : VIX ≥ 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25  (proxy arm v1.1.0+)
  *     - DISLOCATION       : SPY.disparity ≤ -0.25 || QQQ.disparity ≤ -0.25
  *     - ECONOMY_INTACT    : ICSA < 300000 && SAHMCURRENT < 0.5
  *     - SPREAD_REVERSAL   : BAMLH0A0HYM2_today ≥ 4 && < max(last_7d)

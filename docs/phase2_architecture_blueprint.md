@@ -271,7 +271,7 @@ Independent from the composite. Plan §0.5 tenet 4 ("actionable over aggregate")
 
 | Signal | Formula | Inputs |
 |--------|---------|--------|
-| `EXTREME_FEAR` | `VIX ≥ 35 \|\| CNN_FG < 25` | `VIXCLS` (FRED) + CNN F&G |
+| `EXTREME_FEAR` | `VIX ≥ 35 \|\| (CNN_FG ?? STOCK_FG_PROXY) < 25` (v1.1.0, 2026-08-03 — CNN 결측 시 자체 프록시 폴백; v1.0.0은 CNN 단독) | `VIXCLS` (FRED) + CNN F&G (결측 시 `STOCK_FG_PROXY`) |
 | `DISLOCATION` | `SPY.disparity ≤ -0.25 \|\| QQQ.disparity ≤ -0.25` | Technical engine (SPY + QQQ disparity) |
 | `ECONOMY_INTACT` | `ICSA < 300000 && SAHMCURRENT < 0.5` | `ICSA` + `SAHMCURRENT` (FRED) |
 | `SPREAD_REVERSAL` | `BAMLH0A0HYM2_today ≥ 4 && BAMLH0A0HYM2_today < max(last_7d)` | `BAMLH0A0HYM2` (FRED) |

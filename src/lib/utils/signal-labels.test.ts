@@ -99,6 +99,26 @@ describe("describeSignalSituation — partial-unknown copy", () => {
     expect(text).not.toContain("프록시");
   });
 
+  it("EXTREME_FEAR active-via-proxy carries the 자체 산출 tag — the product-trust case", () => {
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "active",
+      inputs: { vix: 20, cnnFg: null, stockFgProxy: 12 },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
+    });
+    expect(text).toContain("공포·탐욕 프록시(자체 산출) 12");
+    expect(text).toContain("공포에 빠진 상태");
+  });
+
+  it("EXTREME_FEAR proxy present + VIX missing takes the fg-side partial branch", () => {
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "unknown",
+      inputs: { vix: null, cnnFg: null, stockFgProxy: 65 },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
+    });
+    expect(text).toContain("공포·탐욕 프록시(자체 산출) 65");
+    expect(text).toContain("VIX 데이터가 없어 판단 보류");
+  });
+
   it("EXTREME_FEAR both-null keeps the all-missing sentence", () => {
     const text = describeSignalSituation("EXTREME_FEAR", {
       state: "unknown",

@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
-import { CURRENT_WEIGHTS_VERSION } from "@/lib/score-engine/weights-registry";
+import {
+  MODEL_VERSION,
+  SIGNAL_RULES_VERSION,
+} from "@/lib/score-engine/weights";
 import type { AssetType, PerAssetCategoryWeights } from "@/lib/score-engine/types";
 import { cn } from "@/lib/utils";
 
@@ -223,7 +225,11 @@ function SaveWeightsButton({
         // comparison is reproducible later. Constants, not literals:
         // the hardcoded "v1.0.0" silently drifted when the rules
         // bumped to v1.1.0 (2026-08-03).
-        modelVersion: CURRENT_WEIGHTS_VERSION,
+        // MODEL_VERSION ("v2.0.0"), NOT the registry lookup key
+        // CURRENT_WEIGHTS_VERSION ("v2.0.0-baseline") — the field is
+        // documented as the composite_snapshots.model_version string
+        // (Trigger 2 review, 2026-08-03).
+        modelVersion: MODEL_VERSION,
         signalRulesVersion: SIGNAL_RULES_VERSION,
       };
       const res = await fetch("/api/backtest/save-weights", {

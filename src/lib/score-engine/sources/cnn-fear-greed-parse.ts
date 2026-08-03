@@ -5,8 +5,8 @@
  * 2026-04-23. CNN has historically changed this endpoint without
  * notice; if live responses stop parsing, inspect the raw body and
  * adjust this parser. The blueprint's EXTREME_FEAR signal (§4.5)
- * depends on CNN F&G being available; total outage requires falling
- * back to VIX-only per the `VIX >= 35 || CNN_FG < 25` OR semantics.
+ * prefers CNN F&G; on outage arm 2 falls back to STOCK_FG_PROXY
+ * (rules v1.1.0), then VIX-only when both fg sources are dark.
  *
  * Split out of `cnn-fear-greed.ts` so that:
  *

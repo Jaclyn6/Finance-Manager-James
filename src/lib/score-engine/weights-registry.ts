@@ -70,7 +70,11 @@ export interface RegionalOverlayConfig {
 export interface EngineWeights {
   /** The string used in `composite_snapshots.model_version`. */
   modelVersion: string;
-  /** Paired signals.ts SIGNAL_RULES_VERSION. */
+  /**
+   * The LIVE signals.ts edition this entry currently pairs with
+   * (test-enforced sync — historical pairings live in git history
+   * and in `signal_events.signal_rules_version` rows).
+   */
   signalRulesVersion: string;
   /** Per-asset category weights (composite-v2 input). */
   categoryWeights: Record<AssetType, PerAssetCategoryWeights>;
@@ -83,16 +87,18 @@ export interface EngineWeights {
 // ---------------------------------------------------------------------------
 // v2.0.0-baseline — current production snapshot.
 //
-// MUST match `weights.ts` exports byte-for-byte. The snapshot test
-// asserts deep equality against the live constants.
+// Weight/config fields MUST match `weights.ts` exports byte-for-byte
+// (the snapshot test asserts deep equality against the live
+// constants); signalRulesVersion is live-pairing metadata, not
+// frozen math (signal rules aren't piped into backtest replay).
 // ---------------------------------------------------------------------------
 
 const V2_0_0_BASELINE: EngineWeights = {
   modelVersion: "v2.0.0",
   // Tracks the LIVE signals.ts edition (test-enforced sync). Signal
-    // rules are NOT piped into backtest replay (Phase 3.4.1 OOS), so
-    // this is reproducibility metadata, not frozen math.
-    signalRulesVersion: "v1.1.0",
+  // rules are NOT piped into backtest replay (Phase 3.4.1 OOS), so
+  // this is reproducibility metadata, not frozen math.
+  signalRulesVersion: "v1.1.0",
   categoryWeights: {
     us_equity: { macro: 45, technical: 35, sentiment: 10, valuation: 10 },
     kr_equity: {
