@@ -68,22 +68,44 @@ describe("describeSignalSituation — partial-unknown copy", () => {
     // tile — a blanket "VIX 또는 CNN F&G 부족" contradicted it.
     const text = describeSignalSituation("EXTREME_FEAR", {
       state: "unknown",
-      inputs: { vix: 17.1, cnnFg: null },
-      threshold: "VIX >= 35 || CNN_FG < 25",
+      inputs: { vix: 17.1, cnnFg: null, stockFgProxy: null },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
     });
     expect(text).toContain("VIX 17.1");
     expect(text).toContain("발동 기준 아님");
-    expect(text).toContain("CNN F&G 데이터가 없어");
+    expect(text).toContain("공포·탐욕 데이터(CNN·프록시 모두)가 없어");
     expect(text).not.toContain("VIX 또는");
+  });
+
+  it("EXTREME_FEAR labels the proxy honestly when it decided arm 2", () => {
+    // v1.1.0: proxy fallback must never be passed off as CNN.
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "inactive",
+      inputs: { vix: 17.1, cnnFg: null, stockFgProxy: 65 },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
+    });
+    expect(text).toContain("공포·탐욕 프록시(자체 산출) 65");
+    expect(text).toContain("평온 구간");
+    expect(text).not.toContain("CNN F&G 65");
+  });
+
+  it("EXTREME_FEAR still says CNN F&G when CNN itself decided", () => {
+    const text = describeSignalSituation("EXTREME_FEAR", {
+      state: "inactive",
+      inputs: { vix: 17.1, cnnFg: 42, stockFgProxy: 65 },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
+    });
+    expect(text).toContain("CNN F&G 42");
+    expect(text).not.toContain("프록시");
   });
 
   it("EXTREME_FEAR both-null keeps the all-missing sentence", () => {
     const text = describeSignalSituation("EXTREME_FEAR", {
       state: "unknown",
-      inputs: { vix: null, cnnFg: null },
-      threshold: "VIX >= 35 || CNN_FG < 25",
+      inputs: { vix: null, cnnFg: null, stockFgProxy: null },
+      threshold: "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25",
     });
-    expect(text).toBe("VIX와 CNN F&G 데이터가 모두 부족합니다.");
+    expect(text).toBe("VIX와 공포·탐욕 데이터가 모두 부족합니다.");
   });
 
   it("ECONOMY_INTACT partial-unknown stays neutral about the present arm", () => {

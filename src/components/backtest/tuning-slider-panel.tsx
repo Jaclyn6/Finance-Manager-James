@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
+import { CURRENT_WEIGHTS_VERSION } from "@/lib/score-engine/weights-registry";
 import type { AssetType, PerAssetCategoryWeights } from "@/lib/score-engine/types";
 import { cn } from "@/lib/utils";
 
@@ -218,9 +220,11 @@ function SaveWeightsButton({
         categoryWeights: { [assetType]: draft },
         // Mirror the EngineWeights interface minimally — modelVersion +
         // signalRulesVersion are stamped at save time so cross-version
-        // comparison is reproducible later.
-        modelVersion: "v2.0.0",
-        signalRulesVersion: "v1.0.0",
+        // comparison is reproducible later. Constants, not literals:
+        // the hardcoded "v1.0.0" silently drifted when the rules
+        // bumped to v1.1.0 (2026-08-03).
+        modelVersion: CURRENT_WEIGHTS_VERSION,
+        signalRulesVersion: SIGNAL_RULES_VERSION,
       };
       const res = await fetch("/api/backtest/save-weights", {
         method: "POST",

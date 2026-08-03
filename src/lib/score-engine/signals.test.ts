@@ -24,6 +24,7 @@ import { SIGNAL_RULES_VERSION } from "./weights";
 const ALL_NULL_INPUTS: SignalInputs = {
   vix: null,
   cnnFg: null,
+  stockFgProxy: null,
   spyDisparity: null,
   qqqDisparity: null,
   icsa: null,
@@ -77,6 +78,35 @@ describe("evaluateExtremeFear", () => {
   it("strict boundary on CNN_FG (24 fires; 25 does not)", () => {
     expect(evaluateExtremeFear(20, 24).state).toBe("active");
     expect(evaluateExtremeFear(20, 25).state).toBe("inactive");
+  });
+
+  // ---- v1.1.0 proxy arm — CNN null falls back to STOCK_FG_PROXY ----
+
+  it("proxy fills arm 2 when CNN is null: fires below 25", () => {
+    expect(evaluateExtremeFear(20, null, 12).state).toBe("active");
+  });
+
+  it("proxy fills arm 2 when CNN is null: RESOLVES inactive when calm", () => {
+    // The whole point of v1.1.0: VIX calm + proxy calm must decide
+    // 조건 미충족 instead of the permanent 판단 보류 the CNN outage
+    // caused (user request, 2026-08-03).
+    expect(evaluateExtremeFear(17.1, null, 65).state).toBe("inactive");
+  });
+
+  it("CNN-first: a fresh CNN reading wins over the proxy", () => {
+    // CNN 30 (non-firing) beats proxy 12 (would fire) — self-heals
+    // toward CNN if the block ever lifts.
+    expect(evaluateExtremeFear(20, 30, 12).state).toBe("inactive");
+    expect(evaluateExtremeFear(20, 12, 90).state).toBe("active");
+  });
+
+  it("still unknown when VIX is non-firing and BOTH fg sources are null", () => {
+    expect(evaluateExtremeFear(20, null, null).state).toBe("unknown");
+  });
+
+  it("echoes all three inputs for UI labeling", () => {
+    const result = evaluateExtremeFear(17.1, null, 65);
+    expect(result.inputs).toEqual({ vix: 17.1, cnnFg: null, stockFgProxy: 65 });
   });
 });
 
@@ -370,6 +400,7 @@ describe("computeSignals", () => {
       // EXTREME_FEAR: VIX=38 fires
       vix: 38,
       cnnFg: 30,
+      stockFgProxy: 40,
       // DISLOCATION: SPY disparity -0.3 fires
       spyDisparity: -0.3,
       qqqDisparity: -0.1,

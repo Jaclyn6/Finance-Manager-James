@@ -89,7 +89,10 @@ export interface EngineWeights {
 
 const V2_0_0_BASELINE: EngineWeights = {
   modelVersion: "v2.0.0",
-  signalRulesVersion: "v1.0.0",
+  // Tracks the LIVE signals.ts edition (test-enforced sync). Signal
+    // rules are NOT piped into backtest replay (Phase 3.4.1 OOS), so
+    // this is reproducibility metadata, not frozen math.
+    signalRulesVersion: "v1.1.0",
   categoryWeights: {
     us_equity: { macro: 45, technical: 35, sentiment: 10, valuation: 10 },
     kr_equity: {

@@ -43,7 +43,9 @@ export const MODEL_VERSION = "v2.0.0";
  * signal_rules_version)` so both versions evolve independently while
  * preserving snapshot immutability (blueprint §2.2 tenet 2).
  */
-export const SIGNAL_RULES_VERSION = "v1.0.0";
+// v1.1.0 (2026-08-03): EXTREME_FEAR arm 2 falls back to
+// STOCK_FG_PROXY when CNN_FG is null (CNN 418-blocked since 06-24).
+export const SIGNAL_RULES_VERSION = "v1.1.0";
 
 /**
  * Snapshot marker for the 15-ticker registry (12 Alpha Vantage + 3

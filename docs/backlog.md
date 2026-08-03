@@ -186,7 +186,11 @@ of time.
 
 ## Advisor pivot follow-ups (2026-07-08, see docs/advisor_pivot_blueprint.md §6)
 
-### EXTREME_FEAR signal still waits on CNN — proxy substitution is a rules-version decision
+### ~~EXTREME_FEAR signal still waits on CNN — proxy substitution is a rules-version decision~~ — DONE 2026-08-03
+
+User green-lit the substitution ("모자란 데이터 수집할 수 있도록");
+shipped as SIGNAL_RULES_VERSION v1.1.0 (proxy fallback on arm 2,
+CNN-first, 자체 프록시 labeling). Original entry kept for context:
 
 - **WHERE**: `src/lib/score-engine/signals.ts` `evaluateExtremeFear`
   (`VIX >= 35 || CNN_FG < 25`); inputs wired in `loadSignalInputs`.

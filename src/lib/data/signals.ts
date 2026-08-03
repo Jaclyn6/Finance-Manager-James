@@ -2,8 +2,10 @@ import "server-only";
 
 import { cacheLife, cacheTag } from "next/cache";
 
+import { STOCK_FG_PROXY_KEY } from "@/lib/advisor/stock-fg-proxy";
 import { computeSignals, type SignalInputs } from "@/lib/score-engine/signals";
 import { SIGNAL_RULES_VERSION } from "@/lib/score-engine/weights";
+import { pickLatestByDateThenVersion } from "@/lib/utils/version-compare";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Tables } from "@/types/database";
 
@@ -298,6 +300,29 @@ export async function loadSignalInputs(
   const mvrvZ = latestOnchain("MVRV_Z");
   const sopr = latestOnchain("SOPR");
 
+  // ---- 2b. STOCK_FG_PROXY (EXTREME_FEAR arm-2 fallback, v1.1.0) ----
+  //
+  // Separate per-key query, NOT part of ONCHAIN_SIGNAL_KEYS: proxy
+  // rows are engine-versioned (model_version = advisor engine), so
+  // cutover days hold two rows per date and the pick must be the
+  // date-then-NUMERIC-version rule, not the plain latest-success scan
+  // latestOnchain does (same trap as getLatestIndicatorReadings).
+  const { data: proxyRows, error: proxyErr } = await supabase
+    .from("onchain_readings")
+    .select("observed_at, value_raw, fetch_status, model_version")
+    .eq("indicator_key", STOCK_FG_PROXY_KEY)
+    .eq("fetch_status", "success")
+    .lte("observed_at", snapshotDate)
+    .order("observed_at", { ascending: false })
+    .limit(4);
+  if (proxyErr) {
+    throw new Error(
+      `loadSignalInputs STOCK_FG_PROXY query failed: ${proxyErr.message}`,
+    );
+  }
+  const stockFgProxy =
+    pickLatestByDateThenVersion(proxyRows ?? [])?.value_raw ?? null;
+
   // ---- 3a. technical_readings — SPY + QQQ DISPARITY (latest only) ----
   //
   // Split into two per-ticker queries (run in parallel). A single
@@ -386,6 +411,7 @@ export async function loadSignalInputs(
   return {
     vix,
     cnnFg,
+    stockFgProxy,
     spyDisparity,
     qqqDisparity,
     icsa,

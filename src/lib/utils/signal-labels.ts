@@ -47,7 +47,7 @@ export const SIGNAL_FULL_NAMES_KO: Record<SignalName, string> = {
  * sees identical strings (reduces review burden).
  */
 export const SIGNAL_THRESHOLD_KO: Record<SignalName, string> = {
-  EXTREME_FEAR: "VIX ≥ 35 또는 CNN F&G < 25",
+  EXTREME_FEAR: "VIX ≥ 35 또는 공포·탐욕 < 25 (CNN 결측 시 자체 프록시)",
   DISLOCATION: "SPY 또는 QQQ 이격도 ≤ -25%",
   ECONOMY_INTACT: "실업 청구 < 30만 그리고 Sahm < 0.5",
   SPREAD_REVERSAL: "HY 스프레드 ≥ 4 그리고 최근 7일 최댓값 하회",
@@ -65,7 +65,7 @@ export const SIGNAL_THRESHOLD_KO: Record<SignalName, string> = {
  */
 export const SIGNAL_DESCRIPTION_KO: Record<SignalName, string> = {
   EXTREME_FEAR:
-    "공포지수(VIX)나 CNN F&G가 극단적인 공포 구간일 때 발동 — 역사적으로 그때가 매수 시점이었습니다.",
+    "공포지수(VIX)나 공포·탐욕지수가 극단적인 공포 구간일 때 발동 — 역사적으로 그때가 매수 시점이었습니다.",
   DISLOCATION:
     "SPY 또는 QQQ가 200일 평균보다 25% 이상 떨어졌을 때 발동 — 가격이 평균에서 크게 벌어진 매수 기회입니다.",
   ECONOMY_INTACT:
@@ -115,11 +115,19 @@ export function describeSignalSituation(
     case "EXTREME_FEAR": {
       const vix = numOrNull(inputs.vix);
       const cnnFg = numOrNull(inputs.cnnFg);
+      const proxy = numOrNull(inputs.stockFgProxy);
+      // Arm 2 is CNN-first with the in-house proxy as fallback
+      // (rules v1.1.0). The gauge that actually decided must be the
+      // one named — the proxy is never passed off as CNN (same
+      // honesty rule as the advisor sentiment pillar).
+      const fg = cnnFg ?? proxy;
+      const fgLabel =
+        cnnFg !== null ? "CNN F&G" : "공포·탐욕 프록시(자체 산출)";
       if (state === "active") {
-        return `VIX ${fmt(vix, "—")}, CNN F&G ${fmt(cnnFg, "—")} — 시장이 공포에 빠진 상태`;
+        return `VIX ${fmt(vix, "—")}, ${fgLabel} ${fmt(fg, "—")} — 시장이 공포에 빠진 상태`;
       }
       if (state === "inactive") {
-        return `VIX ${fmt(vix, "—")}, CNN F&G ${fmt(cnnFg, "—")} — 평온 구간`;
+        return `VIX ${fmt(vix, "—")}, ${fgLabel} ${fmt(fg, "—")} — 평온 구간`;
       }
       // Partial-unknown: one arm present, the other missing. The
       // present arm is guaranteed non-firing here (a firing arm would
@@ -127,12 +135,12 @@ export function describeSignalSituation(
       // BOTH as 부족 contradicted the weather strip showing a live
       // VIX right above the tile (UX 실사 2026-08-03).
       if (vix !== null) {
-        return `VIX ${fmt(vix, "—")} — 발동 기준 아님 · CNN F&G 데이터가 없어 판단 보류`;
+        return `VIX ${fmt(vix, "—")} — 발동 기준 아님 · 공포·탐욕 데이터(CNN·프록시 모두)가 없어 판단 보류`;
       }
-      if (cnnFg !== null) {
-        return `CNN F&G ${fmt(cnnFg, "—")} — 발동 기준 아님 · VIX 데이터가 없어 판단 보류`;
+      if (fg !== null) {
+        return `${fgLabel} ${fmt(fg, "—")} — 발동 기준 아님 · VIX 데이터가 없어 판단 보류`;
       }
-      return "VIX와 CNN F&G 데이터가 모두 부족합니다.";
+      return "VIX와 공포·탐욕 데이터가 모두 부족합니다.";
     }
     case "DISLOCATION": {
       const spy = pctOrNull(inputs.spyDisparity);

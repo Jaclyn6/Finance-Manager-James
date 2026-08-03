@@ -160,6 +160,14 @@ export type SignalInputs = {
   vix: number | null;
   /** CNN Fear & Greed raw 0-100 (0 = extreme fear). Input to EXTREME_FEAR (OR-arm 2). */
   cnnFg: number | null;
+  /**
+   * STOCK_FG_PROXY raw 0-100 — the in-house 4-component substitute
+   * computed daily since CNN's 418 bot-block (2026-06-24). EXTREME_
+   * FEAR's arm 2 falls back to it when cnnFg is null (v1.1.0 rule);
+   * UI copy must label the proxy 자체 산출, same honesty rule as the
+   * advisor sentiment pillar.
+   */
+  stockFgProxy: number | null;
   /** SPY disparity = close/MA200 - 1. Input to DISLOCATION (OR-arm 1). */
   spyDisparity: number | null;
   /** QQQ disparity = close/MA200 - 1. Input to DISLOCATION (OR-arm 2). */
@@ -191,10 +199,16 @@ export type SignalInputs = {
 // ---------------------------------------------------------------------------
 
 /**
- * EXTREME_FEAR = `VIX ≥ 35 || CNN_FG < 25` (blueprint §4.5, PRD §10.4).
+ * EXTREME_FEAR = `VIX ≥ 35 || FG < 25` where FG is CNN_FG when
+ * fresh, else STOCK_FG_PROXY (blueprint §4.5, PRD §10.4; proxy arm
+ * added in SIGNAL_RULES_VERSION v1.1.0, 2026-08-03 — CNN has been
+ * 418-blocked since 06-24, which left the tile permanently 판단
+ * 보류; user green-lit the substitution). CNN-first: a fresh CNN
+ * reading always wins over the proxy, so the rule self-heals if CNN
+ * unblocks — same fallback order as the advisor sentiment pillar.
  *
  * Null semantics: OR-logic with graceful degradation.
- *   - BOTH null → "unknown".
+ *   - BOTH arms null (vix null AND cnn+proxy null) → "unknown".
  *   - One null, the other FIRES → "active" (one confirmed arm is
  *     enough for an OR; blueprint §10.4 "degrades gracefully").
  *   - One null, the other does NOT fire → "unknown" — the missing
@@ -207,25 +221,28 @@ export type SignalInputs = {
 export function evaluateExtremeFear(
   vix: number | null,
   cnnFg: number | null,
+  stockFgProxy: number | null = null,
 ): SignalDetail {
-  const threshold = "VIX >= 35 || CNN_FG < 25";
-  const inputs = { vix, cnnFg };
+  const threshold = "VIX >= 35 || (CNN_FG ?? STOCK_FG_PROXY) < 25";
+  // All three echoed so the UI can label WHICH gauge decided arm 2.
+  const inputs = { vix, cnnFg, stockFgProxy };
+  const fg = cnnFg ?? stockFgProxy;
 
-  if (vix === null && cnnFg === null) {
+  if (vix === null && fg === null) {
     return { state: "unknown", inputs, threshold };
   }
 
   const vixFires = vix !== null && vix >= 35;
-  const cnnFires = cnnFg !== null && cnnFg < 25;
+  const fgFires = fg !== null && fg < 25;
 
-  if (vixFires || cnnFires) {
+  if (vixFires || fgFires) {
     return { state: "active", inputs, threshold };
   }
 
   // Neither arm fires. If one arm is null, we can't rule out the OR
   // firing via the unseen arm — surface as "unknown" per the tenet-1
   // loud-failure bias. Both arms present and non-firing → "inactive".
-  if (vix === null || cnnFg === null) {
+  if (vix === null || fg === null) {
     return { state: "unknown", inputs, threshold };
   }
   return { state: "inactive", inputs, threshold };
@@ -514,7 +531,11 @@ export function evaluateCapitulation(sopr: number | null): SignalDetail {
  */
 export function computeSignals(inputs: SignalInputs): SignalComputation {
   const perSignal: Record<SignalName, SignalDetail> = {
-    EXTREME_FEAR: evaluateExtremeFear(inputs.vix, inputs.cnnFg),
+    EXTREME_FEAR: evaluateExtremeFear(
+      inputs.vix,
+      inputs.cnnFg,
+      inputs.stockFgProxy,
+    ),
     DISLOCATION: evaluateDislocation(inputs.spyDisparity, inputs.qqqDisparity),
     ECONOMY_INTACT: evaluateEconomyIntact(inputs.icsa, inputs.sahmCurrent),
     SPREAD_REVERSAL: evaluateSpreadReversal(
